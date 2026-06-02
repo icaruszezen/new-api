@@ -945,6 +945,14 @@ func (channel *Channel) ValidateSettings() error {
 			return err
 		}
 	}
+	if channelParams.CacheBillingRatioEnabled {
+		if channelParams.CacheBillingRatio <= 0 {
+			return fmt.Errorf("cache_billing_ratio must be greater than 0 when enabled")
+		}
+		if channelParams.CacheBillingRatio > 10 {
+			return fmt.Errorf("cache_billing_ratio must not exceed 10")
+		}
+	}
 	return nil
 }
 

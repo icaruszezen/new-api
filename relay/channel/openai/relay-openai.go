@@ -1,4 +1,4 @@
-package openai
+﻿package openai
 
 import (
 	"fmt"
@@ -117,9 +117,8 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var toolCount int
 	var usage = &dto.Usage{}
 	var lastStreamData string
-	var secondLastStreamData string // 存储倒数第二个stream data，用于音频模型
-
-	// 检查是否为音频模型
+	var secondLastStreamData string // 瀛樺偍鍊掓暟绗簩涓猻tream data锛岀敤浜庨煶棰戞ā鍨?
+	// 妫€鏌ユ槸鍚︿负闊抽妯″瀷
 	isAudioModel := strings.Contains(strings.ToLower(model), "audio")
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
@@ -130,7 +129,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			}
 		}
 		if len(data) > 0 {
-			// 对音频模型，保存倒数第二个stream data
+			// 瀵归煶棰戞ā鍨嬶紝淇濆瓨鍊掓暟绗簩涓猻tream data
 			if isAudioModel && lastStreamData != "" {
 				secondLastStreamData = lastStreamData
 			}
@@ -143,7 +142,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		}
 	})
 
-	// 对音频模型，从倒数第二个stream data中提取usage信息
+	// 瀵归煶棰戞ā鍨嬶紝浠庡€掓暟绗簩涓猻tream data涓彁鍙杣sage淇℃伅
 	if isAudioModel && secondLastStreamData != "" {
 		var streamResp struct {
 			Usage *dto.Usage `json:"usage"`
@@ -161,17 +160,11 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		}
 	}
 
-	// 处理最后的响应
+	// 澶勭悊鏈€鍚庣殑鍝嶅簲
 	shouldSendLastResp := true
 	if err := handleLastResponse(lastStreamData, &responseId, &createAt, &systemFingerprint, &model, &usage,
 		&containStreamUsage, info, &shouldSendLastResp); err != nil {
 		logger.LogError(c, fmt.Sprintf("error handling last response: %s, lastStreamData: [%s]", err.Error(), lastStreamData))
-	}
-
-	if info.RelayFormat == types.RelayFormatOpenAI {
-		if shouldSendLastResp {
-			_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
-		}
 	}
 
 	if !containStreamUsage {
@@ -179,7 +172,16 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		usage.CompletionTokens += toolCount * 7
 	}
 
-	applyUsagePostProcessing(info, usage, common.StringToByteSlice(lastStreamData))
+	lastStreamBytes := common.StringToByteSlice(lastStreamData)
+	applyUsagePostProcessing(info, usage, lastStreamBytes)
+	service.ApplyChannelCacheReadBillingRatio(info, usage, &lastStreamBytes)
+	lastStreamData = string(lastStreamBytes)
+
+	if info.RelayFormat == types.RelayFormatOpenAI {
+		if shouldSendLastResp {
+			_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
+		}
+	}
 
 	HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
 
@@ -197,7 +199,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	logger.LogDebug(c, "upstream response body: %s", responseBody)
 	// Unmarshal to simpleResponse
 	if info.ChannelType == constant.ChannelTypeOpenRouter && info.ChannelOtherSettings.IsOpenRouterEnterprise() {
-		// 尝试解析为 openrouter enterprise
+		// 灏濊瘯瑙ｆ瀽涓?openrouter enterprise
 		var enterpriseResponse openrouter.OpenRouterEnterpriseResponse
 		err = common.Unmarshal(responseBody, &enterpriseResponse)
 		if err != nil {
@@ -286,7 +288,10 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		responseBody = geminiRespStr
 	}
 
+	service.ApplyChannelCacheReadBillingRatio(info, &simpleResponse.Usage, &responseBody)
+
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 
 	return &simpleResponse.Usage, nil
 }
+	c.Writer.WriteHeaderNow()

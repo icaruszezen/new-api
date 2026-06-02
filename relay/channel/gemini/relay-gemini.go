@@ -1489,6 +1489,8 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 		return usage, err
 	}
 
+	service.ApplyChannelCacheReadBillingRatio(info, usage, nil)
+
 	response := helper.GenerateFinalUsageResponse(id, createAt, info.UpstreamModelName, *usage)
 	if info.RelayFormat == types.RelayFormatClaude && info.ClaudeConvertInfo != nil && !info.ClaudeConvertInfo.Done {
 		response = helper.GenerateStopResponse(id, createAt, info.UpstreamModelName, finishReason)
@@ -1570,6 +1572,9 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 	case types.RelayFormatGemini:
 		break
 	}
+
+	service.ApplyChannelCacheReadBillingRatio(info, &usage, &responseBody)
+	fullTextResponse.Usage = usage
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 

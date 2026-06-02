@@ -86,6 +86,8 @@ export interface ChannelSettings {
   pass_through_body_enabled?: boolean
   system_prompt?: string
   system_prompt_override?: boolean
+  cache_billing_ratio_enabled?: boolean
+  cache_billing_ratio?: number
 }
 
 export interface ChannelOtherSettings {

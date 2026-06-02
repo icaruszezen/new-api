@@ -7,6 +7,8 @@ type ChannelSettings struct {
 	PassThroughBodyEnabled bool   `json:"pass_through_body_enabled,omitempty"`
 	SystemPrompt           string `json:"system_prompt,omitempty"`
 	SystemPromptOverride   bool   `json:"system_prompt_override,omitempty"`
+	CacheBillingRatioEnabled bool    `json:"cache_billing_ratio_enabled,omitempty"`
+	CacheBillingRatio        float64 `json:"cache_billing_ratio,omitempty"`
 }
 
 type VertexKeyType string

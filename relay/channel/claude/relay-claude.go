@@ -784,6 +784,12 @@ func FormatClaudeResponseInfo(claudeResponse *dto.ClaudeResponse, oaiResponse *d
 	return true
 }
 
+func patchClaudeStreamChunkCacheBilling(info *relaycommon.RelayInfo, usage *dto.Usage, data string) string {
+	bodyBytes := []byte(data)
+	service.ApplyChannelCacheReadBillingRatio(info, usage, &bodyBytes)
+	return string(bodyBytes)
+}
+
 func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claudeInfo *ClaudeResponseInfo, data string) *types.NewAPIError {
 	var claudeResponse dto.ClaudeResponse
 	err := common.UnmarshalJsonStr(data, &claudeResponse)
@@ -803,22 +809,19 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 	if info.RelayFormat == types.RelayFormatClaude {
 		FormatClaudeResponseInfo(&claudeResponse, nil, claudeInfo)
 
-		if claudeResponse.Type == "message_start" {
-			// message_start, 获取usage
+		switch claudeResponse.Type {
+		case "message_start":
 			if claudeResponse.Message != nil {
 				info.UpstreamModelName = claudeResponse.Message.Model
 			}
-		} else if claudeResponse.Type == "message_delta" {
+			data = patchClaudeStreamChunkCacheBilling(info, claudeInfo.Usage, data)
+		case "message_delta":
 			// 确保 message_delta 的 usage 包含完整的 input_tokens 和 cache 相关字段
 			// 解决 AWS Bedrock 等上游返回的 message_delta 缺少这些字段的问题
 			if !shouldSkipClaudeMessageDeltaUsagePatch(info) {
 				data = patchClaudeMessageDeltaUsageData(data, buildMessageDeltaPatchUsage(&claudeResponse, claudeInfo))
 			}
-			if info.RelayFormat == types.RelayFormatClaude {
-				bodyBytes := []byte(data)
-				service.ApplyChannelCacheReadBillingRatio(info, claudeInfo.Usage, &bodyBytes)
-				data = string(bodyBytes)
-			}
+			data = patchClaudeStreamChunkCacheBilling(info, claudeInfo.Usage, data)
 		}
 		helper.ClaudeChunkData(c, claudeResponse, data)
 	} else if info.RelayFormat == types.RelayFormatOpenAI {
@@ -862,6 +865,7 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 	if info.RelayFormat == types.RelayFormatClaude {
 		//
 	} else if info.RelayFormat == types.RelayFormatOpenAI {
+		// Intermediate OpenAI-format stream chunks omit usage; scale once for billing/final usage chunk.
 		service.ApplyChannelCacheReadBillingRatio(info, claudeInfo.Usage, nil)
 		if info.ShouldIncludeUsage {
 			openAIUsage := buildOpenAIStyleUsageFromClaudeUsage(claudeInfo.Usage)
@@ -924,6 +928,7 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 	var responseData []byte
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:
+		service.ApplyChannelCacheReadBillingRatio(info, claudeInfo.Usage, nil)
 		openaiResponse := ResponseClaude2OpenAI(&claudeResponse)
 		openaiResponse.Usage = buildOpenAIStyleUsageFromClaudeUsage(claudeInfo.Usage)
 		responseData, err = json.Marshal(openaiResponse)
@@ -932,9 +937,8 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		}
 	case types.RelayFormatClaude:
 		responseData = data
+		service.ApplyChannelCacheReadBillingRatio(info, claudeInfo.Usage, &responseData)
 	}
-
-	service.ApplyChannelCacheReadBillingRatio(info, claudeInfo.Usage, &responseData)
 
 	if claudeResponse.Usage != nil && claudeResponse.Usage.ServerToolUse != nil && claudeResponse.Usage.ServerToolUse.WebSearchRequests > 0 {
 		c.Set("claude_web_search_requests", claudeResponse.Usage.ServerToolUse.WebSearchRequests)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/tidwall/gjson"
@@ -11,6 +12,11 @@ import (
 )
 
 const maxCacheBillingRatio = 10
+
+// Cache read billing scales only cache-read token fields in the final usage object used for
+// settlement. Stream handlers may forward intermediate SSE chunks with upstream cache-read
+// values until the terminal event (e.g. OpenAI stream last chunk, Responses response.completed,
+// Claude message_start/message_delta, Gemini final usage chunk).
 
 // EffectiveCacheReadBillingRatio returns the multiplier for cache read tokens (1 = no change).
 func EffectiveCacheReadBillingRatio(setting dto.ChannelSettings) float64 {
@@ -28,6 +34,39 @@ func scaleCacheReadTokenCount(tokens int, ratio float64) int {
 		return tokens
 	}
 	return int(math.Round(float64(tokens) * ratio))
+}
+
+type cacheReadUsageSnapshot struct {
+	cachedTokens       int
+	promptCacheHit     int
+	inputCachedTokens  int
+	hasInputCached     bool
+}
+
+func snapshotCacheReadUsage(usage *dto.Usage) cacheReadUsageSnapshot {
+	snap := cacheReadUsageSnapshot{
+		cachedTokens:   usage.PromptTokensDetails.CachedTokens,
+		promptCacheHit: usage.PromptCacheHitTokens,
+	}
+	if usage.InputTokensDetails != nil {
+		snap.hasInputCached = true
+		snap.inputCachedTokens = usage.InputTokensDetails.CachedTokens
+	}
+	return snap
+}
+
+func restoreCacheReadUsage(usage *dto.Usage, snap cacheReadUsageSnapshot) {
+	if usage == nil {
+		return
+	}
+	usage.PromptTokensDetails.CachedTokens = snap.cachedTokens
+	usage.PromptCacheHitTokens = snap.promptCacheHit
+	if snap.hasInputCached {
+		if usage.InputTokensDetails == nil {
+			usage.InputTokensDetails = &dto.InputTokenDetails{}
+		}
+		usage.InputTokensDetails.CachedTokens = snap.inputCachedTokens
+	}
 }
 
 // ApplyCacheReadBillingRatioToUsage scales cache read token fields only.
@@ -58,6 +97,9 @@ var cacheReadBillingJSONPaths = []string{
 func PatchCacheReadBillingRatioInJSON(body []byte, ratio float64) ([]byte, error) {
 	if len(body) == 0 || ratio == 1 {
 		return body, nil
+	}
+	if !gjson.ValidBytes(body) {
+		return body, fmt.Errorf("invalid JSON for cache read billing patch")
 	}
 	out := body
 	var err error
@@ -114,12 +156,15 @@ func ApplyCacheReadBillingRatioWithSetting(setting dto.ChannelSettings, usage *d
 	if ratio == 1 {
 		return
 	}
+	snap := snapshotCacheReadUsage(usage)
 	ApplyCacheReadBillingRatioToUsage(usage, ratio)
 	if body == nil || len(*body) == 0 {
 		return
 	}
 	patched, err := PatchCacheReadBillingRatioInJSON(*body, ratio)
 	if err != nil {
+		restoreCacheReadUsage(usage, snap)
+		common.SysLog(fmt.Sprintf("cache read billing JSON patch failed, usage rolled back: %v", err))
 		return
 	}
 	*body = patched

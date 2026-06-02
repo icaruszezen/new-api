@@ -112,3 +112,52 @@ func TestApplyChannelCacheReadBillingRatio(t *testing.T) {
 	require.Equal(t, 5000, usage.PromptTokensDetails.CachedTokens)
 	require.Contains(t, string(body), `"cached_tokens":5000`)
 }
+
+func TestSnapshotRestoreCacheReadUsage(t *testing.T) {
+	inputDetails := &dto.InputTokenDetails{CachedTokens: 600}
+	usage := &dto.Usage{
+		PromptCacheHitTokens: 800,
+		PromptTokensDetails:  dto.InputTokenDetails{CachedTokens: 1000},
+		InputTokensDetails:   inputDetails,
+	}
+
+	snap := snapshotCacheReadUsage(usage)
+	ApplyCacheReadBillingRatioToUsage(usage, 0.5)
+	restoreCacheReadUsage(usage, snap)
+
+	require.Equal(t, 1000, usage.PromptTokensDetails.CachedTokens)
+	require.Equal(t, 800, usage.PromptCacheHitTokens)
+	require.Equal(t, 600, usage.InputTokensDetails.CachedTokens)
+}
+
+func TestApplyCacheReadBillingRatioWithSettingRollsBackUsageOnPatchFailure(t *testing.T) {
+	usage := &dto.Usage{
+		PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 1000},
+	}
+	body := []byte(`{`)
+	setting := dto.ChannelSettings{
+		CacheBillingRatioEnabled: true,
+		CacheBillingRatio:        0.5,
+	}
+
+	ApplyCacheReadBillingRatioWithSetting(setting, usage, &body)
+
+	require.Equal(t, 1000, usage.PromptTokensDetails.CachedTokens)
+}
+
+func TestApplyCacheReadBillingRatioWithSettingRatioOneLeavesBodyUnchanged(t *testing.T) {
+	usage := &dto.Usage{
+		PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 1000},
+	}
+	body := []byte(`{"usage":{"prompt_tokens_details":{"cached_tokens":1000}}}`)
+	original := string(body)
+	setting := dto.ChannelSettings{
+		CacheBillingRatioEnabled: true,
+		CacheBillingRatio:        1,
+	}
+
+	ApplyCacheReadBillingRatioWithSetting(setting, usage, &body)
+
+	require.Equal(t, 1000, usage.PromptTokensDetails.CachedTokens)
+	require.Equal(t, original, string(body))
+}

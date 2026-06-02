@@ -1489,6 +1489,7 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 		return usage, err
 	}
 
+	// Final usage chunk only: intermediate OpenAI-format SSE chunks do not carry scaled cache read fields.
 	service.ApplyChannelCacheReadBillingRatio(info, usage, nil)
 
 	response := helper.GenerateFinalUsageResponse(id, createAt, info.UpstreamModelName, *usage)

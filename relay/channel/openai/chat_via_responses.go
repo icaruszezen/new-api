@@ -538,6 +538,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			return nil, streamErr
 		}
 	}
+	// Billing usage is scaled here; intermediate chat chunks converted from Responses events are not patched.
 	service.ApplyChannelCacheReadBillingRatio(info, usage, nil)
 
 	if info.RelayFormat == types.RelayFormatOpenAI && info.ShouldIncludeUsage && usage != nil {

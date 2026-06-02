@@ -171,18 +171,21 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		logger.LogError(c, fmt.Sprintf("error handling last response: %s, lastStreamData: [%s]", err.Error(), lastStreamData))
 	}
 
-	if info.RelayFormat == types.RelayFormatOpenAI {
-		if shouldSendLastResp {
-			_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
-		}
-	}
-
 	if !containStreamUsage {
 		usage = service.ResponseText2Usage(c, responseTextBuilder.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
 		usage.CompletionTokens += toolCount * 7
 	}
 
-	applyUsagePostProcessing(info, usage, common.StringToByteSlice(lastStreamData))
+	lastStreamBytes := common.StringToByteSlice(lastStreamData)
+	applyUsagePostProcessing(info, usage, lastStreamBytes)
+	service.ApplyChannelCacheReadBillingRatio(info, usage, &lastStreamBytes)
+	lastStreamData = string(lastStreamBytes)
+
+	if info.RelayFormat == types.RelayFormatOpenAI {
+		if shouldSendLastResp {
+			_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
+		}
+	}
 
 	HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
 
@@ -288,6 +291,8 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		}
 		responseBody = geminiRespStr
 	}
+
+	service.ApplyChannelCacheReadBillingRatio(info, &simpleResponse.Usage, &responseBody)
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 
@@ -566,13 +571,6 @@ func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 
-	// 写入新的 response body
-	service.IOCopyBytesGracefully(c, resp, responseBody)
-
-	// Once we've written to the client, we should not return errors anymore
-	// because the upstream has already consumed resources and returned content
-	// We should still perform billing even if parsing fails
-	// format
 	if usageResp.InputTokens > 0 {
 		usageResp.PromptTokens += usageResp.InputTokens
 	}
@@ -584,6 +582,9 @@ func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 		usageResp.PromptTokensDetails.TextTokens += usageResp.InputTokensDetails.TextTokens
 	}
 	applyUsagePostProcessing(info, &usageResp.Usage, responseBody)
+	service.ApplyChannelCacheReadBillingRatio(info, &usageResp.Usage, &responseBody)
+
+	service.IOCopyBytesGracefully(c, resp, responseBody)
 	return &usageResp.Usage, nil
 }
 

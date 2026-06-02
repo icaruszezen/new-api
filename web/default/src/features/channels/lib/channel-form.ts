@@ -182,6 +182,8 @@ export const channelFormSchema = z
     pass_through_body_enabled: z.boolean().optional(),
     system_prompt: z.string().optional(),
     system_prompt_override: z.boolean().optional(),
+    cache_billing_ratio_enabled: z.boolean().optional(),
+    cache_billing_ratio: z.number().optional(),
     // Type-specific settings (stored in settings JSON)
     is_enterprise_account: z.boolean().optional(), // OpenRouter specific
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
@@ -259,6 +261,26 @@ export const channelFormSchema = z
         'Vertex AI API Key mode does not support batch creation'
       )
     }
+
+    if (data.cache_billing_ratio_enabled) {
+      if (
+        data.cache_billing_ratio == null ||
+        !Number.isFinite(data.cache_billing_ratio) ||
+        data.cache_billing_ratio <= 0
+      ) {
+        addRequiredIssue(
+          ctx,
+          'cache_billing_ratio',
+          'Cache billing ratio must be greater than 0 when enabled'
+        )
+      } else if (data.cache_billing_ratio > 10) {
+        addRequiredIssue(
+          ctx,
+          'cache_billing_ratio',
+          'Cache billing ratio must not exceed 10'
+        )
+      }
+    }
   })
 
 export type ChannelFormValues = z.infer<typeof channelFormSchema>
@@ -300,6 +322,8 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   pass_through_body_enabled: false,
   system_prompt: '',
   system_prompt_override: false,
+  cache_billing_ratio_enabled: false,
+  cache_billing_ratio: 1,
   // Type-specific settings
   is_enterprise_account: false,
   vertex_key_type: 'json',
@@ -336,6 +360,8 @@ export function transformChannelToFormDefaults(
     pass_through_body_enabled: false,
     system_prompt: '',
     system_prompt_override: false,
+    cache_billing_ratio_enabled: false,
+    cache_billing_ratio: 1,
   }
 
   if (channel.setting) {
@@ -348,6 +374,12 @@ export function transformChannelToFormDefaults(
         pass_through_body_enabled: parsed.pass_through_body_enabled || false,
         system_prompt: parsed.system_prompt || '',
         system_prompt_override: parsed.system_prompt_override || false,
+        cache_billing_ratio_enabled: parsed.cache_billing_ratio_enabled || false,
+        cache_billing_ratio:
+          typeof parsed.cache_billing_ratio === 'number' &&
+          parsed.cache_billing_ratio > 0
+            ? parsed.cache_billing_ratio
+            : 1,
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -457,6 +489,10 @@ function buildSettingJSON(formData: ChannelFormValues): string {
     pass_through_body_enabled: formData.pass_through_body_enabled || false,
     system_prompt: formData.system_prompt || '',
     system_prompt_override: formData.system_prompt_override || false,
+    cache_billing_ratio_enabled: formData.cache_billing_ratio_enabled || false,
+    cache_billing_ratio: formData.cache_billing_ratio_enabled
+      ? formData.cache_billing_ratio || 1
+      : undefined,
   }
   return JSON.stringify(settingObj)
 }

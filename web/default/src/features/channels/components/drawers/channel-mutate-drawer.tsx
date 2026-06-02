@@ -216,6 +216,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.system_prompt?.trim() ||
     values.force_format ||
     values.thinking_to_content ||
+    values.cache_billing_ratio_enabled ||
     values.pass_through_body_enabled ||
     values.system_prompt_override ||
     values.claude_beta_query ||
@@ -3158,6 +3159,66 @@ export function ChannelMutateDrawer({
                             </FormItem>
                           )}
                         />
+
+                        <FormField
+                          control={form.control}
+                          name='cache_billing_ratio_enabled'
+                          render={({ field }) => (
+                            <FormItem className='flex items-center justify-between px-4 py-3'>
+                              <div className='space-y-0.5'>
+                                <FormLabel>
+                                  {t('Cache Read Billing Ratio')}
+                                </FormLabel>
+                                <FormDescription>
+                                  {t(
+                                    'Scale cache read tokens in downstream responses and billing for this channel'
+                                  )}
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        {form.watch('cache_billing_ratio_enabled') && (
+                          <FormField
+                            control={form.control}
+                            name='cache_billing_ratio'
+                            render={({ field }) => (
+                              <FormItem className='px-4 py-3'>
+                                <FormLabel>
+                                  {t('Cache Read Billing Ratio Value')}
+                                </FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type='number'
+                                    min={0.01}
+                                    max={10}
+                                    step={0.01}
+                                    value={field.value ?? 1}
+                                    onChange={(event) => {
+                                      const next = event.target.value
+                                      field.onChange(
+                                        next === '' ? undefined : Number(next)
+                                      )
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  {t(
+                                    'Multiplier for cache read tokens only (e.g. 0.8 bills 80% of upstream cached tokens)'
+                                  )}
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        )}
 
                         <FormField
                           control={form.control}

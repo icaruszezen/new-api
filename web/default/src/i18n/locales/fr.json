@@ -3928,6 +3928,8 @@
     "These toggles affect whether certain request fields are passed through to the upstream provider.": "Ces bascules déterminent si certains champs de demande sont transmis au fournisseur en amont.",
     "Thinking Adapter": "Adaptateur de réflexion",
     "Thinking to Content": "Réflexion vers Contenu",
+    "Auto Reasoning Effort from Model": "Ajuster automatiquement l'effort de raisonnement selon le modèle",
+    "When enabled, model names containing low, medium, high, or xhigh override the upstream reasoning effort": "Lorsqu'il est activé, les noms de modèle contenant low, medium, high ou xhigh remplacent l'effort de raisonnement envoyé en amont",
     "Cache Read Billing Ratio": "Ratio de facturation de lecture du cache",
     "Scale cache read tokens in downstream responses and billing for this channel": "Appliquer un coefficient aux jetons de lecture du cache dans les réponses aval et la facturation de ce canal",
     "Cache Read Billing Ratio Value": "Valeur du ratio de facturation de lecture du cache",

@@ -216,6 +216,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.system_prompt?.trim() ||
     values.force_format ||
     values.thinking_to_content ||
+    values.auto_set_reasoning_effort_by_model ||
     values.cache_billing_ratio_enabled ||
     values.pass_through_body_enabled ||
     values.system_prompt_override ||
@@ -3147,6 +3148,31 @@ export function ChannelMutateDrawer({
                                 <FormDescription>
                                   {t(
                                     'Convert reasoning_content to <think> tag in content'
+                                  )}
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name='auto_set_reasoning_effort_by_model'
+                          render={({ field }) => (
+                            <FormItem className='flex items-center justify-between px-4 py-3'>
+                              <div className='space-y-0.5'>
+                                <FormLabel>
+                                  {t('Auto Reasoning Effort from Model')}
+                                </FormLabel>
+                                <FormDescription>
+                                  {t(
+                                    'When enabled, model names containing low, medium, high, or xhigh override the upstream reasoning effort'
                                   )}
                                 </FormDescription>
                               </div>

@@ -3928,6 +3928,8 @@
     "These toggles affect whether certain request fields are passed through to the upstream provider.": "Các chuyển đổi này ảnh hưởng đến việc các trường yêu cầu nhất định có được chuyển đến nhà cung cấp dịch vụ đầu vào hay không.",
     "Thinking Adapter": "Adapter tư duy",
     "Thinking to Content": "Suy nghĩ thành Nội dung",
+    "Auto Reasoning Effort from Model": "Tự động đặt mức suy luận theo tên mô hình",
+    "When enabled, model names containing low, medium, high, or xhigh override the upstream reasoning effort": "Khi bật, tên mô hình chứa low, medium, high hoặc xhigh sẽ ghi đè mức suy luận gửi lên upstream",
     "Cache Read Billing Ratio": "Tỷ lệ tính phí đọc cache",
     "Scale cache read tokens in downstream responses and billing for this channel": "Nhân hệ số token đọc cache trong phản hồi downstream và tính phí của kênh này",
     "Cache Read Billing Ratio Value": "Giá trị tỷ lệ tính phí đọc cache",

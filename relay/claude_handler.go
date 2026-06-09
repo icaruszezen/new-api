@@ -35,6 +35,7 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	if err != nil {
 		return types.NewError(fmt.Errorf("failed to copy request to ClaudeRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 	}
+	downstreamModel := request.Model
 
 	err = helper.ModelMappedHelper(c, info, request)
 	if err != nil {
@@ -107,6 +108,8 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		info.UpstreamModelName = request.Model
 	}
 
+	applyClaudeReasoningEffortFromModel(request, downstreamModel, info.ChannelSetting.AutoSetReasoningEffortByModel)
+
 	if info.ChannelSetting.SystemPrompt != "" {
 		if request.System == nil {
 			request.SetStringSystem(info.ChannelSetting.SystemPrompt)
@@ -155,7 +158,29 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		requestBody = common.ReaderOnly(storage)
+		if info.ChannelSetting.AutoSetReasoningEffortByModel {
+			bodyBytes, bErr := storage.Bytes()
+			if bErr != nil {
+				return types.NewError(bErr, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
+			}
+			updatedBody, changed, applyErr := applyClaudePassThroughReasoningEffortFromModel(bodyBytes, true)
+			if applyErr != nil {
+				return types.NewError(applyErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			}
+			if changed {
+				body, size, closer, createErr := relaycommon.NewOutboundJSONBody(updatedBody)
+				if createErr != nil {
+					return types.NewError(createErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+				}
+				defer closer.Close()
+				info.UpstreamRequestBodySize = size
+				requestBody = body
+			} else {
+				requestBody = common.ReaderOnly(storage)
+			}
+		} else {
+			requestBody = common.ReaderOnly(storage)
+		}
 	} else {
 		convertedRequest, err := adaptor.ConvertClaudeRequest(c, info, request)
 		if err != nil {

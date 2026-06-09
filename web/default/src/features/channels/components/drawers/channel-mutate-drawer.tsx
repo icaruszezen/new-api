@@ -121,6 +121,7 @@ import {
   FIELD_DESCRIPTIONS,
   FIELD_PLACEHOLDERS,
   MODEL_FETCHABLE_TYPES,
+  OPENAI_COMPATIBLE_IMAGE_STREAM_CHANNEL_TYPES,
 } from '../../constants'
 import { useChannelMutateForm } from '../../hooks/use-channel-mutate-form'
 import {
@@ -213,6 +214,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.proxy?.trim() ||
     values.system_prompt?.trim() ||
     values.force_format ||
+    values.image_nonstream_via_upstream_stream_enabled ||
     values.thinking_to_content ||
     values.auto_set_reasoning_effort_by_model ||
     values.cache_billing_ratio_enabled ||
@@ -3135,6 +3137,37 @@ export function ChannelMutateDrawer({
                                   <FormDescription>
                                     {t(
                                       'Force format response to OpenAI standard (OpenAI channel only)'
+                                    )}
+                                  </FormDescription>
+                                </div>
+                                <FormControl>
+                                  <Switch
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        )}
+
+                        {OPENAI_COMPATIBLE_IMAGE_STREAM_CHANNEL_TYPES.has(
+                          currentType
+                        ) && (
+                          <FormField
+                            control={form.control}
+                            name='image_nonstream_via_upstream_stream_enabled'
+                            render={({ field }) => (
+                              <FormItem className='flex items-center justify-between px-4 py-3'>
+                                <div className='space-y-0.5'>
+                                  <FormLabel>
+                                    {t(
+                                      'Convert non-stream image requests to upstream streaming'
+                                    )}
+                                  </FormLabel>
+                                  <FormDescription>
+                                    {t(
+                                      'When enabled, non-streaming /v1/images/generations and /v1/images/edits requests use upstream streaming to avoid proxy timeouts, then are synthesized into a non-streaming response for the client.'
                                     )}
                                   </FormDescription>
                                 </div>

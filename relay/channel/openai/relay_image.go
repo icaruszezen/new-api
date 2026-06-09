@@ -22,6 +22,11 @@ import (
 // OpenaiImageHandler handles non-streaming OpenAI image responses
 // (generations/edits), returning the parsed usage for billing.
 func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+	if info != nil && info.ImageUpstreamStreamSynthesize && resp != nil &&
+		strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		return OpenaiImageStreamToNonStreamHandler(c, info, resp)
+	}
+
 	defer service.CloseResponseBodyGracefully(resp)
 
 	responseBody, err := io.ReadAll(resp.Body)

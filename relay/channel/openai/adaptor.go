@@ -455,9 +455,18 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 				if key == "model" {
 					continue
 				}
+				if info.ImageUpstreamStreamSynthesize && key == "stream" {
+					continue
+				}
 				for _, value := range values {
 					writer.WriteField(key, value)
 				}
+			}
+		}
+
+		if info.ImageUpstreamStreamSynthesize {
+			if err := writer.WriteField("stream", "true"); err != nil {
+				return nil, fmt.Errorf("failed to write stream field: %w", err)
 			}
 		}
 

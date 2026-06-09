@@ -98,6 +98,7 @@ type RelayInfo struct {
 	isFirstResponse   bool
 	//SendLastReasoningResponse bool
 	IsStream               bool
+	ImageUpstreamStreamSynthesize bool // upstream SSE, synthesize non-stream response for client
 	IsGeminiBatchEmbedding bool
 	IsPlayground           bool
 	UsePrice               bool

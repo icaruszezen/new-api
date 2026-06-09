@@ -379,6 +379,10 @@ export const MODEL_FETCHABLE_TYPES = new Set([
   1, 4, 14, 17, 20, 23, 24, 25, 26, 27, 31, 34, 35, 40, 42, 43, 47, 48,
 ])
 
+export const OPENAI_COMPATIBLE_IMAGE_STREAM_CHANNEL_TYPES = new Set([
+  1, 3, 20, 45, 47, 48,
+])
+
 export const TYPE_TO_KEY_PROMPT: Record<number, string> = {
   15: 'Format: APIKey|SecretKey',
   18: 'Format: APPID|APISecret|APIKey',

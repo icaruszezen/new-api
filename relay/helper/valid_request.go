@@ -183,6 +183,10 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 				watermark := formData.Get("watermark") == "true"
 				imageRequest.Watermark = &watermark
 			}
+			if formData.Has("stream") {
+				stream := formData.Get("stream") == "true"
+				imageRequest.Stream = &stream
+			}
 			break
 		}
 		fallthrough

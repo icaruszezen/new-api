@@ -190,6 +190,7 @@ const EditChannelModal = (props) => {
     // 渠道额外设置的默认值
     force_format: false,
     thinking_to_content: false,
+    image_nonstream_via_upstream_stream_enabled: false,
     proxy: '',
     pass_through_body_enabled: false,
     system_prompt: '',
@@ -512,6 +513,7 @@ const EditChannelModal = (props) => {
   const [channelSettings, setChannelSettings] = useState({
     force_format: false,
     thinking_to_content: false,
+    image_nonstream_via_upstream_stream_enabled: false,
     proxy: '',
     pass_through_body_enabled: false,
     system_prompt: '',
@@ -862,6 +864,8 @@ const EditChannelModal = (props) => {
           data.force_format = parsedSettings.force_format || false;
           data.thinking_to_content =
             parsedSettings.thinking_to_content || false;
+          data.image_nonstream_via_upstream_stream_enabled =
+            parsedSettings.image_nonstream_via_upstream_stream_enabled === true;
           data.proxy = parsedSettings.proxy || '';
           data.pass_through_body_enabled =
             parsedSettings.pass_through_body_enabled || false;
@@ -872,6 +876,7 @@ const EditChannelModal = (props) => {
           console.error('解析渠道设置失败:', error);
           data.force_format = false;
           data.thinking_to_content = false;
+          data.image_nonstream_via_upstream_stream_enabled = false;
           data.proxy = '';
           data.pass_through_body_enabled = false;
           data.system_prompt = '';
@@ -880,6 +885,7 @@ const EditChannelModal = (props) => {
       } else {
         data.force_format = false;
         data.thinking_to_content = false;
+        data.image_nonstream_via_upstream_stream_enabled = false;
         data.proxy = '';
         data.pass_through_body_enabled = false;
         data.system_prompt = '';
@@ -989,6 +995,8 @@ const EditChannelModal = (props) => {
       setChannelSettings({
         force_format: data.force_format,
         thinking_to_content: data.thinking_to_content,
+        image_nonstream_via_upstream_stream_enabled:
+          data.image_nonstream_via_upstream_stream_enabled,
         proxy: data.proxy,
         pass_through_body_enabled: data.pass_through_body_enabled,
         system_prompt: data.system_prompt,
@@ -1033,6 +1041,7 @@ const EditChannelModal = (props) => {
         (data.system_prompt && data.system_prompt.trim()) ||
         data.thinking_to_content ||
         data.pass_through_body_enabled ||
+        data.image_nonstream_via_upstream_stream_enabled ||
         data.force_format ||
         data.claude_beta_query ||
         data.system_prompt_override;
@@ -1373,6 +1382,7 @@ const EditChannelModal = (props) => {
     setChannelSettings({
       force_format: false,
       thinking_to_content: false,
+      image_nonstream_via_upstream_stream_enabled: false,
       proxy: '',
       pass_through_body_enabled: false,
       system_prompt: '',
@@ -1743,6 +1753,8 @@ const EditChannelModal = (props) => {
     const channelExtraSettings = {
       force_format: localInputs.force_format || false,
       thinking_to_content: localInputs.thinking_to_content || false,
+      image_nonstream_via_upstream_stream_enabled:
+        localInputs.image_nonstream_via_upstream_stream_enabled === true,
       proxy: localInputs.proxy || '',
       pass_through_body_enabled: localInputs.pass_through_body_enabled || false,
       system_prompt: localInputs.system_prompt || '',
@@ -1824,6 +1836,7 @@ const EditChannelModal = (props) => {
     // 清理不需要发送到后端的字段
     delete localInputs.force_format;
     delete localInputs.thinking_to_content;
+    delete localInputs.image_nonstream_via_upstream_stream_enabled;
     delete localInputs.proxy;
     delete localInputs.pass_through_body_enabled;
     delete localInputs.system_prompt;
@@ -2514,6 +2527,24 @@ const EditChannelModal = (props) => {
 
                   {inputs.type === 1 && (
                     <Form.Switch field='force_format' label={t('强制格式化')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('force_format', value)} extraText={t('强制将响应格式化为 OpenAI 标准格式（只适用于OpenAI渠道类型）')} />
+                  )}
+
+                  {[1, 3, 20, 45, 47, 48].includes(inputs.type) && (
+                    <Form.Switch
+                      field='image_nonstream_via_upstream_stream_enabled'
+                      label={t('图像非流式转上游流式')}
+                      checkedText={t('开')}
+                      uncheckedText={t('关')}
+                      onChange={(value) =>
+                        handleChannelSettingsChange(
+                          'image_nonstream_via_upstream_stream_enabled',
+                          value,
+                        )
+                      }
+                      extraText={t(
+                        '开启后，/v1/images/generations 与 /v1/images/edits 的非流式请求将向上游使用流式请求以避免代理超时，并在本地聚合为非流式响应返回客户端。',
+                      )}
+                    />
                   )}
 
                   <Form.Switch field='thinking_to_content' label={t('思考内容转换')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('thinking_to_content', value)} extraText={t('将 reasoning_content 转换为 <think> 标签拼接到内容中')} />

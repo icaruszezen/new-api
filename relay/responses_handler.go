@@ -59,6 +59,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	if err != nil {
 		return types.NewError(fmt.Errorf("failed to copy request to GeneralOpenAIRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 	}
+	downstreamModel := request.Model
 
 	err = helper.ModelMappedHelper(c, info, request)
 	if err != nil {
@@ -76,8 +77,31 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 		}
-		requestBody = common.ReaderOnly(storage)
+		if info.ChannelSetting.AutoSetReasoningEffortByModel {
+			bodyBytes, bErr := storage.Bytes()
+			if bErr != nil {
+				return types.NewError(bErr, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
+			}
+			updatedBody, changed, applyErr := applyResponsesPassThroughReasoningEffortFromModel(bodyBytes, true)
+			if applyErr != nil {
+				return types.NewError(applyErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			}
+			if changed {
+				body, size, closer, createErr := relaycommon.NewOutboundJSONBody(updatedBody)
+				if createErr != nil {
+					return types.NewError(createErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+				}
+				defer closer.Close()
+				info.UpstreamRequestBodySize = size
+				requestBody = body
+			} else {
+				requestBody = common.ReaderOnly(storage)
+			}
+		} else {
+			requestBody = common.ReaderOnly(storage)
+		}
 	} else {
+		applyResponsesReasoningEffortFromModel(request, downstreamModel, info.ChannelSetting.AutoSetReasoningEffortByModel)
 		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())

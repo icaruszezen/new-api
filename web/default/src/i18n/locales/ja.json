@@ -3994,6 +3994,8 @@
     "These toggles affect whether certain request fields are passed through to the upstream provider.": "これらの切り替えは、特定の要求フィールドがアップストリームプロバイダーに渡されるかどうかに影響します。",
     "Thinking Suffix Adapter": "思考サフィックスアダプター",
     "Thinking to Content": "思考からコンテンツへ",
+    "Auto Reasoning Effort from Model": "モデル名から推論強度を自動設定",
+    "When enabled, model names containing low, medium, high, or xhigh override the upstream reasoning effort": "有効にすると、モデル名に low、medium、high、xhigh が含まれる場合、上流へ送る推論強度を上書きします",
     "Cache Read Billing Ratio": "キャッシュ読み取り課金比率",
     "Scale cache read tokens in downstream responses and billing for this channel": "このチャネルで下流レスポンスと課金のキャッシュ読み取りトークンを係数で補正します",
     "Cache Read Billing Ratio Value": "キャッシュ読み取り課金比率の値",

@@ -3994,6 +3994,8 @@
     "These toggles affect whether certain request fields are passed through to the upstream provider.": "这些开关控制某些请求字段是否透传到上游服务。",
     "Thinking Suffix Adapter": "思考后缀适配器",
     "Thinking to Content": "思维到内容",
+    "Auto Reasoning Effort from Model": "根据模型名自动设置思维强度",
+    "When enabled, model names containing low, medium, high, or xhigh override the upstream reasoning effort": "启用后，模型名中包含 low、medium、high 或 xhigh 时，会覆盖发往上游的思维强度",
     "Cache Read Billing Ratio": "缓存读取计费比例",
     "Scale cache read tokens in downstream responses and billing for this channel": "按系数修正该渠道返回给下游的缓存读取 token 及对应计费",
     "Cache Read Billing Ratio Value": "缓存读取计费比例值",

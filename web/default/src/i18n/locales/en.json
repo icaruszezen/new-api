@@ -3994,6 +3994,8 @@
     "These toggles affect whether certain request fields are passed through to the upstream provider.": "These toggles affect whether certain request fields are passed through to the upstream provider.",
     "Thinking Suffix Adapter": "Thinking Suffix Adapter",
     "Thinking to Content": "Thinking to Content",
+    "Auto Reasoning Effort from Model": "Auto Reasoning Effort from Model",
+    "When enabled, model names containing low, medium, high, or xhigh override the upstream reasoning effort": "When enabled, model names containing low, medium, high, or xhigh override the upstream reasoning effort",
     "Cache Read Billing Ratio": "Cache Read Billing Ratio",
     "Scale cache read tokens in downstream responses and billing for this channel": "Scale cache read tokens in downstream responses and billing for this channel",
     "Cache Read Billing Ratio Value": "Cache Read Billing Ratio Value",

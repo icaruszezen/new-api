@@ -38,6 +38,10 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
 
+	if shouldImageUpstreamStreamSynthesize(c, info, imageReq) {
+		applyImageUpstreamStreamSynthesize(info, request)
+	}
+
 	adaptor := GetAdaptor(info.ApiType)
 	if adaptor == nil {
 		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
@@ -155,6 +159,9 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	}
 	if imageN > 0 {
 		logContent = append(logContent, fmt.Sprintf("生成数量 %d", imageN))
+	}
+	if info.ImageUpstreamStreamSynthesize {
+		logContent = append(logContent, "上游流式聚合")
 	}
 
 	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), logContent)

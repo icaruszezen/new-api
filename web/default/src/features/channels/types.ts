@@ -89,6 +89,7 @@ export interface ChannelSettings {
   system_prompt_override?: boolean
   cache_billing_ratio_enabled?: boolean
   cache_billing_ratio?: number
+  image_nonstream_via_upstream_stream_enabled?: boolean
 }
 
 export interface ChannelOtherSettings {

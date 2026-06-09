@@ -10,6 +10,7 @@ type ChannelSettings struct {
 	SystemPromptOverride              bool    `json:"system_prompt_override,omitempty"`
 	CacheBillingRatioEnabled          bool    `json:"cache_billing_ratio_enabled,omitempty"`
 	CacheBillingRatio                 float64 `json:"cache_billing_ratio,omitempty"`
+	ImageNonStreamViaUpstreamStreamEnabled bool `json:"image_nonstream_via_upstream_stream_enabled,omitempty"`
 }
 
 type VertexKeyType string

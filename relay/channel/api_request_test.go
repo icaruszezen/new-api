@@ -1,14 +1,122 @@
 package channel
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func init() {
+	service.InitHttpClient()
+}
+
+func TestSetupApiRequestHeader_ImageUpstreamStreamSynthesizeSetsAccept(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	info := &relaycommon.RelayInfo{
+		RelayMode:                     relayconstant.RelayModeImagesGenerations,
+		ImageUpstreamStreamSynthesize: true,
+	}
+
+	headers := make(http.Header)
+	SetupApiRequestHeader(info, ctx, &headers)
+	require.Equal(t, "text/event-stream", headers.Get("Accept"))
+}
+
+func TestSetupApiRequestHeader_ImageUpstreamStreamSynthesizeRespectsClientAccept(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+	ctx.Request.Header.Set("Accept", "application/json")
+
+	info := &relaycommon.RelayInfo{
+		RelayMode:                     relayconstant.RelayModeImagesGenerations,
+		ImageUpstreamStreamSynthesize: true,
+	}
+
+	headers := make(http.Header)
+	SetupApiRequestHeader(info, ctx, &headers)
+	require.Equal(t, "application/json", headers.Get("Accept"))
+}
+
+func TestDoRequest_ImageUpstreamStreamSynthesizeSkipsClientSSEHeaders(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(upstream.Close)
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+
+	info := &relaycommon.RelayInfo{
+		RelayMode:                     relayconstant.RelayModeImagesGenerations,
+		ImageUpstreamStreamSynthesize: true,
+		ChannelMeta:                   &relaycommon.ChannelMeta{},
+	}
+
+	req, err := http.NewRequest(http.MethodPost, upstream.URL, http.NoBody)
+	require.NoError(t, err)
+	resp, err := doRequest(ctx, req, info)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	_ = resp.Body.Close()
+
+	_, hasSSEHeaders := ctx.Get("event_stream_headers_set")
+	require.False(t, hasSSEHeaders)
+	require.NotEqual(t, "text/event-stream", recorder.Header().Get("Content-Type"))
+}
+
+func TestDoRequest_ClientStreamStillSetsSSEHeaders(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(upstream.Close)
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+
+	info := &relaycommon.RelayInfo{
+		IsStream:    true,
+		DisablePing: true,
+		ChannelMeta: &relaycommon.ChannelMeta{},
+	}
+
+	req, err := http.NewRequest(http.MethodPost, upstream.URL, http.NoBody)
+	require.NoError(t, err)
+	resp, err := doRequest(ctx, req, info)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	_ = resp.Body.Close()
+
+	_, hasSSEHeaders := ctx.Get("event_stream_headers_set")
+	require.True(t, hasSSEHeaders)
+	require.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
+}
 
 func TestProcessHeaderOverride_ChannelTestSkipsPassthroughRules(t *testing.T) {
 	t.Parallel()

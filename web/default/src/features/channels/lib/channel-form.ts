@@ -185,6 +185,7 @@ export const channelFormSchema = z
     system_prompt_override: z.boolean().optional(),
     cache_billing_ratio_enabled: z.boolean().optional(),
     cache_billing_ratio: z.number().optional(),
+    image_nonstream_via_upstream_stream_enabled: z.boolean().optional(),
     // Type-specific settings (stored in settings JSON)
     is_enterprise_account: z.boolean().optional(), // OpenRouter specific
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
@@ -326,6 +327,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   system_prompt_override: false,
   cache_billing_ratio_enabled: false,
   cache_billing_ratio: 1,
+  image_nonstream_via_upstream_stream_enabled: false,
   // Type-specific settings
   is_enterprise_account: false,
   vertex_key_type: 'json',
@@ -365,6 +367,7 @@ export function transformChannelToFormDefaults(
     system_prompt_override: false,
     cache_billing_ratio_enabled: false,
     cache_billing_ratio: 1,
+    image_nonstream_via_upstream_stream_enabled: false,
   }
 
   if (channel.setting) {
@@ -385,6 +388,8 @@ export function transformChannelToFormDefaults(
           parsed.cache_billing_ratio > 0
             ? parsed.cache_billing_ratio
             : 1,
+        image_nonstream_via_upstream_stream_enabled:
+          parsed.image_nonstream_via_upstream_stream_enabled === true,
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -500,6 +505,8 @@ function buildSettingJSON(formData: ChannelFormValues): string {
     cache_billing_ratio: formData.cache_billing_ratio_enabled
       ? formData.cache_billing_ratio || 1
       : undefined,
+    image_nonstream_via_upstream_stream_enabled:
+      formData.image_nonstream_via_upstream_stream_enabled === true,
   }
   return JSON.stringify(settingObj)
 }

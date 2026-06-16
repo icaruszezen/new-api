@@ -294,4 +294,3 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 
 	return &simpleResponse.Usage, nil
 }
-	c.Writer.WriteHeaderNow()

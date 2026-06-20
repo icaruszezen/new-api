@@ -97,34 +97,37 @@ type RelayInfo struct {
 	TokenUnlimited    bool
 	StartTime         time.Time
 	FirstResponseTime time.Time
-	isFirstResponse   bool
+	// firstResponseSet 是首字时间的原子门闩：零值 false 表示尚未记录。
+	// 流式转发的扫描器 goroutine 与「假首字」prelude goroutine 可能并发调用
+	// SetFirstResponseTime，用 CAS 保证仅一个 goroutine 写入 FirstResponseTime。
+	firstResponseSet atomic.Bool
 	//SendLastReasoningResponse bool
-	IsStream               bool
+	IsStream                      bool
 	ImageUpstreamStreamSynthesize bool // upstream SSE, synthesize non-stream response for client
-	IsGeminiBatchEmbedding bool
-	IsPlayground           bool
-	UsePrice               bool
-	RelayMode              int
-	OriginModelName        string
-	RequestURLPath         string
-	RequestHeaders         map[string]string
-	ShouldIncludeUsage     bool
-	DisablePing            bool // 是否禁止向下游发送自定义 Ping
-	ClientWs               *websocket.Conn
-	TargetWs               *websocket.Conn
-	InputAudioFormat       string
-	OutputAudioFormat      string
-	RealtimeTools          []dto.RealTimeTool
-	IsFirstRequest         bool
-	AudioUsage             bool
-	ReasoningEffort        string
-	UserSetting            dto.UserSetting
-	UserEmail              string
-	UserQuota              int
-	RelayFormat            types.RelayFormat
-	SendResponseCount      int
-	ReceivedResponseCount  int
-	FinalPreConsumedQuota  int // 最终预消耗的配额
+	IsGeminiBatchEmbedding        bool
+	IsPlayground                  bool
+	UsePrice                      bool
+	RelayMode                     int
+	OriginModelName               string
+	RequestURLPath                string
+	RequestHeaders                map[string]string
+	ShouldIncludeUsage            bool
+	DisablePing                   bool // 是否禁止向下游发送自定义 Ping
+	ClientWs                      *websocket.Conn
+	TargetWs                      *websocket.Conn
+	InputAudioFormat              string
+	OutputAudioFormat             string
+	RealtimeTools                 []dto.RealTimeTool
+	IsFirstRequest                bool
+	AudioUsage                    bool
+	ReasoningEffort               string
+	UserSetting                   dto.UserSetting
+	UserEmail                     string
+	UserQuota                     int
+	RelayFormat                   types.RelayFormat
+	SendResponseCount             int
+	ReceivedResponseCount         int
+	FinalPreConsumedQuota         int // 最终预消耗的配额
 	// ForcePreConsume 为 true 时禁用 BillingSession 的信任额度旁路，
 	// 强制预扣全额。用于异步任务（视频/音乐生成等），因为请求返回后任务仍在运行，
 	// 必须在提交前锁定全额。
@@ -489,12 +492,11 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		TokenUnlimited: common.GetContextKeyBool(c, constant.ContextKeyTokenUnlimited),
 		TokenGroup:     tokenGroup,
 
-		isFirstResponse: true,
-		streamWriteMu:   &sync.Mutex{},
-		RelayMode:       relayconstant.Path2RelayMode(c.Request.URL.Path),
-		RequestURLPath:  c.Request.URL.String(),
-		RequestHeaders:  cloneRequestHeaders(c),
-		IsStream:        isStream,
+		streamWriteMu:  &sync.Mutex{},
+		RelayMode:      relayconstant.Path2RelayMode(c.Request.URL.Path),
+		RequestURLPath: c.Request.URL.String(),
+		RequestHeaders: cloneRequestHeaders(c),
+		IsStream:       isStream,
 
 		StartTime:         startTime,
 		FirstResponseTime: startTime.Add(-time.Second),
@@ -669,9 +671,8 @@ func (info *RelayInfo) GetEstimatePromptTokens() int {
 }
 
 func (info *RelayInfo) SetFirstResponseTime() {
-	if info.isFirstResponse {
+	if info.firstResponseSet.CompareAndSwap(false, true) {
 		info.FirstResponseTime = time.Now()
-		info.isFirstResponse = false
 	}
 }
 

@@ -1,12 +1,13 @@
-package channel
+package helper
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/relay/common"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -25,15 +26,17 @@ func newPreludeTestContext(t *testing.T) (*gin.Context, *httptest.ResponseRecord
 	return c, recorder
 }
 
-func newPreludeTestInfo(format types.RelayFormat, model string) *common.RelayInfo {
-	return &common.RelayInfo{
+func newPreludeTestInfo(format types.RelayFormat, model string) *relaycommon.RelayInfo {
+	return &relaycommon.RelayInfo{
 		RelayFormat:     format,
 		OriginModelName: model,
+		StartTime:       time.Now().Add(-time.Minute),
 	}
 }
 
 // TestDeliverStreamPrelude_SendsPerProtocol 验证三种受支持协议下 prelude 内容符合下游客户端期望：
 // Chat 发空首字 chunk；Claude / Responses 仅发 SSE 注释行，不发伪造业务事件。
+// 同时验证发送成功后 FirstResponseTime 被标记（上游自身首字时间反映 prelude）。
 func TestDeliverStreamPrelude_SendsPerProtocol(t *testing.T) {
 	t.Run("openai chat sends empty start chunk", func(t *testing.T) {
 		c, recorder := newPreludeTestContext(t)
@@ -47,6 +50,7 @@ func TestDeliverStreamPrelude_SendsPerProtocol(t *testing.T) {
 		assert.Contains(t, body, "\"role\":\"assistant\"")
 		assert.Contains(t, body, "\"content\":\"\"")
 		assert.Contains(t, body, "\"model\":\"gpt-4o-mini\"")
+		assert.True(t, info.HasSendResponse(), "first response time should be marked after prelude")
 	})
 
 	t.Run("claude sends comment line only", func(t *testing.T) {
@@ -60,6 +64,7 @@ func TestDeliverStreamPrelude_SendsPerProtocol(t *testing.T) {
 		assert.Equal(t, ": \n\n", body)
 		assert.NotContains(t, body, "message_start")
 		assert.NotContains(t, body, "data:")
+		assert.True(t, info.HasSendResponse())
 	})
 
 	t.Run("responses sends comment line only", func(t *testing.T) {
@@ -73,10 +78,12 @@ func TestDeliverStreamPrelude_SendsPerProtocol(t *testing.T) {
 		assert.Equal(t, ": \n\n", body)
 		assert.NotContains(t, body, "response.created")
 		assert.NotContains(t, body, "data:")
+		assert.True(t, info.HasSendResponse())
 	})
 }
 
-// TestDeliverStreamPrelude_SkipWhenUpstreamStarted 验证上游已返回业务内容时不发 prelude（上游优先）。
+// TestDeliverStreamPrelude_SkipWhenUpstreamStarted 验证上游已返回业务内容时不发 prelude（上游优先），
+// 且不会篡改 FirstResponseTime。
 func TestDeliverStreamPrelude_SkipWhenUpstreamStarted(t *testing.T) {
 	c, recorder := newPreludeTestContext(t)
 	info := newPreludeTestInfo(types.RelayFormatOpenAI, "gpt-4o-mini")
@@ -86,6 +93,7 @@ func TestDeliverStreamPrelude_SkipWhenUpstreamStarted(t *testing.T) {
 
 	assert.False(t, sent)
 	assert.Empty(t, recorder.Body.String())
+	assert.False(t, info.HasSendResponse(), "prelude must not mark first response time when skipped")
 }
 
 // TestDeliverStreamPrelude_OnlyOnce 验证每请求最多发送一次 prelude。
@@ -109,6 +117,7 @@ func TestDeliverStreamPrelude_UnsupportedFormat(t *testing.T) {
 
 	assert.False(t, sent)
 	assert.Empty(t, recorder.Body.String())
+	assert.False(t, info.HasSendResponse())
 }
 
 // TestStreamPreludeDelay_Bounds 验证随机延迟落在 [Min, Max] 秒区间内，且对非法配置做钳制。
@@ -128,8 +137,8 @@ func TestStreamPreludeDelay_Bounds(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			info := &common.RelayInfo{
-				ChannelMeta: &common.ChannelMeta{
+			info := &relaycommon.RelayInfo{
+				ChannelMeta: &relaycommon.ChannelMeta{
 					ChannelSetting: dto.ChannelSettings{
 						StreamPreludeEnabled:         true,
 						StreamPreludeDelayMinSeconds: tc.minSeconds,
@@ -146,12 +155,12 @@ func TestStreamPreludeDelay_Bounds(t *testing.T) {
 	}
 }
 
-// TestPreludeEnabledForFormat 验证渠道开关与协议共同决定 prelude 是否启用。
+// TestPreludeEnabledForFormat 验证渠道开关、协议、以及 ChannelMeta 缺失防御共同决定 prelude 是否启用。
 func TestPreludeEnabledForFormat(t *testing.T) {
-	makeInfo := func(enabled bool, format types.RelayFormat) *common.RelayInfo {
-		return &common.RelayInfo{
+	makeInfo := func(enabled bool, format types.RelayFormat) *relaycommon.RelayInfo {
+		return &relaycommon.RelayInfo{
 			RelayFormat: format,
-			ChannelMeta: &common.ChannelMeta{
+			ChannelMeta: &relaycommon.ChannelMeta{
 				ChannelSetting: dto.ChannelSettings{StreamPreludeEnabled: enabled},
 			},
 		}
@@ -162,4 +171,8 @@ func TestPreludeEnabledForFormat(t *testing.T) {
 	assert.True(t, preludeEnabledForFormat(makeInfo(true, types.RelayFormatOpenAIResponses)))
 	assert.False(t, preludeEnabledForFormat(makeInfo(false, types.RelayFormatOpenAI)))
 	assert.False(t, preludeEnabledForFormat(makeInfo(true, types.RelayFormatGemini)))
+
+	// ChannelMeta 缺失时必须安全返回 false，不 panic
+	assert.False(t, preludeEnabledForFormat(&relaycommon.RelayInfo{RelayFormat: types.RelayFormatOpenAI}))
+	assert.False(t, preludeEnabledForFormat(nil))
 }

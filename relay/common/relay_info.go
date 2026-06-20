@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -179,6 +181,14 @@ type RelayInfo struct {
 	FinalRequestRelayFormat types.RelayFormat
 
 	StreamStatus *StreamStatus
+
+	// streamWriteMu 是流式响应写客户端的共享互斥锁，供上游转发、Ping 保活、
+	// 「流式假首字」prelude 共用，避免并发写 SSE 冲突。在 genBaseRelayInfo 中预初始化。
+	streamWriteMu *sync.Mutex
+	// streamUpstreamStarted 在收到上游首条有效业务数据后置位，prelude 据此判断是否放弃发送。
+	streamUpstreamStarted atomic.Bool
+	// streamPreludeSent 保证每请求最多发送一次 prelude。
+	streamPreludeSent atomic.Bool
 
 	ThinkingContentInfo
 	TokenCountMeta
@@ -480,6 +490,7 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		TokenGroup:     tokenGroup,
 
 		isFirstResponse: true,
+		streamWriteMu:   &sync.Mutex{},
 		RelayMode:       relayconstant.Path2RelayMode(c.Request.URL.Path),
 		RequestURLPath:  c.Request.URL.String(),
 		RequestHeaders:  cloneRequestHeaders(c),
@@ -666,6 +677,31 @@ func (info *RelayInfo) SetFirstResponseTime() {
 
 func (info *RelayInfo) HasSendResponse() bool {
 	return info.FirstResponseTime.After(info.StartTime)
+}
+
+// StreamWriteMutex 返回流式写客户端的共享互斥锁。若未初始化则惰性创建，
+// 保证上游转发、Ping、prelude 共用同一把锁。
+func (info *RelayInfo) StreamWriteMutex() *sync.Mutex {
+	if info.streamWriteMu == nil {
+		info.streamWriteMu = &sync.Mutex{}
+	}
+	return info.streamWriteMu
+}
+
+// MarkStreamUpstreamStarted 标记上游已返回首条有效业务数据。
+func (info *RelayInfo) MarkStreamUpstreamStarted() {
+	info.streamUpstreamStarted.Store(true)
+}
+
+// StreamUpstreamStarted 返回上游是否已返回有效业务数据。
+func (info *RelayInfo) StreamUpstreamStarted() bool {
+	return info.streamUpstreamStarted.Load()
+}
+
+// TryMarkStreamPreludeSent 原子地将 prelude 标记为已发送，仅当此前未发送时返回 true，
+// 用于保证每请求最多发送一次 prelude。
+func (info *RelayInfo) TryMarkStreamPreludeSent() bool {
+	return info.streamPreludeSent.CompareAndSwap(false, true)
 }
 
 type TaskRelayInfo struct {

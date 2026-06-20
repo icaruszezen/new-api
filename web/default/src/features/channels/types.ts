@@ -90,6 +90,9 @@ export interface ChannelSettings {
   cache_billing_ratio_enabled?: boolean
   cache_billing_ratio?: number
   image_nonstream_via_upstream_stream_enabled?: boolean
+  stream_prelude_enabled?: boolean
+  stream_prelude_delay_min_seconds?: number
+  stream_prelude_delay_max_seconds?: number
 }
 
 export interface ChannelOtherSettings {

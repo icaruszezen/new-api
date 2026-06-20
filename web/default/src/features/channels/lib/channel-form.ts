@@ -194,6 +194,9 @@ export const channelFormSchema = z
     cache_billing_ratio_enabled: z.boolean().optional(),
     cache_billing_ratio: z.number().optional(),
     image_nonstream_via_upstream_stream_enabled: z.boolean().optional(),
+    stream_prelude_enabled: z.boolean().optional(),
+    stream_prelude_delay_min_seconds: z.number().optional(),
+    stream_prelude_delay_max_seconds: z.number().optional(),
     // Type-specific settings (stored in settings JSON)
     is_enterprise_account: z.boolean().optional(), // OpenRouter specific
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
@@ -312,6 +315,45 @@ export const channelFormSchema = z
         )
       }
     }
+
+    if (data.stream_prelude_enabled) {
+      const minSeconds = data.stream_prelude_delay_min_seconds
+      const maxSeconds = data.stream_prelude_delay_max_seconds
+      if (
+        minSeconds == null ||
+        !Number.isFinite(minSeconds) ||
+        minSeconds < 0
+      ) {
+        addRequiredIssue(
+          ctx,
+          'stream_prelude_delay_min_seconds',
+          'Minimum delay must be greater than or equal to 0'
+        )
+      }
+      if (maxSeconds == null || !Number.isFinite(maxSeconds)) {
+        addRequiredIssue(
+          ctx,
+          'stream_prelude_delay_max_seconds',
+          'Maximum delay must be greater than or equal to the minimum delay'
+        )
+      } else if (maxSeconds > 30) {
+        addRequiredIssue(
+          ctx,
+          'stream_prelude_delay_max_seconds',
+          'Maximum delay must not exceed 30 seconds'
+        )
+      } else if (
+        minSeconds != null &&
+        Number.isFinite(minSeconds) &&
+        maxSeconds < minSeconds
+      ) {
+        addRequiredIssue(
+          ctx,
+          'stream_prelude_delay_max_seconds',
+          'Maximum delay must be greater than or equal to the minimum delay'
+        )
+      }
+    }
   })
 
 export type ChannelFormValues = z.infer<typeof channelFormSchema>
@@ -357,6 +399,9 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   cache_billing_ratio_enabled: false,
   cache_billing_ratio: 1,
   image_nonstream_via_upstream_stream_enabled: false,
+  stream_prelude_enabled: false,
+  stream_prelude_delay_min_seconds: 0,
+  stream_prelude_delay_max_seconds: 5,
   // Type-specific settings
   is_enterprise_account: false,
   vertex_key_type: 'json',
@@ -398,6 +443,9 @@ export function transformChannelToFormDefaults(
     cache_billing_ratio_enabled: false,
     cache_billing_ratio: 1,
     image_nonstream_via_upstream_stream_enabled: false,
+    stream_prelude_enabled: false,
+    stream_prelude_delay_min_seconds: 0,
+    stream_prelude_delay_max_seconds: 5,
   }
 
   if (channel.setting) {
@@ -420,6 +468,17 @@ export function transformChannelToFormDefaults(
             : 1,
         image_nonstream_via_upstream_stream_enabled:
           parsed.image_nonstream_via_upstream_stream_enabled === true,
+        stream_prelude_enabled: parsed.stream_prelude_enabled === true,
+        stream_prelude_delay_min_seconds:
+          typeof parsed.stream_prelude_delay_min_seconds === 'number' &&
+          parsed.stream_prelude_delay_min_seconds >= 0
+            ? parsed.stream_prelude_delay_min_seconds
+            : 0,
+        stream_prelude_delay_max_seconds:
+          typeof parsed.stream_prelude_delay_max_seconds === 'number' &&
+          parsed.stream_prelude_delay_max_seconds >= 0
+            ? parsed.stream_prelude_delay_max_seconds
+            : 5,
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -542,6 +601,13 @@ function buildSettingJSON(formData: ChannelFormValues): string {
       : undefined,
     image_nonstream_via_upstream_stream_enabled:
       formData.image_nonstream_via_upstream_stream_enabled === true,
+    stream_prelude_enabled: formData.stream_prelude_enabled || false,
+    stream_prelude_delay_min_seconds: formData.stream_prelude_enabled
+      ? (formData.stream_prelude_delay_min_seconds ?? 0)
+      : undefined,
+    stream_prelude_delay_max_seconds: formData.stream_prelude_enabled
+      ? (formData.stream_prelude_delay_max_seconds ?? 5)
+      : undefined,
   }
   return JSON.stringify(settingObj)
 }

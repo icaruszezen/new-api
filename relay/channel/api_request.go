@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"regexp"
 	"strings"
@@ -396,8 +397,11 @@ func DoWssRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	return targetConn, nil
 }
 
-func startPingKeepAlive(c *gin.Context, pingInterval time.Duration) context.CancelFunc {
+func startPingKeepAlive(c *gin.Context, info *common.RelayInfo, pingInterval time.Duration) context.CancelFunc {
 	pingerCtx, stopPinger := context.WithCancel(context.Background())
+
+	// 复用 RelayInfo 上的共享写锁，避免与 prelude / 上游转发并发写冲突
+	pingMutex := info.StreamWriteMutex()
 
 	gopool.Go(func() {
 		defer func() {
@@ -419,7 +423,6 @@ func startPingKeepAlive(c *gin.Context, pingInterval time.Duration) context.Canc
 			logger.LogDebug(c, "SSE ping ticker stopped")
 		}()
 
-		var pingMutex sync.Mutex
 		logger.LogDebug(c, "SSE ping goroutine started")
 
 		// 增加超时控制，防止goroutine长时间运行
@@ -431,7 +434,7 @@ func startPingKeepAlive(c *gin.Context, pingInterval time.Duration) context.Canc
 			select {
 			// 发送 ping 数据
 			case <-ticker.C:
-				if err := sendPingData(c, &pingMutex); err != nil {
+				if err := sendPingData(c, pingMutex); err != nil {
 					logger.LogDebug(c, "SSE ping error, stopping goroutine: %s", err.Error())
 					return
 				}
@@ -481,6 +484,112 @@ func sendPingData(c *gin.Context, mutex *sync.Mutex) error {
 	}
 }
 
+// preludeSupportedFormat 报告该下游客户端格式是否支持「流式假首字」prelude。
+// 仅 OpenAI chat、Claude messages、OpenAI Responses 三种流式协议受支持。
+func preludeSupportedFormat(format types.RelayFormat) bool {
+	switch format {
+	case types.RelayFormatOpenAI, types.RelayFormatClaude, types.RelayFormatOpenAIResponses:
+		return true
+	default:
+		return false
+	}
+}
+
+// preludeEnabledForFormat 判断当前请求是否启用「流式假首字」prelude：
+// 渠道开启且下游客户端格式为受支持的三种流式协议之一。
+func preludeEnabledForFormat(info *common.RelayInfo) bool {
+	if info == nil || !info.ChannelSetting.StreamPreludeEnabled {
+		return false
+	}
+	return preludeSupportedFormat(info.RelayFormat)
+}
+
+// streamPreludeDelay 计算本次请求的随机延迟，delay = Min + rand(0, Max-Min) 秒。
+func streamPreludeDelay(info *common.RelayInfo) time.Duration {
+	minSeconds := info.ChannelSetting.StreamPreludeDelayMinSeconds
+	maxSeconds := info.ChannelSetting.StreamPreludeDelayMaxSeconds
+	if minSeconds < 0 {
+		minSeconds = 0
+	}
+	if maxSeconds < minSeconds {
+		maxSeconds = minSeconds
+	}
+	delaySeconds := minSeconds
+	if maxSeconds > minSeconds {
+		delaySeconds += rand.Intn(maxSeconds - minSeconds + 1)
+	}
+	return time.Duration(delaySeconds) * time.Second
+}
+
+// startStreamPrelude 与 client.Do(req) 并行启动一个一次性 goroutine：
+// 等待随机延迟，到期时若上游仍未返回任何业务内容且客户端未断开，则发送 prelude。
+// goroutine 由定时器（上限受 Max 约束）与请求上下文自然终止，无需外部 cancel。
+func startStreamPrelude(c *gin.Context, info *common.RelayInfo) {
+	delay := streamPreludeDelay(info)
+
+	gopool.Go(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.LogDebug(c, "stream prelude goroutine panic recovered: %v", r)
+			}
+		}()
+
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+
+		select {
+		case <-timer.C:
+			if info.StreamUpstreamStarted() {
+				return
+			}
+			deliverStreamPrelude(c, info)
+		case <-c.Request.Context().Done():
+			// 客户端断开或请求结束，干净退出，不发送任何内容
+			return
+		}
+	})
+}
+
+// deliverStreamPrelude 在持有共享写锁的前提下按下游协议发送一次 prelude。
+// 同步、纯逻辑，便于单测；返回是否实际发送了 prelude。
+// 持锁后会二次确认上游尚未开始，避免与上游首条业务内容产生竞态写。
+func deliverStreamPrelude(c *gin.Context, info *common.RelayInfo) bool {
+	if !preludeSupportedFormat(info.RelayFormat) {
+		return false
+	}
+
+	mutex := info.StreamWriteMutex()
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	if info.StreamUpstreamStarted() {
+		return false
+	}
+	// 保证每请求最多发送一次 prelude
+	if !info.TryMarkStreamPreludeSent() {
+		return false
+	}
+
+	var err error
+	switch info.RelayFormat {
+	case types.RelayFormatOpenAI:
+		// Chat Completions：发送一个空首字 chunk（delta.role=assistant、content=""）。
+		// 客户端可容忍多个 chunk，安全。
+		prelude := helper.GenerateStartEmptyResponse(helper.GetResponseID(c), time.Now().Unix(), info.OriginModelName, nil)
+		err = helper.ObjectData(c, prelude)
+	case types.RelayFormatClaude, types.RelayFormatOpenAIResponses:
+		// 无法安全插入空起始事件（会与真实 message_start/response.created 冲突或 ID 对不上），
+		// 退化为仅发送 SSE 注释行保活，不发伪造业务事件。
+		err = helper.CommentData(c, "")
+	}
+
+	if err != nil {
+		logger.LogDebug(c, "stream prelude send failed: %s", err.Error())
+		return false
+	}
+	return true
+}
+
 func DoRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http.Response, error) {
 	return doRequest(c, req, info)
 }
@@ -503,7 +612,7 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		generalSettings := operation_setting.GetGeneralSetting()
 		if generalSettings.PingIntervalEnabled && !info.DisablePing {
 			pingInterval := time.Duration(generalSettings.PingIntervalSeconds) * time.Second
-			stopPinger = startPingKeepAlive(c, pingInterval)
+			stopPinger = startPingKeepAlive(c, info, pingInterval)
 			// 使用defer确保在任何情况下都能停止ping goroutine
 			defer func() {
 				if stopPinger != nil {
@@ -511,6 +620,11 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 					logger.LogDebug(c, "SSE ping goroutine stopped by defer")
 				}
 			}()
+		}
+		// 「流式假首字」：与 client.Do(req) 并行启动，延迟到期且上游仍无内容时发 prelude。
+		// 该 goroutine 由定时器与请求上下文自终止，故不随 doRequest 返回而 cancel。
+		if preludeEnabledForFormat(info) {
+			startStreamPrelude(c, info)
 		}
 	}
 

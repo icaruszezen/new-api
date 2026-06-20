@@ -17,6 +17,11 @@ type ChannelSettings struct {
 	CacheBillingRatioEnabled          bool    `json:"cache_billing_ratio_enabled,omitempty"`
 	CacheBillingRatio                 float64 `json:"cache_billing_ratio,omitempty"`
 	ImageNonStreamViaUpstreamStreamEnabled bool `json:"image_nonstream_via_upstream_stream_enabled,omitempty"`
+	// StreamPreludeEnabled 开启「流式假首字」：流式请求在 [Min,Max] 秒内随机延迟，
+	// 到期时若上游仍无内容则向客户端按下游协议发一个合规空首字/注释行，改善首字体感。
+	StreamPreludeEnabled         bool `json:"stream_prelude_enabled,omitempty"`
+	StreamPreludeDelayMinSeconds int  `json:"stream_prelude_delay_min_seconds,omitempty"`
+	StreamPreludeDelayMaxSeconds int  `json:"stream_prelude_delay_max_seconds,omitempty"`
 }
 
 type VertexKeyType string

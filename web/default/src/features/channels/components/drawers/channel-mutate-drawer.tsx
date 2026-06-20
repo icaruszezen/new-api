@@ -222,6 +222,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.thinking_to_content ||
     values.auto_set_reasoning_effort_by_model ||
     values.cache_billing_ratio_enabled ||
+    values.stream_prelude_enabled ||
     values.pass_through_body_enabled ||
     values.system_prompt_override ||
     values.claude_beta_query ||
@@ -3347,6 +3348,90 @@ export function ChannelMutateDrawer({
                               </FormItem>
                             )}
                           />
+                        )}
+
+                        <FormField
+                          control={form.control}
+                          name='stream_prelude_enabled'
+                          render={({ field }) => (
+                            <FormItem className='flex items-center justify-between px-4 py-3'>
+                              <div className='space-y-0.5'>
+                                <FormLabel>
+                                  {t('Stream Fake First Token')}
+                                </FormLabel>
+                                <FormDescription>
+                                  {t(
+                                    'Send an empty first token after a random delay when the upstream is slow, improving perceived first-token latency'
+                                  )}
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        {form.watch('stream_prelude_enabled') && (
+                          <div className='grid grid-cols-2 gap-4 px-4 py-3'>
+                            <FormField
+                              control={form.control}
+                              name='stream_prelude_delay_min_seconds'
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    {t('Minimum Delay (Seconds)')}
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type='number'
+                                      min={0}
+                                      max={30}
+                                      step={1}
+                                      value={field.value ?? 0}
+                                      onChange={(event) => {
+                                        const next = event.target.value
+                                        field.onChange(
+                                          next === '' ? undefined : Number(next)
+                                        )
+                                      }}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name='stream_prelude_delay_max_seconds'
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    {t('Maximum Delay (Seconds)')}
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type='number'
+                                      min={0}
+                                      max={30}
+                                      step={1}
+                                      value={field.value ?? 5}
+                                      onChange={(event) => {
+                                        const next = event.target.value
+                                        field.onChange(
+                                          next === '' ? undefined : Number(next)
+                                        )
+                                      }}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
                         )}
 
                         <FormField

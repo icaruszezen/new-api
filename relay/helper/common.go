@@ -91,7 +91,9 @@ func StringData(c *gin.Context, str string) error {
 	return FlushWriter(c)
 }
 
-func PingData(c *gin.Context) error {
+// CommentData 向客户端写一行 SSE 注释（以 ": " 开头），注释会被所有 SSE 客户端忽略，
+// 可安全用于保活/占位而不污染业务事件序列。
+func CommentData(c *gin.Context, comment string) error {
 	if c == nil || c.Writer == nil {
 		return errors.New("context or writer is nil")
 	}
@@ -100,10 +102,14 @@ func PingData(c *gin.Context) error {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
 
-	if _, err := c.Writer.Write([]byte(": PING\n\n")); err != nil {
-		return fmt.Errorf("write ping data failed: %w", err)
+	if _, err := c.Writer.Write([]byte(": " + comment + "\n\n")); err != nil {
+		return fmt.Errorf("write comment data failed: %w", err)
 	}
 	return FlushWriter(c)
+}
+
+func PingData(c *gin.Context) error {
+	return CommentData(c, "PING")
 }
 
 func ObjectData(c *gin.Context, object interface{}) error {

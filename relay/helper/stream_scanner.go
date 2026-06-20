@@ -63,7 +63,8 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		scanner    = NewStreamScanner(resp.Body)
 		ticker     = time.NewTicker(streamingTimeout)
 		pingTicker *time.Ticker
-		writeMutex sync.Mutex     // Mutex to protect concurrent writes
+		// 复用 RelayInfo 上的共享锁，使上游转发、Ping、prelude 共用同一把写锁
+		writeMutex = info.StreamWriteMutex()
 		wg         sync.WaitGroup // 用于等待所有 goroutine 退出
 	)
 
@@ -248,6 +249,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			}
 			if !strings.HasPrefix(data, "[DONE]") {
 				info.SetFirstResponseTime()
+				info.MarkStreamUpstreamStarted()
 				info.ReceivedResponseCount++
 
 				select {

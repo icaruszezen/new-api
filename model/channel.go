@@ -953,6 +953,17 @@ func (channel *Channel) ValidateSettings() error {
 			return fmt.Errorf("cache_billing_ratio must not exceed 10")
 		}
 	}
+	if channelParams.StreamPreludeEnabled {
+		if channelParams.StreamPreludeDelayMinSeconds < 0 {
+			return fmt.Errorf("stream_prelude_delay_min_seconds must be greater than or equal to 0")
+		}
+		if channelParams.StreamPreludeDelayMaxSeconds < channelParams.StreamPreludeDelayMinSeconds {
+			return fmt.Errorf("stream_prelude_delay_max_seconds must be greater than or equal to stream_prelude_delay_min_seconds")
+		}
+		if channelParams.StreamPreludeDelayMaxSeconds > 30 {
+			return fmt.Errorf("stream_prelude_delay_max_seconds must not exceed 30")
+		}
+	}
 	channelOtherSettings := &dto.ChannelOtherSettings{}
 	if channel.OtherSettings != "" {
 		err := common.UnmarshalJsonStr(channel.OtherSettings, channelOtherSettings)

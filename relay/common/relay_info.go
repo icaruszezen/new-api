@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
@@ -185,13 +186,9 @@ type RelayInfo struct {
 
 	StreamStatus *StreamStatus
 
-	// streamWriteMu 是流式响应写客户端的共享互斥锁，供上游转发、Ping 保活、
-	// 「流式假首字」prelude 共用，避免并发写 SSE 冲突。在 genBaseRelayInfo 中预初始化。
+	// streamWriteMu 是流式响应写客户端的共享互斥锁，供上游转发与 Ping 保活共用，
+	// 避免并发写 SSE 冲突。在 genBaseRelayInfo 中预初始化。
 	streamWriteMu *sync.Mutex
-	// streamUpstreamStarted 在收到上游首条有效业务数据后置位，prelude 据此判断是否放弃发送。
-	streamUpstreamStarted atomic.Bool
-	// streamPreludeSent 保证每请求最多发送一次 prelude。
-	streamPreludeSent atomic.Bool
 
 	ThinkingContentInfo
 	TokenCountMeta
@@ -672,7 +669,17 @@ func (info *RelayInfo) GetEstimatePromptTokens() int {
 
 func (info *RelayInfo) SetFirstResponseTime() {
 	if info.firstResponseSet.CompareAndSwap(false, true) {
-		info.FirstResponseTime = time.Now()
+		now := time.Now()
+		info.FirstResponseTime = now
+		// 「流式假首字」：仅伪造日志/指标中记录的首字时间，不向客户端发送任何内容。
+		// 将记录的首字时间设为 StartTime + 随机延迟，使日志中的首字时间落在配置区间；
+		// 限制不晚于真实首字时间，避免出现首字晚于完成时间这类不一致。
+		if info.shouldFakeStreamFirstResponseTime() {
+			faked := info.StartTime.Add(info.randomStreamPreludeDelay())
+			if faked.After(info.StartTime) && faked.Before(now) {
+				info.FirstResponseTime = faked
+			}
+		}
 	}
 }
 
@@ -681,7 +688,7 @@ func (info *RelayInfo) HasSendResponse() bool {
 }
 
 // StreamWriteMutex 返回流式写客户端的共享互斥锁。若未初始化则惰性创建，
-// 保证上游转发、Ping、prelude 共用同一把锁。
+// 保证上游转发与 Ping 保活共用同一把锁。
 func (info *RelayInfo) StreamWriteMutex() *sync.Mutex {
 	if info.streamWriteMu == nil {
 		info.streamWriteMu = &sync.Mutex{}
@@ -689,20 +696,28 @@ func (info *RelayInfo) StreamWriteMutex() *sync.Mutex {
 	return info.streamWriteMu
 }
 
-// MarkStreamUpstreamStarted 标记上游已返回首条有效业务数据。
-func (info *RelayInfo) MarkStreamUpstreamStarted() {
-	info.streamUpstreamStarted.Store(true)
+// shouldFakeStreamFirstResponseTime 判断是否对记录的首字时间进行伪造：
+// 仅流式请求、渠道已开启「流式假首字」时生效。
+func (info *RelayInfo) shouldFakeStreamFirstResponseTime() bool {
+	return info.IsStream && info.ChannelMeta != nil && info.ChannelSetting.StreamPreludeEnabled
 }
 
-// StreamUpstreamStarted 返回上游是否已返回有效业务数据。
-func (info *RelayInfo) StreamUpstreamStarted() bool {
-	return info.streamUpstreamStarted.Load()
-}
-
-// TryMarkStreamPreludeSent 原子地将 prelude 标记为已发送，仅当此前未发送时返回 true，
-// 用于保证每请求最多发送一次 prelude。
-func (info *RelayInfo) TryMarkStreamPreludeSent() bool {
-	return info.streamPreludeSent.CompareAndSwap(false, true)
+// randomStreamPreludeDelay 计算本次请求伪造的首字延迟，按毫秒在 [Min, Max] 秒区间随机，
+// 使「0-1s」这类配置能得到平滑的亚秒级随机值。对非法配置做钳制。
+func (info *RelayInfo) randomStreamPreludeDelay() time.Duration {
+	minMs := info.ChannelSetting.StreamPreludeDelayMinSeconds * 1000
+	maxMs := info.ChannelSetting.StreamPreludeDelayMaxSeconds * 1000
+	if minMs < 0 {
+		minMs = 0
+	}
+	if maxMs < minMs {
+		maxMs = minMs
+	}
+	delayMs := minMs
+	if maxMs > minMs {
+		delayMs += rand.Intn(maxMs - minMs + 1)
+	}
+	return time.Duration(delayMs) * time.Millisecond
 }
 
 type TaskRelayInfo struct {

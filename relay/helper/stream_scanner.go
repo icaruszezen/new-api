@@ -181,32 +181,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		})
 	}
 
-	// 「流式假首字」：仅在成功流式响应路径触发（错误响应在 DoResponse 前已被拦截）。
-	// 延迟到期前若上游已发任何数据则放弃；与 ping/转发共用 writeMutex；生命周期随 ctx 结束。
-	if preludeEnabledForFormat(info) {
-		wg.Add(1)
-		gopool.Go(func() {
-			defer func() {
-				wg.Done()
-				if r := recover(); r != nil {
-					logger.LogDebug(c, "stream prelude goroutine panic recovered: %v", r)
-				}
-			}()
-
-			timer := time.NewTimer(streamPreludeDelay(info))
-			defer timer.Stop()
-
-			select {
-			case <-timer.C:
-				if !info.StreamUpstreamStarted() {
-					deliverStreamPrelude(c, info)
-				}
-			case <-ctx.Done():
-			case <-c.Request.Context().Done():
-			}
-		})
-	}
-
 	dataChan := make(chan string, 10)
 
 	wg.Add(1)
@@ -275,7 +249,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			}
 			if !strings.HasPrefix(data, "[DONE]") {
 				info.SetFirstResponseTime()
-				info.MarkStreamUpstreamStarted()
 				info.ReceivedResponseCount++
 
 				select {

@@ -20,6 +20,8 @@ import { SystemBehaviorSection } from '../general/system-behavior-section'
 import { EmailSettingsSection } from '../integrations/email-settings-section'
 import { MonitoringSettingsSection } from '../integrations/monitoring-settings-section'
 import { WorkerSettingsSection } from '../integrations/worker-settings-section'
+import { DebugErrorCaptureSection } from '../maintenance/debug-error-capture-section'
+import { DebugRecentCaptureSection } from '../maintenance/debug-recent-capture-section'
 import { LogSettingsSection } from '../maintenance/log-settings-section'
 import { PerformanceSection } from '../maintenance/performance-section'
 import { UpdateCheckerSection } from '../maintenance/update-checker-section'
@@ -122,6 +124,28 @@ const OPERATIONS_SECTIONS = [
           'performance_setting.monitor_disk_threshold':
             settings['performance_setting.monitor_disk_threshold'] ?? 95,
         }}
+      />
+    ),
+  },
+  {
+    id: 'debug-error-capture',
+    titleKey: 'Error Request Capture',
+    build: (settings: OperationsSettings) => (
+      <DebugErrorCaptureSection
+        defaultEnabled={Boolean(
+          settings['debug_setting.error_capture_enabled']
+        )}
+      />
+    ),
+  },
+  {
+    id: 'debug-recent-capture',
+    titleKey: 'Recent Request Capture',
+    build: (settings: OperationsSettings) => (
+      <DebugRecentCaptureSection
+        defaultEnabled={Boolean(
+          settings['debug_setting.recent_capture_enabled']
+        )}
       />
     ),
   },

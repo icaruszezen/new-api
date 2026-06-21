@@ -529,6 +529,13 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		c.Set(common2.UpstreamRequestIdKey, upID)
 	}
 
+	// 调试捕获：在任一调试功能开启时，用 TeeReader 包装上游响应体，
+	// 使后续读取（流式扫描 / io.ReadAll / 错误处理）时同步累积「上游返回的内容」。
+	if operation_setting.IsAnyDebugCaptureEnabled() {
+		info.ResetUpstreamCapture()
+		common.WrapUpstreamBody(resp, info)
+	}
+
 	_ = req.Body.Close()
 	_ = c.Request.Body.Close()
 	return resp, nil

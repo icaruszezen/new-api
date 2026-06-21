@@ -186,6 +186,13 @@ type RelayInfo struct {
 
 	StreamStatus *StreamStatus
 
+	// UpstreamCapture 累积上游响应原始字节，供调试捕获功能记录「上游返回的内容」。
+	// 仅在调试捕获开启时由 WrapUpstreamBody 初始化与填充；重试时通过 ResetUpstreamCapture 重置。
+	UpstreamCapture *UpstreamCaptureBuffer
+	// DebugBillingIssue 标记计费异常原因（"billing_no_usage" / "billing_zero_tokens"），
+	// 由 Post*ConsumeQuota 在上游未返回计费信息时设置，供错误捕获判定使用。
+	DebugBillingIssue string
+
 	// streamWriteMu 是流式响应写客户端的共享互斥锁，供上游转发与 Ping 保活共用，
 	// 避免并发写 SSE 冲突。在 genBaseRelayInfo 中预初始化。
 	streamWriteMu *sync.Mutex

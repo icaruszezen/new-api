@@ -219,6 +219,13 @@ func SetApiRouter(router *gin.Engine) {
 			performanceRoute.GET("/logs", controller.GetLogFiles)
 			performanceRoute.DELETE("/logs", controller.CleanupLogFiles)
 		}
+		debugCaptureRoute := apiRouter.Group("/debug/capture")
+		debugCaptureRoute.Use(middleware.RootAuth())
+		{
+			debugCaptureRoute.GET("/errors", controller.GetDebugCaptureErrors)
+			debugCaptureRoute.DELETE("/errors", controller.ClearDebugCaptureErrors)
+			debugCaptureRoute.GET("/recent", controller.GetDebugCaptureRecent)
+		}
 		ratioSyncRoute := apiRouter.Group("/ratio_sync")
 		ratioSyncRoute.Use(middleware.RootAuth())
 		{

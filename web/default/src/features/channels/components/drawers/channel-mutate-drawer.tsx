@@ -16,15 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  type ReactNode,
-  useEffect,
-  useState,
-  useMemo,
-  useCallback,
-  useRef,
-} from 'react'
-import { type SubmitErrorHandler, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -51,6 +42,15 @@ import {
   SlidersHorizontal,
   Wand2,
 } from 'lucide-react'
+import {
+  type ReactNode,
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+  useRef,
+} from 'react'
+import { type SubmitErrorHandler, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -734,9 +734,7 @@ export function ChannelMutateDrawer({
   const currentAllowServiceTier = form.watch('allow_service_tier')
   const currentDisableStore = form.watch('disable_store')
   const currentAllowSafetyIdentifier = form.watch('allow_safety_identifier')
-  const currentAllowIncludeObfuscation = form.watch(
-    'allow_include_obfuscation'
-  )
+  const currentAllowIncludeObfuscation = form.watch('allow_include_obfuscation')
   const currentAllowInferenceGeo = form.watch('allow_inference_geo')
   const currentAllowSpeed = form.watch('allow_speed')
   const currentClaudeBetaQuery = form.watch('claude_beta_query')
@@ -917,56 +915,56 @@ export function ChannelMutateDrawer({
   const advancedSummary = advancedHaveErrors ? t('Error') : undefined
   const routingStrategyConfigured = Boolean(
     currentPriority ||
-      currentWeight ||
-      currentTestModel?.trim() ||
-      (currentAutoBan ?? 1) !== 1
+    currentWeight ||
+    currentTestModel?.trim() ||
+    (currentAutoBan ?? 1) !== 1
   )
   const internalNotesConfigured = Boolean(
     currentTag?.trim() || currentRemark?.trim()
   )
   const overrideRulesConfigured = Boolean(
     hasConfiguredOverrideValue(currentStatusCodeMapping) ||
-      hasConfiguredOverrideValue(currentParamOverride) ||
-      hasConfiguredOverrideValue(currentHeaderOverride)
+    hasConfiguredOverrideValue(currentParamOverride) ||
+    hasConfiguredOverrideValue(currentHeaderOverride)
   )
   const extraSettingsConfigured = Boolean(
     currentForceFormat ||
-      currentThinkingToContent ||
-      currentPassThroughBodyEnabled ||
-      currentDisableTaskPollingSleep ||
-      currentProxy?.trim() ||
-      currentSystemPrompt?.trim() ||
-      currentSystemPromptOverride
+    currentThinkingToContent ||
+    currentPassThroughBodyEnabled ||
+    currentDisableTaskPollingSleep ||
+    currentProxy?.trim() ||
+    currentSystemPrompt?.trim() ||
+    currentSystemPromptOverride
   )
   let fieldPassthroughConfigured = false
-  if (currentType === 1) {
+  if (currentType === 1 || currentType === 57) {
     fieldPassthroughConfigured = Boolean(
       currentAllowServiceTier ||
-        currentDisableStore ||
-        currentAllowSafetyIdentifier ||
-        currentAllowIncludeObfuscation ||
-        currentAllowInferenceGeo
+      currentDisableStore ||
+      currentAllowSafetyIdentifier ||
+      currentAllowIncludeObfuscation ||
+      currentAllowInferenceGeo
     )
   } else if (currentType === 14) {
     fieldPassthroughConfigured = Boolean(
       currentAllowServiceTier ||
-        currentAllowInferenceGeo ||
-        currentAllowSpeed ||
-        currentClaudeBetaQuery
+      currentAllowInferenceGeo ||
+      currentAllowSpeed ||
+      currentClaudeBetaQuery
     )
   }
   const upstreamModelDetectionConfigured = Boolean(
     upstreamModelUpdateCheckEnabled ||
-      currentUpstreamModelUpdateAutoSyncEnabled ||
-      currentUpstreamModelUpdateIgnoredModels?.trim()
+    currentUpstreamModelUpdateAutoSyncEnabled ||
+    currentUpstreamModelUpdateIgnoredModels?.trim()
   )
   const advancedConfigured = Boolean(
     routingStrategyConfigured ||
-      internalNotesConfigured ||
-      overrideRulesConfigured ||
-      extraSettingsConfigured ||
-      fieldPassthroughConfigured ||
-      upstreamModelDetectionConfigured
+    internalNotesConfigured ||
+    overrideRulesConfigured ||
+    extraSettingsConfigured ||
+    fieldPassthroughConfigured ||
+    upstreamModelDetectionConfigured
   )
   const advancedNavChildren: ChannelEditorNavChildItem[] = [
     {
@@ -990,7 +988,7 @@ export function ChannelMutateDrawer({
       configured: extraSettingsConfigured,
     },
   ]
-  if (currentType === 1 || currentType === 14) {
+  if (currentType === 1 || currentType === 14 || currentType === 57) {
     advancedNavChildren.push({
       id: ADVANCED_SETTINGS_SECTION_IDS.fieldPassthrough,
       title: t('Field passthrough controls'),
@@ -2679,14 +2677,18 @@ export function ChannelMutateDrawer({
                                               </Badge>
                                             )
                                           )}
-                                          {hiddenAdvancedCustomRouteTypeCount > 0 && (
+                                          {hiddenAdvancedCustomRouteTypeCount >
+                                            0 && (
                                             <Badge
                                               variant='outline'
                                               title={
                                                 advancedCustomRouteTypeTitle
                                               }
                                             >
-                                              +{hiddenAdvancedCustomRouteTypeCount}
+                                              +
+                                              {
+                                                hiddenAdvancedCustomRouteTypeCount
+                                              }
                                             </Badge>
                                           )}
                                           {!advancedCustomStats.valid && (
@@ -4315,7 +4317,9 @@ export function ChannelMutateDrawer({
                           </fieldset>
                         </div>
 
-                        {(currentType === 1 || currentType === 14) && (
+                        {(currentType === 1 ||
+                          currentType === 14 ||
+                          currentType === 57) && (
                           <div
                             id={ADVANCED_SETTINGS_SECTION_IDS.fieldPassthrough}
                             className={sideDrawerSectionClassName(
@@ -4327,9 +4331,7 @@ export function ChannelMutateDrawer({
                           >
                             <CardHeading
                               title={t('Field passthrough controls')}
-                              icon={
-                                <SlidersHorizontal className='h-4 w-4' />
-                              }
+                              icon={<SlidersHorizontal className='h-4 w-4' />}
                             />
                             <fieldset
                               disabled={sensitiveLocked}
@@ -4361,7 +4363,7 @@ export function ChannelMutateDrawer({
                                   )}
                                 />
 
-                                {currentType === 1 && (
+                                {(currentType === 1 || currentType === 57) && (
                                   <>
                                     <FormField
                                       control={form.control}

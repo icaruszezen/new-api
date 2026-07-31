@@ -5,8 +5,8 @@ import (
 	"math"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
@@ -37,10 +37,10 @@ func scaleCacheReadTokenCount(tokens int, ratio float64) int {
 }
 
 type cacheReadUsageSnapshot struct {
-	cachedTokens       int
-	promptCacheHit     int
-	inputCachedTokens  int
-	hasInputCached     bool
+	cachedTokens      int
+	promptCacheHit    int
+	inputCachedTokens int
+	hasInputCached    bool
 }
 
 func snapshotCacheReadUsage(usage *dto.Usage) cacheReadUsageSnapshot {
@@ -171,8 +171,10 @@ func ApplyCacheReadBillingRatioWithSetting(setting dto.ChannelSettings, usage *d
 }
 
 // ApplyChannelCacheReadBillingRatio reads channel setting, scales usage, and patches response body when provided.
+// ChannelMeta is nil until InitChannelMeta runs, so requests that reach a response
+// handler without channel context (channel tests, converter unit paths) keep upstream values.
 func ApplyChannelCacheReadBillingRatio(info *relaycommon.RelayInfo, usage *dto.Usage, body *[]byte) {
-	if info == nil {
+	if info == nil || info.ChannelMeta == nil {
 		return
 	}
 	ApplyCacheReadBillingRatioWithSetting(info.ChannelSetting, usage, body)

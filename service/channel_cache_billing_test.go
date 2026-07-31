@@ -3,8 +3,8 @@ package service
 import (
 	"testing"
 
-	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,9 +35,9 @@ func TestApplyCacheReadBillingRatioToUsage(t *testing.T) {
 			CachedTokens:         10000,
 			CachedCreationTokens: 500,
 		},
-		InputTokensDetails:             inputDetails,
-		ClaudeCacheCreation5mTokens:    100,
-		ClaudeCacheCreation1hTokens:    50,
+		InputTokensDetails:          inputDetails,
+		ClaudeCacheCreation5mTokens: 100,
+		ClaudeCacheCreation1hTokens: 50,
 	}
 
 	ApplyCacheReadBillingRatioToUsage(usage, 0.5)

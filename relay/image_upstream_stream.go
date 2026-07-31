@@ -3,9 +3,9 @@ package relay
 import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 
 	"github.com/gin-gonic/gin"
 )
@@ -40,7 +40,7 @@ func shouldImageUpstreamStreamSynthesize(c *gin.Context, info *relaycommon.Relay
 		info.RelayMode != relayconstant.RelayModeImagesEdits {
 		return false
 	}
-	if imageReq.IsStream(c) {
+	if imageReq.IsStream(c.Request) {
 		return false
 	}
 	return true

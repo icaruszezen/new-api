@@ -10,11 +10,11 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 )
@@ -98,10 +98,10 @@ func consumeImageGenerationStream(c *gin.Context, body io.Reader) ([]dto.ImageDa
 	defer ticker.Stop()
 
 	var (
-		images        []dto.ImageData
-		usage         dto.Usage
-		gotCompleted  bool
-		hasUsage      bool
+		images       []dto.ImageData
+		usage        dto.Usage
+		gotCompleted bool
+		hasUsage     bool
 	)
 
 	for {

@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import * as z from 'zod'
@@ -25,51 +24,55 @@ import * as z from 'zod'
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 
-import { SettingsForm } from '../components/settings-form-layout'
+import {
+  SettingsForm,
+  SettingsSwitchContent,
+  SettingsSwitchItem,
+} from '../components/settings-form-layout'
 import { SettingsPageFormActions } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
+import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
 
 const noticeSchema = z.object({
-  Notice: z.string().optional(),
+  Notice: z.string(),
+  NoticePopupEnabled: z.boolean(),
 })
 
 type NoticeFormValues = z.infer<typeof noticeSchema>
 
 type NoticeSectionProps = {
-  defaultValue: string
+  defaultValues: NoticeFormValues
 }
 
-export function NoticeSection({ defaultValue }: NoticeSectionProps) {
+export function NoticeSection(props: NoticeSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
   const form = useForm<NoticeFormValues>({
     resolver: zodResolver(noticeSchema),
-    defaultValues: {
-      Notice: defaultValue ?? '',
-    },
+    defaultValues: props.defaultValues,
   })
 
-  useEffect(() => {
-    form.reset({ Notice: defaultValue ?? '' })
-  }, [defaultValue, form])
+  useResetForm(form, props.defaultValues)
 
   const onSubmit = async (values: NoticeFormValues) => {
-    const normalized = values.Notice ?? ''
-    if (normalized === (defaultValue ?? '')) {
-      return
+    const updates = Object.entries(values).filter(
+      ([key, value]) =>
+        value !== props.defaultValues[key as keyof NoticeFormValues]
+    )
+
+    for (const [key, value] of updates) {
+      await updateOption.mutateAsync({ key, value })
     }
-    await updateOption.mutateAsync({
-      key: 'Notice',
-      value: normalized,
-    })
   }
 
   return (
@@ -98,6 +101,29 @@ export function NoticeSection({ defaultValue }: NoticeSectionProps) {
                 </FormControl>
                 <FormMessage />
               </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='NoticePopupEnabled'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>{t('Popup notice on visit')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Show the notice in a centered dialog when users visit the site, until they confirm it'
+                    )}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </SettingsSwitchItem>
             )}
           />
         </SettingsForm>

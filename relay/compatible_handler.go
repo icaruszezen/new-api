@@ -101,6 +101,7 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
+		requestBody = common.NewReplayableBodyReader(storage)
 		if info.ChannelSetting.AutoSetReasoningEffortByModel {
 			bodyBytes, bErr := storage.Bytes()
 			if bErr != nil {
@@ -111,18 +112,13 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 				return types.NewError(applyErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 			}
 			if changed {
-				body, size, closer, createErr := relaycommon.NewOutboundJSONBody(updatedBody)
+				body, closer, createErr := relaycommon.NewOutboundJSONBody(updatedBody)
 				if createErr != nil {
 					return types.NewError(createErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 				}
 				defer closer.Close()
-				info.UpstreamRequestBodySize = size
 				requestBody = body
-			} else {
-				requestBody = common.ReaderOnly(storage)
 			}
-		} else {
-			requestBody = common.ReaderOnly(storage)
 		}
 		if common.DebugEnabled {
 			if debugBytes, bErr := storage.Bytes(); bErr == nil {
@@ -200,13 +196,12 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 
 		logger.LogDebug(c, "text request body: %s", jsonData)
 
-		body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+		body, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 		defer closer.Close()
 		jsonData = nil
-		info.UpstreamRequestBodySize = size
 		requestBody = body
 	}
 

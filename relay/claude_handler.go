@@ -107,6 +107,11 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 		info.UpstreamModelName = request.Model
 	}
+	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled && !info.ChannelSetting.PassThroughBodyEnabled {
+		if effort := request.GetEfforts(); effort != "" {
+			info.SetReasoningEffort(effort)
+		}
+	}
 
 	applyClaudeReasoningEffortFromModel(request, downstreamModel, info.ChannelSetting.AutoSetReasoningEffortByModel)
 
@@ -162,6 +167,7 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
+		requestBody = common.NewReplayableBodyReader(storage)
 		if info.ChannelSetting.AutoSetReasoningEffortByModel {
 			bodyBytes, bErr := storage.Bytes()
 			if bErr != nil {
@@ -172,20 +178,13 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 				return types.NewError(applyErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 			}
 			if changed {
-				body, size, closer, createErr := relaycommon.NewOutboundJSONBody(updatedBody)
+				body, closer, createErr := relaycommon.NewOutboundJSONBody(updatedBody)
 				if createErr != nil {
 					return types.NewError(createErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 				}
 				defer closer.Close()
-				info.UpstreamRequestBodySize = size
 				requestBody = body
-			} else {
-				info.UpstreamRequestBodySize = storage.Size()
-				requestBody = common.ReaderOnly(storage)
 			}
-		} else {
-			info.UpstreamRequestBodySize = storage.Size()
-			requestBody = common.ReaderOnly(storage)
 		}
 	} else {
 		convertedRequest, err := adaptor.ConvertClaudeRequest(c, info, request)
@@ -213,13 +212,12 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 
 		logger.LogDebug(c, "requestBody: %s", jsonData)
-		body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+		body, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 		defer closer.Close()
 		jsonData = nil
-		info.UpstreamRequestBodySize = size
 		requestBody = body
 	}
 

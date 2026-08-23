@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import * as z from 'zod'
 
+import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
@@ -38,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useUserConsolePreview } from '@/skins/use-user-console-preview'
 
 import { SettingsForm } from '../components/settings-form-layout'
 import { SettingsPageFormActions } from '../components/settings-page-context'
@@ -62,6 +64,9 @@ type ConsoleUiSectionProps = {
 export function ConsoleUiSection(props: ConsoleUiSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
+  const preview = useUserConsolePreview()
+  const savedSiteSkinIsNext =
+    props.defaultValues.console_setting.ui_skin === 'next'
   const form = useForm<ConsoleUiFormValues>({
     resolver: zodResolver(consoleUiSchema),
     defaultValues: props.defaultValues,
@@ -132,9 +137,20 @@ export function ConsoleUiSection(props: ConsoleUiSectionProps) {
                 </FormDescription>
                 <FormDescription>
                   {t(
-                    'The next interface currently matches the current interface. Switching now only reserves this setting.'
+                    'The next interface applies to regular users only. Administrators keep the current console and can preview the user interface.'
                   )}
                 </FormDescription>
+                {savedSiteSkinIsNext &&
+                  preview.canPreview &&
+                  !preview.isPreviewing && (
+                    <Button
+                      type='button'
+                      variant='outline'
+                      onClick={preview.startPreview}
+                    >
+                      {t('Preview user interface')}
+                    </Button>
+                  )}
               </FormItem>
             )}
           />

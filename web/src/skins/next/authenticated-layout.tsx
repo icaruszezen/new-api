@@ -20,11 +20,21 @@ For commercial licensing, please contact support@quantumnous.com
 // barrel, which reaches the sidebar config and cycles back into features.
 import { AuthenticatedLayout } from '@/components/layout/components/authenticated-layout'
 
+import { NextConsolePreviewBanner } from './preview-banner'
+
 /**
  * Next console shell. It intentionally renders the existing layout so this
  * release stays identical to `classic`; the future shell replaces the body of
  * this component instead of forking the layout tree elsewhere.
+ *
+ * The preview banner lives on this side so administrators can tell they are
+ * looking at the user console without changing classic chrome.
  */
 export function NextAuthenticatedLayout() {
-  return <AuthenticatedLayout />
+  return (
+    <>
+      <NextConsolePreviewBanner />
+      <AuthenticatedLayout />
+    </>
+  )
 }

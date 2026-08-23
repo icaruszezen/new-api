@@ -18,8 +18,16 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
+import { ROLE } from '@/lib/roles'
 import { SkinnedAuthenticatedLayout } from '@/skins'
+import {
+  consumePreviewSearchParam,
+  isAdminConsolePath,
+} from '@/skins/admin-console-path'
+import { useConsolePreviewStore } from '@/skins/console-preview-store'
+import { parseUiSkin } from '@/skins/registry'
 import { useAuthStore } from '@/stores/auth-store'
+import { useSystemConfigStore } from '@/stores/system-config-store'
 
 export const Route = createFileRoute('/_authenticated')({
   beforeLoad: ({ location }) => {
@@ -29,6 +37,31 @@ export const Route = createFileRoute('/_authenticated')({
       throw redirect({
         to: '/sign-in',
         search: { redirect: location.href },
+      })
+    }
+
+    const consumed = consumePreviewSearchParam(location.searchStr)
+    const siteSkin = parseUiSkin(useSystemConfigStore.getState().config.uiSkin)
+    const canPreview =
+      siteSkin === 'next' && (auth.user.role ?? 0) >= ROLE.ADMIN
+
+    if (
+      consumed.wantsPreview &&
+      canPreview &&
+      !isAdminConsolePath(location.pathname)
+    ) {
+      useConsolePreviewStore.getState().enterPreview(auth.user.id)
+    }
+
+    if (isAdminConsolePath(location.pathname)) {
+      useConsolePreviewStore.getState().exitPreview()
+    }
+
+    if (consumed.wantsPreview) {
+      const hash = location.hash ? `#${location.hash}` : ''
+      throw redirect({
+        href: `${location.pathname}${consumed.nextSearchStr}${hash}`,
+        replace: true,
       })
     }
   },

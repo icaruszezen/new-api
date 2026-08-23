@@ -18,7 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, test } from 'vitest'
 
-import { parseUiSkin } from '../registry'
+import { ROLE } from '@/lib/roles'
+
+import { parseUiSkin, resolveConsoleSkin } from '../registry'
 
 describe('parseUiSkin', () => {
   test.each([
@@ -38,5 +40,53 @@ describe('parseUiSkin', () => {
     ['non-string value', 1],
   ])('falls back to classic for %s', (_label, input) => {
     expect(parseUiSkin(input)).toBe('classic')
+  })
+})
+
+describe('resolveConsoleSkin', () => {
+  test.each([
+    [
+      'classic site keeps classic for a regular user',
+      'classic',
+      ROLE.USER,
+      false,
+      'classic',
+    ],
+    [
+      'classic site keeps classic for an administrator',
+      'classic',
+      ROLE.ADMIN,
+      false,
+      'classic',
+    ],
+    ['classic site ignores preview', 'classic', ROLE.ADMIN, true, 'classic'],
+    ['next site serves a regular user', 'next', ROLE.USER, false, 'next'],
+    ['next site serves a guest-level role', 'next', ROLE.GUEST, false, 'next'],
+    [
+      'next site keeps administrators on classic',
+      'next',
+      ROLE.ADMIN,
+      false,
+      'classic',
+    ],
+    [
+      'next site keeps super administrators on classic',
+      'next',
+      ROLE.SUPER_ADMIN,
+      false,
+      'classic',
+    ],
+    [
+      'next site serves an administrator who is previewing',
+      'next',
+      ROLE.ADMIN,
+      true,
+      'next',
+    ],
+    ['role 9 is still a regular user on next', 'next', 9, false, 'next'],
+    ['role 10 without preview stays on classic', 'next', 10, false, 'classic'],
+    ['role 10 with preview uses next', 'next', 10, true, 'next'],
+  ] as const)('%s', (_label, siteSkin, role, preview, expected) => {
+    expect(resolveConsoleSkin(siteSkin, role, preview)).toBe(expected)
   })
 })

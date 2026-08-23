@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { ROLE } from '@/lib/roles'
+
 import type { UiSkin } from './types'
 
 export const UI_SKIN_VALUES: ReadonlySet<UiSkin> = new Set<UiSkin>([
@@ -35,4 +37,19 @@ export function parseUiSkin(value: unknown): UiSkin {
     return value as UiSkin
   }
   return DEFAULT_UI_SKIN
+}
+
+/**
+ * Choose the authenticated console shell. Site `classic` stays classic for
+ * everyone. Site `next` serves regular users; administrators keep classic
+ * unless they opted into a session-level user-console preview.
+ */
+export function resolveConsoleSkin(
+  siteSkin: UiSkin,
+  role: number,
+  previewUserConsole: boolean
+): UiSkin {
+  if (siteSkin !== 'next') return 'classic'
+  if (role >= ROLE.ADMIN && !previewUserConsole) return 'classic'
+  return 'next'
 }

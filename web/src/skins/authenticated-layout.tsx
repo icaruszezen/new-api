@@ -16,12 +16,30 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useAuthStore } from '@/stores/auth-store'
+
 import { ClassicAuthenticatedLayout } from './classic/authenticated-layout'
+import {
+  isConsolePreviewActive,
+  useConsolePreviewStore,
+} from './console-preview-store'
 import { UiSkinProvider, useUiSkin } from './context'
 import { NextAuthenticatedLayout } from './next/authenticated-layout'
+import { resolveConsoleSkin } from './registry'
 
 function ActiveSkinLayout() {
-  const skin = useUiSkin()
+  const siteSkin = useUiSkin()
+  const role = useAuthStore((state) => state.auth.user?.role ?? 0)
+  const userId = useAuthStore((state) => state.auth.user?.id)
+  const previewUserConsole = useConsolePreviewStore(
+    (state) => state.previewUserConsole
+  )
+  const previewUserId = useConsolePreviewStore((state) => state.previewUserId)
+  const skin = resolveConsoleSkin(
+    siteSkin,
+    role,
+    isConsolePreviewActive({ previewUserConsole, previewUserId }, userId)
+  )
 
   if (skin === 'next') {
     return <NextAuthenticatedLayout />
@@ -30,8 +48,9 @@ function ActiveSkinLayout() {
 }
 
 /**
- * Single dispatch point for the authenticated console shell. The administrator
- * chooses the skin site-wide; users have no switch of their own.
+ * Single dispatch point for the authenticated console shell. The site skin is
+ * still administrator-chosen; role and a session preview decide which shell
+ * actually mounts. Public pages keep using `useUiSkin()` unchanged.
  */
 export function SkinnedAuthenticatedLayout() {
   return (

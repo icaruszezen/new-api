@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useNavigate } from '@tanstack/react-router'
-import { User, Wallet, LogOut, Settings } from 'lucide-react'
+import { Eye, User, Wallet, LogOut, Settings } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -36,6 +36,7 @@ import { useIsSidebarModuleVisible } from '@/hooks/use-sidebar-config'
 import { useUserDisplay } from '@/hooks/use-user-display'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { ROLE } from '@/lib/roles'
+import { useUserConsolePreview } from '@/skins/use-user-console-preview'
 import { useAuthStore } from '@/stores/auth-store'
 
 const avatarFallbackClassName = 'font-semibold text-white'
@@ -48,6 +49,7 @@ export function ProfileDropdown() {
   const { displayName, roleLabel } = useUserDisplay(user)
   const isSuperAdmin = user?.role === ROLE.SUPER_ADMIN
   const isWalletVisible = useIsSidebarModuleVisible('/wallet')
+  const preview = useUserConsolePreview()
   const avatarName = user?.username || displayName
   const avatarFallback = getUserAvatarFallback(avatarName)
   const avatarFallbackStyle = useMemo(
@@ -125,6 +127,13 @@ export function ProfileDropdown() {
             >
               <Settings className='size-4' />
               {t('System Settings')}
+            </DropdownMenuItem>
+          )}
+
+          {preview.canPreview && !preview.isPreviewing && (
+            <DropdownMenuItem onClick={preview.startPreview}>
+              <Eye className='size-4' />
+              {t('Preview user interface')}
             </DropdownMenuItem>
           )}
 

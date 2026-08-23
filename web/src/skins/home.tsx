@@ -16,11 +16,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { ClassicHome } from './classic/home'
+import { UiSkinProvider, useUiSkin } from './context'
+import { NextHome } from './next/home'
+
+function ActiveSkinHome() {
+  const skin = useUiSkin()
+
+  if (skin === 'next') {
+    return <NextHome />
+  }
+  return <ClassicHome />
+}
+
 /**
- * Public surface of the UI Skin module.
+ * Single dispatch point for the public landing page. The administrator chooses
+ * the skin site-wide, the same way the authenticated console shell is chosen.
  */
-export { SkinnedAuthenticatedLayout } from './authenticated-layout'
-export { useUiSkin } from './context'
-export { SkinnedHome } from './home'
-export { DEFAULT_UI_SKIN, parseUiSkin } from './registry'
-export type { UiSkin } from './types'
+export function SkinnedHome() {
+  return (
+    <UiSkinProvider>
+      <ActiveSkinHome />
+    </UiSkinProvider>
+  )
+}

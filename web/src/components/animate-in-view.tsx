@@ -28,6 +28,12 @@ interface AnimateInViewProps {
   animation?: 'fade-up' | 'fade-in' | 'scale-in' | 'fade-left' | 'fade-right'
   once?: boolean
   as?: 'div' | 'section' | 'li' | 'span'
+  /**
+   * Keep the scroll-triggered reveal even for a visitor who asked for reduced
+   * motion. Pair it with `data-landing-motion="always"` on an ancestor, which is
+   * what re-enables the underlying keyframes.
+   */
+  ignoreReducedMotion?: boolean
 }
 
 export function AnimateInView(props: AnimateInViewProps) {
@@ -37,6 +43,7 @@ export function AnimateInView(props: AnimateInViewProps) {
     threshold = 0.15,
     animation = 'fade-up',
     once = true,
+    ignoreReducedMotion = false,
   } = props
 
   const ref = useRef<HTMLDivElement>(null)
@@ -46,7 +53,7 @@ export function AnimateInView(props: AnimateInViewProps) {
     if (!el) return
 
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    if (mq.matches) {
+    if (mq.matches && !ignoreReducedMotion) {
       el.classList.remove('opacity-0')
       el.classList.add(`landing-animate-${animation}`)
       return
@@ -68,7 +75,7 @@ export function AnimateInView(props: AnimateInViewProps) {
 
     observer.observe(el)
     return () => observer.disconnect()
-  }, [threshold, once, animation])
+  }, [threshold, once, animation, ignoreReducedMotion])
 
   return (
     <Tag

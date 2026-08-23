@@ -514,6 +514,51 @@ For commercial licensing, please contact support@quantumnous.com
   }
 }
 
+/* Headline reveal: the line rises out of its own clipping box, so it appears
+   from nothing rather than sliding over the layout. The travel is deliberately
+   more than one line so the glyphs clear the mask's descender padding. */
+@keyframes landing-line-rise {
+  from {
+    transform: translateY(150%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* A beam of the theme's accent sweeps left to right through the glyphs. Both
+   ends of the gradient are flat ink, so the two endpoints render identically
+   and a one-directional loop needs no ping-pong to stay seamless. Staying
+   inside 0%–100% keeps the oversized gradient covering the text at all times,
+   which matters because the text itself is transparent. */
+@keyframes landing-headline-sheen {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+/* The rise and the sheen live on one class because they share the `animation`
+   property. Colours come from the raw theme tokens rather than the Tailwind
+   `--color-*` aliases, so every preset and both colour schemes follow along. */
+.landing-animate-headline {
+  background-image: linear-gradient(
+    100deg,
+    var(--foreground) 44%,
+    var(--primary) 50%,
+    var(--foreground) 56%
+  );
+  background-repeat: no-repeat;
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation:
+    landing-line-rise 0.85s cubic-bezier(0.16, 1, 0.3, 1) both,
+    landing-headline-sheen 4s linear infinite;
+}
 .landing-animate-fade-up {
   animation: landing-fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -531,11 +576,15 @@ For commercial licensing, please contact support@quantumnous.com
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .landing-animate-fade-up,
-  .landing-animate-fade-in,
-  .landing-animate-scale-in,
-  .landing-animate-fade-left,
-  .landing-animate-fade-right {
+  /* A subtree marked `data-landing-motion="always"` keeps its entrance
+     animations: on a landing page the reveal is the content rather than
+     decoration. Everything else still honours the visitor's preference. */
+  .landing-animate-headline:not([data-landing-motion='always'] *),
+  .landing-animate-fade-up:not([data-landing-motion='always'] *),
+  .landing-animate-fade-in:not([data-landing-motion='always'] *),
+  .landing-animate-scale-in:not([data-landing-motion='always'] *),
+  .landing-animate-fade-left:not([data-landing-motion='always'] *),
+  .landing-animate-fade-right:not([data-landing-motion='always'] *) {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;

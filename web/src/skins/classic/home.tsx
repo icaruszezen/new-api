@@ -16,11 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-/**
- * Public surface of the UI Skin module.
- */
-export { SkinnedAuthenticatedLayout } from './authenticated-layout'
-export { useUiSkin } from './context'
-export { SkinnedHome } from './home'
-export { DEFAULT_UI_SKIN, parseUiSkin } from './registry'
-export type { UiSkin } from './types'
+import { Home } from '@/features/home'
+
+/** Classic landing page: the home page the site has always rendered. */
+export function ClassicHome() {
+  return <Home />
+}

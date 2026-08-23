@@ -140,6 +140,13 @@ export function ConsoleKeyManagement() {
             type='button'
             className='border-border inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium'
           >
+            <Zap className='size-3.5' aria-hidden='true' />
+            {t('Test Connection')}
+          </button>
+          <button
+            type='button'
+            className='border-border inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium'
+          >
             <FileText className='size-3.5' aria-hidden='true' />
             {t('Usage docs')}
           </button>
@@ -154,13 +161,6 @@ export function ConsoleKeyManagement() {
       </div>
 
       <div className='border-border/70 flex flex-col gap-3 border-t px-5 py-3 sm:flex-row sm:items-center'>
-        <button
-          type='button'
-          className='border-border inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium'
-        >
-          <Zap className='size-3.5' aria-hidden='true' />
-          {t('Test Connection')}
-        </button>
         <div className='flex min-w-0 flex-1 flex-wrap items-center gap-2'>
           {apiInfo.items.map((item) => (
             <div

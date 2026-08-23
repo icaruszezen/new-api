@@ -22,10 +22,14 @@ import { ConsoleStatsRow } from './components/stats-row'
 
 export function NextConsoleHome() {
   return (
-    <div className='flex flex-col gap-5 pb-10'>
-      <ConsoleStatsRow />
-      <ConsoleShortcutRow />
-      <ConsoleKeyManagement />
+    <div className='grid grid-cols-1 gap-5 pb-10 lg:grid-cols-12 lg:items-start'>
+      <div className='flex flex-col gap-3 lg:col-span-4'>
+        <ConsoleStatsRow />
+        <ConsoleShortcutRow />
+      </div>
+      <div className='min-w-0 lg:col-span-8'>
+        <ConsoleKeyManagement />
+      </div>
     </div>
   )
 }

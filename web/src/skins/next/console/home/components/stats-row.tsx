@@ -115,7 +115,7 @@ export function ConsoleStatsRow() {
   return (
     <section
       aria-label={t("Today's usage")}
-      className='grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'
+      className='grid grid-cols-2 gap-3'
     >
       <StatCard
         title={t("Today's calls")}

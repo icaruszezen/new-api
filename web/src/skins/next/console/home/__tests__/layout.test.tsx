@@ -152,6 +152,44 @@ describe('next console homepage layout', () => {
     expect(screen.getByText('https://api.example.com')).toBeVisible()
   })
 
+  test('places stats and shortcuts in a left column beside key management', () => {
+    renderHome()
+
+    const stats = screen.getByRole('region', { name: "Today's usage" })
+    const shortcuts = screen.getByRole('navigation', { name: 'Quick actions' })
+    const keys = screen
+      .getByRole('heading', { name: 'Key Management' })
+      .closest('section')
+
+    expect(stats.parentElement).toBe(shortcuts.parentElement)
+    expect(stats.parentElement).toHaveClass('lg:col-span-4')
+    expect(stats).toHaveClass('grid-cols-2')
+    expect(stats).not.toHaveClass('xl:grid-cols-4')
+    expect(shortcuts).toHaveClass('grid-cols-1')
+    expect(shortcuts).not.toHaveClass('sm:grid-cols-3')
+
+    expect(keys).toBeTruthy()
+    expect(keys?.parentElement).toHaveClass('min-w-0')
+    expect(keys?.parentElement).toHaveClass('lg:col-span-8')
+    expect(keys?.parentElement?.previousElementSibling).toBe(
+      stats.parentElement
+    )
+  })
+
+  test('places the test connection button immediately before usage docs', () => {
+    renderHome()
+
+    const testConnection = screen.getByRole('button', {
+      name: 'Test Connection',
+    })
+    const usageDocs = screen.getByRole('button', { name: 'Usage docs' })
+    const newKey = screen.getByRole('button', { name: 'New key' })
+
+    expect(testConnection.nextElementSibling).toBe(usageDocs)
+    expect(usageDocs.nextElementSibling).toBe(newKey)
+    expect(testConnection.parentElement).toBe(usageDocs.parentElement)
+  })
+
   test('estimates remaining days from wallet quota and today spend', async () => {
     useAuthStore.getState().auth.setUser({
       id: 1,

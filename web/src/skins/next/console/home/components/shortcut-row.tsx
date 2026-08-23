@@ -46,7 +46,7 @@ export function ConsoleShortcutRow() {
   return (
     <nav
       aria-label={t('Quick actions')}
-      className='grid grid-cols-1 gap-3 sm:grid-cols-3'
+      className='grid grid-cols-1 gap-3'
     >
       <ShortcutButton label={t('Personal Center')} icon={UserRound} />
       <ShortcutButton label={t('Usage records')} icon={FileText} />

@@ -22,10 +22,12 @@ import { Home } from '@/features/home'
 import { useHomePageContent } from '@/features/home/hooks'
 import { useAuthStore } from '@/stores/auth-store'
 
+import { LandingAtmosphere } from './components/atmosphere'
 import { Hero } from './components/hero'
 import { MinimalFooter } from './components/minimal-footer'
 import { MinimalHeader } from './components/minimal-header'
 import { ProviderStrip } from './components/provider-strip'
+import { LANDING_MEASURE_CLASS } from './layout'
 
 /**
  * Next landing page: a quiet, typography-led single column.
@@ -58,12 +60,13 @@ export function NextHome() {
   return (
     <div
       data-landing-motion='always'
-      className='bg-background text-foreground flex min-h-svh flex-col'
+      className='bg-background text-foreground relative isolate flex min-h-svh flex-col'
     >
+      <LandingAtmosphere />
       <MinimalHeader />
       {/* The shell owns the single measure the page is built on, so the header
           logo, the headline and the provider row all share one left edge. */}
-      <main className='mx-auto w-full max-w-5xl flex-1 px-6'>
+      <main className={`${LANDING_MEASURE_CLASS} flex-1`}>
         <Hero isAuthenticated={!!auth.user} />
         <ProviderStrip />
       </main>

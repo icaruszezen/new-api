@@ -33,6 +33,8 @@ import { useTopNavLinks } from '@/hooks/use-top-nav-links'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
+import { LANDING_MEASURE_CLASS } from '../layout'
+
 const NAV_LINK_CLASS =
   'text-muted-foreground hover:text-foreground rounded-md px-2.5 py-1.5 text-sm transition-colors'
 
@@ -58,8 +60,13 @@ export function MinimalHeader() {
   // The entrance animates opacity only: a transform on a sticky element turns
   // it into a containing block and breaks the stick.
   return (
-    <header className='border-border/60 bg-background landing-animate-fade-in sticky top-0 z-50 border-b'>
-      <nav className='mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-6'>
+    <header className='border-border/60 bg-background/80 landing-animate-fade-in sticky top-0 z-50 border-b backdrop-blur-md'>
+      <nav
+        className={cn(
+          LANDING_MEASURE_CLASS,
+          'flex h-16 items-center justify-between gap-4'
+        )}
+      >
         <Link to='/' className='group flex shrink-0 items-center gap-2.5'>
           <div className='flex size-6 shrink-0 items-center justify-center transition-transform duration-300 group-hover:scale-105'>
             {loading ? (

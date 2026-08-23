@@ -21,7 +21,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { HomePageContentResult } from '@/features/home/types'
 
-import { NextHome } from '../next/home'
+import { NextHome } from '../index'
 
 const homePageContent = vi.hoisted(() => ({
   current: {
@@ -39,39 +39,36 @@ vi.mock('@/features/home/hooks', () => ({
   useHomePageContent: () => homePageContent.current,
 }))
 
-vi.mock('../next/home/components/minimal-footer', () => ({
+vi.mock('../components/minimal-footer', () => ({
   MinimalFooter: () => <footer data-testid='footer' />,
 }))
 
-vi.mock('../next/home/components/minimal-header', () => ({
+vi.mock('../components/minimal-header', () => ({
   MinimalHeader: () => <header data-testid='next-header' />,
 }))
 
-vi.mock('../next/home/components/hero', () => ({
+vi.mock('../components/hero', () => ({
   Hero: () => <div data-testid='next-hero' />,
 }))
 
-vi.mock('../next/home/components/provider-strip', () => ({
+vi.mock('../components/provider-strip', () => ({
   ProviderStrip: () => <div data-testid='next-provider-strip' />,
 }))
 
-describe('next landing page and custom home page content', () => {
+describe('next landing atmosphere', () => {
   beforeEach(() => {
     homePageContent.current = { content: '', isLoaded: true, isUrl: false }
   })
 
-  test('renders the next landing page when no custom home page is configured', () => {
+  test('paints a decorative wash behind the default landing page without intercepting input', () => {
     render(<NextHome />)
 
-    expect(screen.getByTestId('next-header')).toBeInTheDocument()
-    expect(screen.getByTestId('next-hero')).toBeInTheDocument()
-    expect(screen.getByTestId('next-provider-strip')).toBeInTheDocument()
-    expect(screen.getByTestId('footer')).toBeInTheDocument()
-    expect(screen.getByTestId('landing-atmosphere')).toBeInTheDocument()
-    expect(screen.queryByTestId('classic-home')).toBeNull()
+    const wash = screen.getByTestId('landing-atmosphere')
+    expect(wash).toHaveAttribute('aria-hidden', 'true')
+    expect(wash).toHaveClass('landing-atmosphere', 'pointer-events-none')
   })
 
-  test('defers to the classic rendering when the administrator configured a custom home page', () => {
+  test('omits the wash when the administrator configured a custom home page', () => {
     homePageContent.current = {
       content: '# Welcome',
       isLoaded: true,
@@ -80,33 +77,14 @@ describe('next landing page and custom home page content', () => {
 
     render(<NextHome />)
 
-    expect(screen.getByTestId('classic-home')).toBeInTheDocument()
-    expect(screen.queryByTestId('next-hero')).toBeNull()
     expect(screen.queryByTestId('landing-atmosphere')).toBeNull()
   })
 
-  test('defers to the classic rendering when the custom home page is an external URL', () => {
-    homePageContent.current = {
-      content: 'https://example.com/landing',
-      isLoaded: true,
-      isUrl: true,
-    }
-
-    render(<NextHome />)
-
-    expect(screen.getByTestId('classic-home')).toBeInTheDocument()
-    expect(screen.queryByTestId('next-hero')).toBeNull()
-    expect(screen.queryByTestId('landing-atmosphere')).toBeNull()
-  })
-
-  test('shows a loading state until the home page content request settles', () => {
+  test('omits the wash while the home page content request is still loading', () => {
     homePageContent.current = { content: '', isLoaded: false, isUrl: false }
 
     render(<NextHome />)
 
-    expect(screen.getByText('Loading...')).toBeInTheDocument()
-    expect(screen.queryByTestId('next-hero')).toBeNull()
-    expect(screen.queryByTestId('classic-home')).toBeNull()
     expect(screen.queryByTestId('landing-atmosphere')).toBeNull()
   })
 })

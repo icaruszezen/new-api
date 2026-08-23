@@ -540,6 +540,47 @@ For commercial licensing, please contact support@quantumnous.com
   }
 }
 
+/* Quiet wash behind the next landing page. Colours come from the raw theme
+   tokens so every preset and both colour schemes follow along. The mix stays
+   low enough that body text still sits on the page background for contrast. */
+.landing-atmosphere {
+  background-image:
+    radial-gradient(
+      ellipse 70% 55% at 8% -10%,
+      color-mix(in oklch, var(--primary) 26%, transparent) 0%,
+      transparent 68%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 96% 4%,
+      color-mix(in oklch, var(--chart-2) 20%, transparent) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 70% 110%,
+      color-mix(in oklch, var(--chart-3) 16%, transparent) 0%,
+      transparent 70%
+    );
+}
+
+.dark .landing-atmosphere {
+  background-image:
+    radial-gradient(
+      ellipse 70% 55% at 8% -10%,
+      color-mix(in oklch, var(--primary) 38%, transparent) 0%,
+      transparent 68%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 96% 4%,
+      color-mix(in oklch, var(--chart-2) 28%, transparent) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 70% 110%,
+      color-mix(in oklch, var(--chart-3) 22%, transparent) 0%,
+      transparent 70%
+    );
+}
+
 /* The rise and the sheen live on one class because they share the `animation`
    property. Colours come from the raw theme tokens rather than the Tailwind
    `--color-*` aliases, so every preset and both colour schemes follow along. */

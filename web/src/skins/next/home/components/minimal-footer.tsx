@@ -25,6 +25,8 @@ import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { cn } from '@/lib/utils'
 
+import { LANDING_MEASURE_CLASS } from '../layout'
+
 const ATTRIBUTION_LINK = 'https://github.com/QuantumNous/new-api'
 const NOTICE_ROTATION_MS = 6000
 
@@ -113,7 +115,7 @@ export function MinimalFooter() {
     <footer className='border-border/60 border-t'>
       <AnimateInView
         ignoreReducedMotion
-        className='mx-auto w-full max-w-5xl px-6 py-8'
+        className={cn(LANDING_MEASURE_CLASS, 'py-8')}
       >
         {/* Same trust model as the classic footer: this markup can only be set
             by an administrator through the site settings. */}

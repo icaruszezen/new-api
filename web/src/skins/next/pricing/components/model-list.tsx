@@ -23,7 +23,14 @@ import { Accordion } from '@/components/ui/accordion'
 import type { PricingModel, TokenUnit } from '@/features/pricing/types'
 import { getLobeIcon } from '@/lib/lobe-icon'
 
-import { MODEL_LIST_GRID_CLASS } from '../layout'
+import {
+  MODEL_LIST_META_CLASS,
+  MODEL_LIST_PRICE_CLASS,
+  MODEL_LIST_PRIMARY_CLASS,
+  MODEL_LIST_PRIMARY_NAME_CLASS,
+  MODEL_LIST_RATIO_CLASS,
+  MODEL_LIST_ROW_CLASS,
+} from '../layout'
 import {
   OTHER_VENDOR_GROUP_ID,
   groupModelsByVendor,
@@ -51,21 +58,28 @@ function ListColumnHeader(props: { tokenUnitLabel: string }) {
 
   return (
     <div
-      className={`${MODEL_LIST_GRID_CLASS} border-border text-muted-foreground border-b px-3 py-2.5 text-[11px] font-medium tracking-wide sm:px-4`}
+      className={`${MODEL_LIST_ROW_CLASS} border-border text-muted-foreground border-b py-2.5 text-[11px] font-medium tracking-wide`}
     >
-      <span />
-      <span>{t('Model')}</span>
-      <span className='text-center'>{t('Multiplier')}</span>
-      <span className='text-right'>
-        {t('Input (per {{unit}} tokens)', { unit: props.tokenUnitLabel })}
-      </span>
-      <span className='text-right'>
-        {t('Output (per {{unit}} tokens)', { unit: props.tokenUnitLabel })}
-      </span>
-      <span className='text-right'>
-        {t('Cached input (per {{unit}} tokens)', { unit: props.tokenUnitLabel })}
-      </span>
-      <span />
+      <div className={MODEL_LIST_PRIMARY_CLASS} data-slot='model-list-primary'>
+        <span className='size-4 shrink-0' />
+        <span className={MODEL_LIST_PRIMARY_NAME_CLASS}>{t('Model')}</span>
+      </div>
+      <div className={MODEL_LIST_META_CLASS} data-slot='model-list-meta'>
+        <span className={`${MODEL_LIST_RATIO_CLASS} text-center`}>
+          {t('Multiplier')}
+        </span>
+        <div className={MODEL_LIST_PRICE_CLASS} data-slot='model-list-prices'>
+          <span className='text-right whitespace-nowrap'>
+            {t('Input')} /{props.tokenUnitLabel} tokens
+          </span>
+          <span className='text-right whitespace-nowrap'>
+            {t('Output')} /{props.tokenUnitLabel} tokens
+          </span>
+          <span className='text-right whitespace-nowrap'>
+            {t('Cached input')} /{props.tokenUnitLabel} tokens
+          </span>
+        </div>
+      </div>
     </div>
   )
 }

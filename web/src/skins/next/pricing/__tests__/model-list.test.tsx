@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { describe, expect, test, vi } from 'vitest'
@@ -95,23 +95,58 @@ describe('next model square list', () => {
       .getAllByRole('heading', { level: 2 })
       .map((heading) => heading.textContent?.trim())
     expect(vendorHeadings).toEqual(['OpenAI', 'Anthropic'])
-    expect(screen.getAllByTestId('vendor-icon-Claude').length).toBeGreaterThan(0)
-    expect(screen.getAllByTestId('vendor-icon-OpenAI').length).toBeGreaterThan(0)
+    expect(screen.getAllByTestId('vendor-icon-Claude').length).toBeGreaterThan(
+      0
+    )
+    expect(screen.getAllByTestId('vendor-icon-OpenAI').length).toBeGreaterThan(
+      0
+    )
     expect(screen.getAllByText('Model')).toHaveLength(2)
     expect(screen.getAllByText('Multiplier')).toHaveLength(2)
-    expect(screen.getAllByText('Input (per 1M tokens)')).toHaveLength(2)
-    expect(screen.getAllByText('Output (per 1M tokens)')).toHaveLength(2)
-    expect(screen.getAllByText('Cached input (per 1M tokens)')).toHaveLength(2)
+    expect(screen.getAllByText('Input /1M tokens')).toHaveLength(2)
+    expect(screen.getAllByText('Output /1M tokens')).toHaveLength(2)
+    expect(screen.getAllByText('Cached input /1M tokens')).toHaveLength(2)
     expect(
       screen.getByRole('button', { name: 'Expand gpt-4o pricing' })
     ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Expand claude-sonnet-4 pricing' })
     ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Previous page' })
-    ).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Previous page' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull()
+  })
+
+  test('shows the multiplier beside the model name and keeps fee headers for desktop only', () => {
+    renderList()
+
+    expect(document.querySelector('[data-slot="model-list-scroll"]')).toBeNull()
+
+    const firstPrimary = document.querySelector(
+      '[data-slot="model-list-primary"]'
+    )
+    const firstMeta = document.querySelector('[data-slot="model-list-meta"]')
+    const firstPrices = document.querySelector(
+      '[data-slot="model-list-prices"]'
+    )
+    expect(firstPrimary).toBeInstanceOf(HTMLElement)
+    expect(firstMeta).toBeInstanceOf(HTMLElement)
+    expect(firstPrices).toBeInstanceOf(HTMLElement)
+    if (
+      !(firstPrimary instanceof HTMLElement) ||
+      !(firstMeta instanceof HTMLElement) ||
+      !(firstPrices instanceof HTMLElement)
+    ) {
+      throw new Error('expected model list header clusters')
+    }
+
+    expect(within(firstPrimary).getByText('Model')).toBeInTheDocument()
+    expect(within(firstPrimary).queryByText('Multiplier')).toBeNull()
+    expect(within(firstMeta).getByText('Multiplier')).toBeInTheDocument()
+    expect(firstPrices).toHaveClass('hidden', 'md:grid')
+    expect(
+      within(firstPrices).getByText('Input /1M tokens')
+    ).toBeInTheDocument()
+    expect(within(firstPrices).queryByText('Model')).toBeNull()
   })
 
   test('renders every filtered model on one page when the catalog is longer than the old page size', () => {

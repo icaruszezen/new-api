@@ -26,6 +26,9 @@ import type { TopNavLink } from '@/hooks/use-top-nav-links'
 import { MinimalHeader } from '../components/minimal-header'
 
 const routerStateRef = vi.hoisted(() => ({ pathname: '/' }))
+const authUserRef = vi.hoisted(() => ({
+  current: null as { username: string } | null,
+}))
 
 const NAV_LINKS: TopNavLink[] = [
   { title: 'Home', href: '/' },
@@ -49,7 +52,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 vi.mock('@/stores/auth-store', () => ({
-  useAuthStore: () => ({ auth: { user: null } }),
+  useAuthStore: () => ({ auth: { user: authUserRef.current } }),
 }))
 
 vi.mock('@/hooks/use-system-config', () => ({
@@ -80,31 +83,35 @@ vi.mock('@/hooks/use-notifications', () => ({
 }))
 
 vi.mock('@/components/language-switcher', () => ({
-  LanguageSwitcher: () => null,
+  LanguageSwitcher: () => <button type='button'>Change language</button>,
 }))
 
 vi.mock('@/components/theme-switch', () => ({
-  ThemeSwitch: () => null,
+  ThemeSwitch: () => <button type='button'>Toggle theme</button>,
 }))
 
 vi.mock('@/components/notification-popover', () => ({
-  NotificationPopover: () => null,
+  NotificationPopover: () => <button type='button'>Notifications</button>,
 }))
 
 vi.mock('@/components/profile-dropdown', () => ({
-  ProfileDropdown: () => null,
+  ProfileDropdown: () => <button type='button'>Account</button>,
 }))
 
 describe('next public header', () => {
   beforeEach(() => {
     routerStateRef.pathname = '/'
+    authUserRef.current = null
   })
 
   test('places the logo on the left, nav links in the center, and sign-in on the right', () => {
     render(<MinimalHeader />)
 
     const nav = screen.getByRole('navigation')
-    expect(nav).toHaveClass('grid-cols-[1fr_auto_1fr]')
+    expect(nav).toHaveClass('flex')
+    expect(nav).toHaveClass('justify-between')
+    expect(nav).toHaveClass('sm:grid')
+    expect(nav).toHaveClass('sm:grid-cols-[1fr_auto_1fr]')
 
     const columns = [...nav.children]
     expect(columns).toHaveLength(3)
@@ -115,6 +122,76 @@ describe('next public header', () => {
     expect(columns[1]).toHaveTextContent('Docs')
     expect(columns[2]).toHaveTextContent('Sign in')
     expect(columns[2]).toHaveClass('justify-end')
+    expect(columns[2]).toHaveClass('gap-2')
+
+    const brandName = within(columns[0] as HTMLElement).getByText('AIGC Pro')
+    expect(brandName).toHaveClass('truncate')
+    expect(brandName).toHaveClass('max-w-[40vw]')
+  })
+
+  test('keeps notifications and sign-in on the bar and puts the menu last on narrow viewports', () => {
+    render(<MinimalHeader />)
+
+    const actions = screen.getByRole('navigation').lastElementChild
+    expect(actions).not.toBeNull()
+
+    expect(
+      within(actions as HTMLElement).getByRole('button', {
+        name: 'Notifications',
+      })
+    ).toBeInTheDocument()
+    expect(
+      within(actions as HTMLElement).getByRole('link', { name: 'Sign in' })
+    ).toBeInTheDocument()
+
+    const menu = within(actions as HTMLElement).getByRole('button', {
+      name: 'Open menu',
+    })
+    expect(actions?.lastElementChild).toBe(menu)
+    expect(menu).toHaveClass('size-11')
+    expect(menu).toHaveClass('sm:hidden')
+    expect(menu).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('hides language and theme from the bar on narrow viewports and keeps them in the menu', async () => {
+    const user = userEvent.setup()
+    render(<MinimalHeader />)
+
+    const nav = screen.getByRole('navigation')
+    const languageInBar = within(nav).getByRole('button', {
+      name: 'Change language',
+    })
+    const themeInBar = within(nav).getByRole('button', {
+      name: 'Toggle theme',
+    })
+
+    expect(languageInBar.parentElement).toHaveClass('hidden')
+    expect(languageInBar.parentElement).toHaveClass('sm:flex')
+    expect(themeInBar.parentElement).toBe(languageInBar.parentElement)
+
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      within(dialog).getByRole('button', { name: 'Change language' })
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole('button', { name: 'Toggle theme' })
+    ).toBeInTheDocument()
+    expect(within(dialog).getByText('Preferences')).toBeInTheDocument()
+  })
+
+  test('keeps the signed-in account control on the bar instead of moving it into the menu', () => {
+    authUserRef.current = { username: 'z' }
+    render(<MinimalHeader />)
+
+    const actions = screen.getByRole('navigation').lastElementChild
+    expect(
+      within(actions as HTMLElement).getByRole('button', { name: 'Account' })
+    ).toBeInTheDocument()
+    expect(
+      within(actions as HTMLElement).queryByRole('link', { name: 'Sign in' })
+    ).toBeNull()
   })
 
   test('underlines the current public route', () => {

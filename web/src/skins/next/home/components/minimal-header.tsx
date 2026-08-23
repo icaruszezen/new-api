@@ -33,6 +33,7 @@ import {
   Sheet,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
@@ -111,9 +112,11 @@ function HeaderNavLinks(props: HeaderNavLinksProps) {
 }
 
 /**
- * Flat header for the next public pages. Logo sits left, configured nav
- * links sit in the center, and account/theme controls stay on the right.
- * Narrow viewports hide the centered links and open the same list in a sheet.
+ * Flat header for the next public and console-home chrome. Logo sits left,
+ * configured nav links sit in the center on wide viewports, and account
+ * controls stay on the right. Narrow viewports drop language/theme from the
+ * bar, keep notifications and account, and open nav plus those utilities in
+ * a sheet.
  */
 export function MinimalHeader() {
   const { t } = useTranslation()
@@ -136,16 +139,17 @@ export function MinimalHeader() {
   }
 
   return (
-    <header className='border-border bg-background sticky top-0 z-50 border-b'>
+    <header className='border-border bg-background/80 sticky top-0 z-50 border-b pt-[env(safe-area-inset-top)] backdrop-blur-md'>
       <nav
         className={cn(
           LANDING_MEASURE_CLASS,
-          'grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-4'
+          'flex h-14 touch-manipulation items-center justify-between gap-3',
+          'sm:grid sm:h-16 sm:grid-cols-[1fr_auto_1fr] sm:gap-4'
         )}
       >
         <Link
           to='/'
-          className='group flex shrink-0 items-center gap-2.5 justify-self-start'
+          className='group flex min-w-0 items-center gap-2 justify-self-start sm:gap-2.5'
         >
           <div className='flex size-6 shrink-0 items-center justify-center'>
             {loading ? (
@@ -159,7 +163,7 @@ export function MinimalHeader() {
               />
             )}
           </div>
-          <span className='text-sm font-medium tracking-tight'>
+          <span className='max-w-[40vw] min-w-0 truncate text-sm font-medium tracking-tight sm:max-w-[16rem]'>
             {loading ? <Skeleton className='h-4 w-16' /> : systemName}
           </span>
         </Link>
@@ -171,20 +175,13 @@ export function MinimalHeader() {
           className='hidden items-center justify-center gap-0.5 sm:flex'
         />
 
-        <div className='flex items-center justify-end gap-1'>
-          <Button
-            type='button'
-            variant='ghost'
-            size='icon'
-            className='h-9 w-9 sm:hidden'
-            aria-label={t('Open menu')}
-            onClick={() => setMenuOpen(true)}
-          >
-            <Menu className='size-4' aria-hidden='true' />
-          </Button>
-          <LanguageSwitcher />
-          <ThemeSwitch />
+        <div className='flex shrink-0 items-center justify-end gap-2'>
+          <div className='hidden items-center gap-2 sm:flex'>
+            <LanguageSwitcher />
+            <ThemeSwitch />
+          </div>
           <NotificationPopover
+            className='size-10 sm:size-9'
             open={notifications.popoverOpen}
             onOpenChange={notifications.setPopoverOpen}
             unreadCount={notifications.unreadCount}
@@ -195,16 +192,29 @@ export function MinimalHeader() {
             loading={notifications.loading}
           />
 
-          {loading && <Skeleton className='h-8 w-16 rounded-md' />}
-          {!loading && isAuthenticated && <ProfileDropdown />}
+          {loading && <Skeleton className='size-10 rounded-md sm:h-8 sm:w-16' />}
+          {!loading && isAuthenticated && (
+            <ProfileDropdown triggerClassName='size-10 sm:size-6' />
+          )}
           {!loading && !isAuthenticated && (
             <Link
               to='/sign-in'
-              className='ml-2 text-sm font-medium transition-opacity hover:opacity-70'
+              className='px-1.5 text-sm font-medium transition-opacity hover:opacity-70'
             >
               {t('Sign in')}
             </Link>
           )}
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon'
+            className='size-11 sm:hidden'
+            aria-label={t('Open menu')}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(true)}
+          >
+            <Menu className='size-5' aria-hidden='true' />
+          </Button>
         </div>
       </nav>
 
@@ -221,9 +231,16 @@ export function MinimalHeader() {
             pathname={pathname}
             onAuthLink={handleAuthLink}
             onNavigate={() => setMenuOpen(false)}
-            className='flex flex-col items-stretch gap-1 px-4'
-            linkClassName='px-1 py-2 text-base'
+            className='flex flex-1 flex-col items-stretch gap-1 px-4'
+            linkClassName='px-1 py-2.5 text-base'
           />
+          <SheetFooter className='border-border border-t'>
+            <p className='text-muted-foreground text-xs'>{t('Preferences')}</p>
+            <div className='flex items-center gap-2'>
+              <LanguageSwitcher />
+              <ThemeSwitch />
+            </div>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
     </header>

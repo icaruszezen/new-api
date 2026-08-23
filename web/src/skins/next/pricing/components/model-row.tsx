@@ -38,7 +38,14 @@ import type { PricingModel, TokenUnit } from '@/features/pricing/types'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 
-import { MODEL_LIST_GRID_CLASS } from '../layout'
+import {
+  MODEL_LIST_META_CLASS,
+  MODEL_LIST_PRICE_CLASS,
+  MODEL_LIST_PRIMARY_CLASS,
+  MODEL_LIST_PRIMARY_NAME_CLASS,
+  MODEL_LIST_RATIO_CLASS,
+  MODEL_LIST_ROW_CLASS,
+} from '../layout'
 import { GroupPriceDrawer } from './group-price-drawer'
 import { RatioTag } from './ratio-tag'
 
@@ -73,8 +80,6 @@ export function ModelRow(props: ModelRowProps) {
   const isTokenBased = isTokenBasedModel(props.model)
   const isDynamic = isDynamicPricingModel(props.model)
   const hasCache = isTokenBased && props.model.cache_ratio != null
-  const groupCount = (props.model.enable_groups || []).length
-  const showLowestBadge = groupCount > 1
   const tokenUnit = props.tokenUnit
   const dynamicSummary = isDynamic
     ? getDynamicPricingSummary(props.model, {
@@ -158,35 +163,40 @@ export function ModelRow(props: ModelRowProps) {
           model: props.model.model_name,
         })}
         className={cn(
-          MODEL_LIST_GRID_CLASS,
-          'hover:bg-muted/15 rounded-none border-0 px-3 py-4 hover:no-underline sm:px-4',
+          MODEL_LIST_ROW_CLASS,
+          'hover:bg-muted/15 rounded-none border-0 py-4 hover:no-underline',
           '**:data-[slot=accordion-trigger-icon]:hidden'
         )}
       >
-        <ChevronRight
-          aria-hidden
-          className='text-muted-foreground size-4 shrink-0 transition-transform group-aria-expanded/accordion-trigger:rotate-90'
-        />
-        <span className='flex min-w-0 items-center gap-2 text-left'>
-          <span aria-hidden='true' className='flex shrink-0 items-center'>
-            {getLobeIcon(props.model.icon || props.model.vendor_icon, 16)}
-          </span>
-          <span className='min-w-0 truncate font-mono text-sm font-medium'>
-            {props.model.model_name}
-          </span>
-        </span>
-        <span className='flex justify-center'>
-          <RatioTag ratio={getDisplayGroupRatio(props.model)} />
-        </span>
-        <PriceCell>{inputPrice}</PriceCell>
-        <PriceCell>{outputPrice}</PriceCell>
-        <PriceCell>{cachePrice}</PriceCell>
-        <span className='flex justify-end'>
-          {showLowestBadge ? (
-            <span className='text-muted-foreground rounded-md border px-1.5 py-0.5 text-[10px] tracking-wide'>
-              {t('lowest')}
+        <span
+          className={MODEL_LIST_PRIMARY_CLASS}
+          data-slot='model-list-primary'
+        >
+          <ChevronRight
+            aria-hidden
+            className='text-muted-foreground size-4 shrink-0 transition-transform group-aria-expanded/accordion-trigger:rotate-90'
+          />
+          <span className={MODEL_LIST_PRIMARY_NAME_CLASS}>
+            <span aria-hidden='true' className='flex shrink-0 items-center'>
+              {getLobeIcon(props.model.icon || props.model.vendor_icon, 16)}
             </span>
-          ) : null}
+            <span className='min-w-0 truncate font-mono text-sm font-medium'>
+              {props.model.model_name}
+            </span>
+          </span>
+        </span>
+        <span className={MODEL_LIST_META_CLASS} data-slot='model-list-meta'>
+          <span className={MODEL_LIST_RATIO_CLASS}>
+            <RatioTag ratio={getDisplayGroupRatio(props.model)} />
+          </span>
+          <span
+            className={MODEL_LIST_PRICE_CLASS}
+            data-slot='model-list-prices'
+          >
+            <PriceCell>{inputPrice}</PriceCell>
+            <PriceCell>{outputPrice}</PriceCell>
+            <PriceCell>{cachePrice}</PriceCell>
+          </span>
         </span>
       </AccordionTrigger>
       <AccordionContent className='pb-0'>

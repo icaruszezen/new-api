@@ -18,13 +18,30 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, test } from 'vitest'
 
-import { MODEL_LIST_GRID_CLASS, MODEL_LIST_RATIO_COL } from '../layout'
+import {
+  MODEL_LIST_META_CLASS,
+  MODEL_LIST_PRICE_CLASS,
+  MODEL_LIST_PRIMARY_CLASS,
+  MODEL_LIST_RATIO_CLASS,
+  MODEL_LIST_RATIO_COL,
+} from '../layout'
 
 describe('next model square list layout', () => {
   test('reserves a fixed-width ratio column immediately after the model name', () => {
     expect(MODEL_LIST_RATIO_COL).toBe('3.75rem')
-    expect(MODEL_LIST_GRID_CLASS).toContain(
-      `minmax(0,1.5fr)_${MODEL_LIST_RATIO_COL}_minmax(4.75rem,1fr)`
+    expect(MODEL_LIST_RATIO_CLASS).toContain(`w-[${MODEL_LIST_RATIO_COL}]`)
+    expect(MODEL_LIST_META_CLASS).toContain('flex')
+    expect(MODEL_LIST_PRIMARY_CLASS).toContain('flex-1')
+    expect(MODEL_LIST_PRIMARY_CLASS).toContain('min-w-0')
+  })
+
+  test('keeps prices out of the phone summary and restores them from the md breakpoint', () => {
+    expect(MODEL_LIST_PRICE_CLASS).toContain('hidden')
+    expect(MODEL_LIST_PRICE_CLASS).toContain('md:grid')
+    expect(MODEL_LIST_PRICE_CLASS).not.toContain('overflow-x-auto')
+    expect(MODEL_LIST_PRIMARY_CLASS).not.toContain('sticky')
+    expect(MODEL_LIST_PRICE_CLASS).toContain(
+      'md:grid-cols-[minmax(4.75rem,1fr)_minmax(4.75rem,1fr)_minmax(5.25rem,1.2fr)]'
     )
   })
 })

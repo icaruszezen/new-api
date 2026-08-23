@@ -88,24 +88,26 @@ describe('next model square row', () => {
     expect(screen.getByTestId('model-icon-Claude')).toBeInTheDocument()
   })
 
-  test('shows the lowest available input, output and cache prices while collapsed', () => {
+  test('keeps the lowest prices in the desktop-only summary pane while collapsed', () => {
     const model = tokenModel()
     renderRow(model)
 
     const trigger = screen.getByRole('button', {
       name: 'Expand gpt-4o pricing',
     })
+    const prices = trigger.querySelector('[data-slot="model-list-prices"]')
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
-    expect(trigger).toHaveTextContent(
+    expect(prices).toHaveClass('hidden', 'md:grid')
+    expect(prices).toHaveTextContent(
       formatPrice(model, 'input', 'M', false, 1, 1)
     )
-    expect(trigger).toHaveTextContent(
+    expect(prices).toHaveTextContent(
       formatPrice(model, 'output', 'M', false, 1, 1)
     )
-    expect(trigger).toHaveTextContent(
+    expect(prices).toHaveTextContent(
       formatPrice(model, 'cache', 'M', false, 1, 1)
     )
-    expect(trigger).toHaveTextContent('lowest')
+    expect(prices).not.toHaveTextContent('lowest')
     expect(trigger).toHaveTextContent('0.8x')
     expect(trigger).not.toHaveTextContent('1x')
     expect(screen.queryByText('Pricing by Group')).toBeNull()
@@ -121,16 +123,26 @@ describe('next model square row', () => {
     expect(tag.parentElement).toHaveClass('justify-center')
   })
 
-  test('omits the lowest badge when a model belongs to a single group', () => {
-    renderRow(
-      tokenModel({ enable_groups: ['default'], group_ratio: { default: 1 } })
-    )
+  test('keeps the multiplier in the collapsed row and hides fee cells until the md breakpoint', () => {
+    const model = tokenModel()
+    renderRow(model)
 
-    const trigger = screen.getByRole('button', {
-      name: 'Expand gpt-4o pricing',
-    })
-    expect(trigger).not.toHaveTextContent('lowest')
-    expect(trigger).toHaveTextContent('1x')
+    const name = screen.getByText('gpt-4o')
+    const tag = screen.getByText('0.8x')
+    const inputPrice = formatPrice(model, 'input', 'M', false, 1, 1)
+    const primary = name.closest('[data-slot="model-list-primary"]')
+    const meta = tag.closest('[data-slot="model-list-meta"]')
+    const prices = document.querySelector('[data-slot="model-list-prices"]')
+
+    expect(primary).toBeTruthy()
+    expect(meta).toBeTruthy()
+    expect(prices).toBeTruthy()
+    expect(primary).not.toHaveClass('sticky')
+    expect(primary).not.toContainElement(tag)
+    expect(meta).toContainElement(tag)
+    expect(prices).toHaveClass('hidden', 'md:grid')
+    expect(prices).toHaveTextContent(inputPrice)
+    expect(primary).not.toHaveTextContent(inputPrice)
   })
 
   test('omits a cache price when the model has no cache ratio', () => {

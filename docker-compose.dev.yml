@@ -1,9 +1,15 @@
 # Frontend Development - Backend built from local source
 #
-# Usage:
+# Usage (local Go + this compose for Postgres/Redis):
+#   1. docker compose -f docker-compose.dev.yml up -d postgres redis
+#   2. go run main.go   # reads .env SQL_DSN -> 127.0.0.1:5432/new-api
+#   3. make dev-web
+#   4. Open http://localhost:5173 (Rsbuild dev server, API auto-proxied to :3000)
+#
+# Usage (backend also in Docker):
 #   1. docker compose -f docker-compose.dev.yml up -d
 #   2. make dev-web
-#   3. Open http://localhost:5173 (Rsbuild dev server, API auto-proxied to :3000)
+#   3. Open http://localhost:5173
 #
 # Rebuild backend after Go code changes:
 #   docker compose -f docker-compose.dev.yml up -d --build new-api
@@ -48,6 +54,8 @@ services:
     image: redis:7-alpine
     container_name: new-api-dev-redis
     restart: unless-stopped
+    ports:
+      - "6379:6379"
     networks:
       - dev-network
 
@@ -61,6 +69,8 @@ services:
       POSTGRES_DB: new-api
     volumes:
       - dev_pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     networks:
       - dev-network
     healthcheck:

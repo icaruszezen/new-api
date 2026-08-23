@@ -1796,6 +1796,7 @@
     "Existing Models ({{count}})": "Существующие модели ({{count}})",
     "Exists": "Существует",
     "Expand": "Развернуть",
+    "Expand {{group}} tier prices": "Показать тарифы {{group}}",
     "Expand {{model}} pricing": "Развернуть цены {{model}}",
     "Expand All": "Развернуть все",
     "Expected a JSON array of group identifiers": "Ожидается JSON-массив идентификаторов групп",

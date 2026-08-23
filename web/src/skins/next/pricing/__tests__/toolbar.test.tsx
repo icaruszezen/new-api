@@ -31,12 +31,6 @@ function renderToolbar() {
     <NextPricingToolbar
       filteredCount={12}
       totalCount={20}
-      sortBy='default'
-      onSortChange={vi.fn()}
-      tokenUnit='M'
-      onTokenUnitChange={vi.fn()}
-      showRechargePrice={false}
-      onRechargePriceChange={vi.fn()}
       quotaTypeFilter=''
       endpointTypeFilter=''
       vendorFilter=''
@@ -66,6 +60,13 @@ describe('next model square toolbar', () => {
     const filter = screen.getByRole('button', { name: /Filter/ })
     expect(filter).toHaveTextContent('2')
     expect(filter.querySelector('[data-slot="badge"]')).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Price display mode' })).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Token unit' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Sort|Name/ })).toBeNull()
+    expect(screen.queryByText('Standard')).toBeNull()
+    expect(screen.queryByText('Recharge')).toBeNull()
+    expect(screen.queryByText('/1M')).toBeNull()
+    expect(screen.queryByText('/1K')).toBeNull()
 
     await user.click(filter)
 

@@ -1796,6 +1796,7 @@
     "Existing Models ({{count}})": "Modèles existants ({{count}})",
     "Exists": "Existe",
     "Expand": "Développer",
+    "Expand {{group}} tier prices": "Afficher les paliers de {{group}}",
     "Expand {{model}} pricing": "Afficher les tarifs de {{model}}",
     "Expand All": "Tout développer",
     "Expected a JSON array of group identifiers": "Un tableau JSON d'identifiants de groupe est attendu",

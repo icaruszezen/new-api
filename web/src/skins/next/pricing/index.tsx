@@ -21,9 +21,14 @@ import { useTranslation } from 'react-i18next'
 
 import { EmptyState } from '@/features/pricing/components/empty-state'
 import { SearchBar } from '@/features/pricing/components/search-bar'
-import { EXCLUDED_GROUPS } from '@/features/pricing/constants'
+import {
+  DEFAULT_TOKEN_UNIT,
+  EXCLUDED_GROUPS,
+  SORT_OPTIONS,
+} from '@/features/pricing/constants'
 import { useFilters } from '@/features/pricing/hooks/use-filters'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
+import { sortModels } from '@/features/pricing/lib/filters'
 import { groupModelsByName } from '@/features/pricing/lib/group-models'
 
 import { NextPublicShell } from '../public-shell'
@@ -47,23 +52,17 @@ export function NextPricing() {
 
   const {
     searchInput,
-    sortBy,
     vendorFilter,
     groupFilter,
     quotaTypeFilter,
     endpointTypeFilter,
     tagFilter,
-    tokenUnit,
-    showRechargePrice,
     setSearchInput,
-    setSortBy,
     setVendorFilter,
     setGroupFilter,
     setQuotaTypeFilter,
     setEndpointTypeFilter,
     setTagFilter,
-    setTokenUnit,
-    setShowRechargePrice,
     filteredModels,
     hasActiveFilters,
     activeFilterCount,
@@ -71,6 +70,11 @@ export function NextPricing() {
     clearFilters,
     clearSearch,
   } = useFilters(uniqueModels)
+
+  const displayModels = useMemo(
+    () => sortModels(filteredModels, SORT_OPTIONS.NAME),
+    [filteredModels]
+  )
 
   const availableGroups = useMemo(
     () =>
@@ -112,14 +116,8 @@ export function NextPricing() {
 
         <div className='space-y-4'>
           <NextPricingToolbar
-            filteredCount={filteredModels.length}
+            filteredCount={displayModels.length}
             totalCount={uniqueModels.length}
-            sortBy={sortBy}
-            onSortChange={setSortBy}
-            tokenUnit={tokenUnit}
-            onTokenUnitChange={setTokenUnit}
-            showRechargePrice={showRechargePrice}
-            onRechargePriceChange={setShowRechargePrice}
             quotaTypeFilter={quotaTypeFilter}
             endpointTypeFilter={endpointTypeFilter}
             vendorFilter={vendorFilter}
@@ -140,7 +138,7 @@ export function NextPricing() {
             onClearFilters={clearFilters}
           />
 
-          {filteredModels.length === 0 ? (
+          {displayModels.length === 0 ? (
             <EmptyState
               searchQuery={searchInput}
               hasActiveFilters={hasActiveFilters}
@@ -148,11 +146,11 @@ export function NextPricing() {
             />
           ) : (
             <ModelList
-              models={filteredModels}
+              models={displayModels}
               usableGroup={usableGroup || {}}
               groupRatio={groupRatio || {}}
-              tokenUnit={tokenUnit}
-              showRechargePrice={showRechargePrice}
+              tokenUnit={DEFAULT_TOKEN_UNIT}
+              showRechargePrice
               priceRate={priceRate ?? 1}
               usdExchangeRate={usdExchangeRate ?? 1}
               selectedGroup={groupFilter}

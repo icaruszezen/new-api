@@ -18,6 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Skeleton } from '@/components/ui/skeleton'
 
+const VENDOR_BLOCKS = ['vendor-a', 'vendor-b'] as const
+const VENDOR_ROWS = ['row-a', 'row-b', 'row-c'] as const
+
 export function NextPricingSkeleton() {
   return (
     <div className='pt-16 pb-20'>
@@ -25,26 +28,27 @@ export function NextPricingSkeleton() {
         <Skeleton className='h-12 w-56' />
         <Skeleton className='h-11 w-full rounded-xl' />
       </div>
-      <div className='overflow-hidden rounded-xl border'>
-        {[
-          'row-a',
-          'row-b',
-          'row-c',
-          'row-d',
-          'row-e',
-          'row-f',
-          'row-g',
-          'row-h',
-        ].map((rowId) => (
-          <div
-            key={rowId}
-            className='flex items-center justify-between gap-4 border-b px-4 py-4 last:border-b-0'
-          >
-            <Skeleton className='h-4 w-36' />
-            <div className='flex gap-8'>
-              <Skeleton className='h-4 w-14' />
-              <Skeleton className='h-4 w-14' />
-              <Skeleton className='h-4 w-14' />
+      <div className='space-y-8'>
+        {VENDOR_BLOCKS.map((blockId) => (
+          <div key={blockId} className='space-y-3'>
+            <div className='flex items-center gap-2'>
+              <Skeleton className='size-5 rounded-full' />
+              <Skeleton className='h-4 w-24' />
+            </div>
+            <div className='overflow-hidden rounded-xl border'>
+              {VENDOR_ROWS.map((rowId) => (
+                <div
+                  key={`${blockId}-${rowId}`}
+                  className='flex items-center justify-between gap-4 border-b px-4 py-4 last:border-b-0'
+                >
+                  <Skeleton className='h-4 w-36' />
+                  <div className='flex gap-8'>
+                    <Skeleton className='h-4 w-14' />
+                    <Skeleton className='h-4 w-14' />
+                    <Skeleton className='h-4 w-14' />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         ))}

@@ -1796,6 +1796,7 @@
     "Existing Models ({{count}})": "Các mô hình hiện có ({{count}})",
     "Exists": "Tồn tại",
     "Expand": "Mở rộng",
+    "Expand {{group}} tier prices": "Hiện giá bậc của {{group}}",
     "Expand {{model}} pricing": "Mở giá {{model}}",
     "Expand All": "Mở rộng tất cả",
     "Expected a JSON array of group identifiers": "Cần là một mảng JSON gồm các định danh nhóm",

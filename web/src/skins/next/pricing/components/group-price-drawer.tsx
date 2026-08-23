@@ -17,9 +17,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
+import { ChevronRight } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   getDynamicPriceEntries,
   getDynamicPricingTiers,
@@ -241,73 +247,137 @@ function DynamicGroupTable(props: {
     usdExchangeRate: props.usdExchangeRate,
     groupRatioMultiplier: 1,
   }).slice(0, 3)
+  const hasMultipleTiers = tiers.length > 1
+  const rowClass =
+    'grid grid-cols-[minmax(0,1.3fr)_3.25rem_minmax(3.5rem,1fr)_minmax(3.5rem,1fr)_minmax(3.5rem,1fr)] items-center gap-x-2'
 
   return (
-    <div className='space-y-3'>
+    <div>
+      <div className={`${rowClass} border-border/60 border-b`}>
+        <span className={DRAWER_HEAD}>{t('Group')}</span>
+        <span className={`${DRAWER_HEAD} text-right`}>{t('Multiplier')}</span>
+        {fields.map((field) => (
+          <span key={field.field} className={`${DRAWER_HEAD} text-right`}>
+            {t(field.shortLabel)}
+          </span>
+        ))}
+      </div>
       {props.groups.map((group) => {
         const ratio = getConfiguredGroupRatio(props.groupRatio, group)
-        return (
-          <div key={group}>
-            <div className='mb-1.5 flex items-center justify-between gap-3'>
-              <span className='font-mono text-xs'>{group}</span>
-              <span className='text-muted-foreground font-mono text-xs'>
-                {formatMultiplier(ratio)}
+        const lowestEntries = getDynamicPriceEntries(firstTier, {
+          tokenUnit: props.tokenUnit,
+          showRechargePrice: props.showRechargePrice,
+          priceRate: props.priceRate,
+          usdExchangeRate: props.usdExchangeRate,
+          groupRatioMultiplier: ratio,
+        })
+        const lowestByField = new Map(
+          lowestEntries.map((entry) => [entry.field, entry.formatted])
+        )
+        const rowCells = (
+          <>
+            <span className='flex min-w-0 items-center gap-1.5 py-2 text-left font-mono text-xs'>
+              {hasMultipleTiers ? (
+                <ChevronRight
+                  aria-hidden
+                  className='size-3.5 shrink-0 transition-transform group-aria-expanded/tier-trigger:rotate-90'
+                />
+              ) : null}
+              <span className='truncate'>{group}</span>
+            </span>
+            <span className='text-muted-foreground py-2 text-right font-mono text-xs'>
+              {formatMultiplier(ratio)}
+            </span>
+            {fields.map((field) => (
+              <span
+                key={field.field}
+                className='py-2 text-right font-mono text-xs'
+              >
+                {lowestByField.get(field.field) ?? MISSING_PRICE}
               </span>
+            ))}
+          </>
+        )
+
+        if (!hasMultipleTiers) {
+          return (
+            <div
+              key={group}
+              className={`${rowClass} border-border/50 border-b last:border-b-0`}
+            >
+              {rowCells}
             </div>
-            <table className='w-full text-sm'>
-              <thead>
-                <tr className='border-border/60 border-b'>
-                  <th scope='col' className={DRAWER_HEAD}>
-                    {t('Tier')}
-                  </th>
-                  {fields.map((field) => (
-                    <th
-                      key={field.field}
-                      scope='col'
-                      className={`${DRAWER_HEAD} text-right`}
-                    >
-                      {t(field.shortLabel)}
+          )
+        }
+
+        return (
+          <Collapsible
+            key={group}
+            defaultOpen={false}
+            className='border-border/50 border-b last:border-b-0'
+          >
+            <CollapsibleTrigger
+              aria-label={t('Expand {{group}} tier prices', { group })}
+              className={`group/tier-trigger hover:bg-muted/15 ${rowClass} w-full`}
+            >
+              {rowCells}
+            </CollapsibleTrigger>
+            <CollapsibleContent className='px-1 pt-1 pb-2'>
+              <table className='w-full text-sm'>
+                <thead>
+                  <tr className='border-border/60 border-b'>
+                    <th scope='col' className={DRAWER_HEAD}>
+                      {t('Tier')}
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {tiers.map((tier, tierIndex) => {
-                  const entries = getDynamicPriceEntries(tier, {
-                    tokenUnit: props.tokenUnit,
-                    showRechargePrice: props.showRechargePrice,
-                    priceRate: props.priceRate,
-                    usdExchangeRate: props.usdExchangeRate,
-                    groupRatioMultiplier: ratio,
-                  })
-                  const byField = new Map(
-                    entries.map((entry) => [entry.field, entry.formatted])
-                  )
-                  return (
-                    <tr
-                      key={`${group}-${tier.label || tierIndex}`}
-                      className='border-border/50 border-b last:border-b-0'
-                    >
+                    {fields.map((field) => (
                       <th
-                        scope='row'
-                        className='text-muted-foreground py-2 text-left text-xs font-normal'
+                        key={field.field}
+                        scope='col'
+                        className={`${DRAWER_HEAD} text-right`}
                       >
-                        {tier.label || t('Default')}
+                        {t(field.shortLabel)}
                       </th>
-                      {fields.map((field) => (
-                        <td
-                          key={field.field}
-                          className='py-2 text-right font-mono text-xs'
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tiers.map((tier, tierIndex) => {
+                    const entries = getDynamicPriceEntries(tier, {
+                      tokenUnit: props.tokenUnit,
+                      showRechargePrice: props.showRechargePrice,
+                      priceRate: props.priceRate,
+                      usdExchangeRate: props.usdExchangeRate,
+                      groupRatioMultiplier: ratio,
+                    })
+                    const byField = new Map(
+                      entries.map((entry) => [entry.field, entry.formatted])
+                    )
+                    return (
+                      <tr
+                        key={`${group}-${tier.label || tierIndex}`}
+                        className='border-border/50 border-b last:border-b-0'
+                      >
+                        <th
+                          scope='row'
+                          className='text-muted-foreground py-2 text-left text-xs font-normal'
                         >
-                          {byField.get(field.field) ?? MISSING_PRICE}
-                        </td>
-                      ))}
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                          {tier.label || t('Default')}
+                        </th>
+                        {fields.map((field) => (
+                          <td
+                            key={field.field}
+                            className='py-2 text-right font-mono text-xs'
+                          >
+                            {byField.get(field.field) ?? MISSING_PRICE}
+                          </td>
+                        ))}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </CollapsibleContent>
+          </Collapsible>
         )
       })}
     </div>

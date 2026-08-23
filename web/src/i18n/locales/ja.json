@@ -1796,6 +1796,7 @@
     "Existing Models ({{count}})": "既存のモデル ({{count}})",
     "Exists": "存在",
     "Expand": "展開",
+    "Expand {{group}} tier prices": "{{group}} の段階価格を表示",
     "Expand {{model}} pricing": "{{model}} の料金を展開",
     "Expand All": "すべて展開",
     "Expected a JSON array of group identifiers": "グループ識別子の JSON 配列が必要です",

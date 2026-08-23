@@ -1796,6 +1796,7 @@
     "Existing Models ({{count}})": "Existing Models ({{count}})",
     "Exists": "Exists",
     "Expand": "Expand",
+    "Expand {{group}} tier prices": "Expand {{group}} tier prices",
     "Expand {{model}} pricing": "Expand {{model}} pricing",
     "Expand All": "Expand All",
     "Expected a JSON array of group identifiers": "Expected a JSON array of group identifiers",

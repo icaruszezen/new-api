@@ -35,6 +35,11 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }))
 
+vi.mock('@/lib/lobe-icon', () => ({
+  getLobeIcon: (iconName?: string | null) =>
+    iconName ? <span data-testid={`model-icon-${iconName}`} /> : null,
+}))
+
 const usableGroup = {
   default: { desc: 'Default', ratio: 1 },
   vip: { desc: 'VIP', ratio: 0.8 },
@@ -71,6 +76,18 @@ function renderRow(model: PricingModel) {
 }
 
 describe('next model square row', () => {
+  test('shows the model logo before the name', () => {
+    renderRow(tokenModel({ icon: 'OpenAI.Color' }))
+
+    expect(screen.getByTestId('model-icon-OpenAI.Color')).toBeInTheDocument()
+  })
+
+  test('falls back to the vendor icon when the model has no logo', () => {
+    renderRow(tokenModel({ vendor_icon: 'Claude' }))
+
+    expect(screen.getByTestId('model-icon-Claude')).toBeInTheDocument()
+  })
+
   test('shows the lowest available input, output and cache prices while collapsed', () => {
     const model = tokenModel()
     renderRow(model)

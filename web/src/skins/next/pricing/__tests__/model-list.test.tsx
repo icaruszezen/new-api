@@ -33,26 +33,39 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }))
 
-const models: PricingModel[] = [
-  {
+vi.mock('@/lib/lobe-icon', () => ({
+  getLobeIcon: (iconName?: string | null) =>
+    iconName ? <span data-testid={`vendor-icon-${iconName}`} /> : null,
+}))
+
+function tokenModel(
+  name: string,
+  overrides?: Partial<PricingModel>
+): PricingModel {
+  return {
     id: 1,
-    model_name: 'gpt-4o',
+    model_name: name,
     quota_type: 0,
     model_ratio: 1.25,
     completion_ratio: 4,
     cache_ratio: 0.5,
-    enable_groups: ['default', 'vip'],
-    group_ratio: { default: 1, vip: 0.8 },
-  },
-  {
-    id: 2,
-    model_name: 'claude-sonnet-4',
-    quota_type: 0,
-    model_ratio: 1.5,
-    completion_ratio: 5,
     enable_groups: ['default'],
     group_ratio: { default: 1 },
-  },
+    ...overrides,
+  }
+}
+
+const models: PricingModel[] = [
+  tokenModel('gpt-4o', {
+    vendor_name: 'OpenAI',
+    vendor_icon: 'OpenAI',
+    enable_groups: ['default', 'vip'],
+    group_ratio: { default: 1, vip: 0.8 },
+  }),
+  tokenModel('claude-sonnet-4', {
+    vendor_name: 'Anthropic',
+    vendor_icon: 'Claude',
+  }),
 ]
 
 const usableGroup = {
@@ -60,47 +73,64 @@ const usableGroup = {
   vip: { desc: 'VIP', ratio: 0.8 },
 }
 
-describe('next model square list', () => {
-  test('renders column headers and one row per model name', () => {
-    render(
-      <ModelList
-        models={models}
-        usableGroup={usableGroup}
-        groupRatio={{ default: 1, vip: 0.8 }}
-        tokenUnit='M'
-        showRechargePrice={false}
-        priceRate={1}
-        usdExchangeRate={1}
-      />
-    )
+function renderList(listModels: PricingModel[] = models) {
+  return render(
+    <ModelList
+      models={listModels}
+      usableGroup={usableGroup}
+      groupRatio={{ default: 1, vip: 0.8 }}
+      tokenUnit='M'
+      showRechargePrice={false}
+      priceRate={1}
+      usdExchangeRate={1}
+    />
+  )
+}
 
-    expect(screen.getByText('Model')).toBeInTheDocument()
-    expect(screen.getByText('Input (per 1M tokens)')).toBeInTheDocument()
-    expect(screen.getByText('Output (per 1M tokens)')).toBeInTheDocument()
-    expect(
-      screen.getByText('Cached input (per 1M tokens)')
-    ).toBeInTheDocument()
+describe('next model square list', () => {
+  test('splits models into vendor sections with icons and column headers', () => {
+    renderList()
+
+    const vendorHeadings = screen
+      .getAllByRole('heading', { level: 2 })
+      .map((heading) => heading.textContent?.trim())
+    expect(vendorHeadings).toEqual(['OpenAI', 'Anthropic'])
+    expect(screen.getAllByTestId('vendor-icon-Claude').length).toBeGreaterThan(0)
+    expect(screen.getAllByTestId('vendor-icon-OpenAI').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Model')).toHaveLength(2)
+    expect(screen.getAllByText('Input (per 1M tokens)')).toHaveLength(2)
+    expect(screen.getAllByText('Output (per 1M tokens)')).toHaveLength(2)
+    expect(screen.getAllByText('Cached input (per 1M tokens)')).toHaveLength(2)
     expect(
       screen.getByRole('button', { name: 'Expand gpt-4o pricing' })
     ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Expand claude-sonnet-4 pricing' })
     ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Previous page' })
+    ).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull()
+  })
+
+  test('renders every filtered model on one page when the catalog is longer than the old page size', () => {
+    const manyModels = Array.from({ length: 25 }, (_, index) =>
+      tokenModel(`model-${index + 1}`, {
+        vendor_name: index < 12 ? 'OpenAI' : 'Anthropic',
+      })
+    )
+
+    renderList(manyModels)
+
+    expect(
+      screen.getAllByRole('button', { name: /Expand .+ pricing/ })
+    ).toHaveLength(25)
+    expect(screen.queryByText(/Page \d+ of \d+/)).toBeNull()
   })
 
   test('opens a nested group drawer for the selected model only', async () => {
     const user = userEvent.setup()
-    render(
-      <ModelList
-        models={models}
-        usableGroup={usableGroup}
-        groupRatio={{ default: 1, vip: 0.8 }}
-        tokenUnit='M'
-        showRechargePrice={false}
-        priceRate={1}
-        usdExchangeRate={1}
-      />
-    )
+    renderList()
 
     await user.click(
       screen.getByRole('button', { name: 'Expand gpt-4o pricing' })

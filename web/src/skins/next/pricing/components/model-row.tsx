@@ -32,6 +32,7 @@ import {
 import { isTokenBasedModel } from '@/features/pricing/lib/model-helpers'
 import { formatPrice, formatRequestPrice } from '@/features/pricing/lib/price'
 import type { PricingModel, TokenUnit } from '@/features/pricing/types'
+import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 
 import { MODEL_LIST_GRID_CLASS } from '../layout'
@@ -162,8 +163,13 @@ export function ModelRow(props: ModelRowProps) {
           aria-hidden
           className='text-muted-foreground size-4 shrink-0 transition-transform group-aria-expanded/accordion-trigger:rotate-90'
         />
-        <span className='min-w-0 truncate text-left font-mono text-sm font-medium'>
-          {props.model.model_name}
+        <span className='flex min-w-0 items-center gap-2 text-left'>
+          <span aria-hidden='true' className='flex shrink-0 items-center'>
+            {getLobeIcon(props.model.icon || props.model.vendor_icon, 16)}
+          </span>
+          <span className='min-w-0 truncate font-mono text-sm font-medium'>
+            {props.model.model_name}
+          </span>
         </span>
         <PriceCell>{inputPrice}</PriceCell>
         <PriceCell>{outputPrice}</PriceCell>

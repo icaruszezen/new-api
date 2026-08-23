@@ -1796,6 +1796,7 @@
     "Existing Models ({{count}})": "現有模型 ({{count}})",
     "Exists": "存在",
     "Expand": "展開",
+    "Expand {{group}} tier prices": "展開 {{group}} 的階梯價格",
     "Expand {{model}} pricing": "展開 {{model}} 的價格",
     "Expand All": "全部展開",
     "Expected a JSON array of group identifiers": "應為分組標識符的 JSON 陣列",

@@ -16,23 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { ConsoleKeyManagement } from './components/key-management'
+import { ConsoleShortcutRow } from './components/shortcut-row'
+import { ConsoleStatsRow } from './components/stats-row'
 
-import {
-  DASHBOARD_SECTION_IDS,
-  DASHBOARD_DEFAULT_SECTION,
-} from '@/features/dashboard/section-registry'
-import { SkinnedDashboard } from '@/skins/dashboard'
-
-export const Route = createFileRoute('/_authenticated/dashboard/$section')({
-  beforeLoad: ({ params }) => {
-    const validSections = DASHBOARD_SECTION_IDS as unknown as string[]
-    if (!validSections.includes(params.section)) {
-      throw redirect({
-        to: '/dashboard/$section',
-        params: { section: DASHBOARD_DEFAULT_SECTION },
-      })
-    }
-  },
-  component: SkinnedDashboard,
-})
+export function NextConsoleHome() {
+  return (
+    <div className='flex flex-col gap-5 pb-10'>
+      <ConsoleStatsRow />
+      <ConsoleShortcutRow />
+      <ConsoleKeyManagement />
+    </div>
+  )
+}

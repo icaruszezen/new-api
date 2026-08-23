@@ -16,23 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute, redirect } from '@tanstack/react-router'
 
-import {
-  DASHBOARD_SECTION_IDS,
-  DASHBOARD_DEFAULT_SECTION,
-} from '@/features/dashboard/section-registry'
-import { SkinnedDashboard } from '@/skins/dashboard'
-
-export const Route = createFileRoute('/_authenticated/dashboard/$section')({
-  beforeLoad: ({ params }) => {
-    const validSections = DASHBOARD_SECTION_IDS as unknown as string[]
-    if (!validSections.includes(params.section)) {
-      throw redirect({
-        to: '/dashboard/$section',
-        params: { section: DASHBOARD_DEFAULT_SECTION },
-      })
-    }
-  },
-  component: SkinnedDashboard,
-})
+/**
+ * Next user-console homepage. `/dashboard` redirects here; both forms must
+ * drop the sidebar shell so the first paint is the standalone console page.
+ */
+export function isNextConsoleHomePath(pathname: string): boolean {
+  return pathname === '/dashboard' || pathname === '/dashboard/overview'
+}

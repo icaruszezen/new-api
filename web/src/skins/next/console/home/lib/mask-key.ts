@@ -16,23 +16,26 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute, redirect } from '@tanstack/react-router'
 
-import {
-  DASHBOARD_SECTION_IDS,
-  DASHBOARD_DEFAULT_SECTION,
-} from '@/features/dashboard/section-registry'
-import { SkinnedDashboard } from '@/skins/dashboard'
+/**
+ * Display-only mask for a token suffix. The list API never returns the
+ * full secret; this only formats whatever fragment is already public.
+ */
+export function maskApiKey(key: string): string {
+  const full = key.startsWith('sk-') ? key : `sk-${key}`
+  if (full.length <= 14) return full
+  return `${full.slice(0, 7)}***${full.slice(-4)}`
+}
 
-export const Route = createFileRoute('/_authenticated/dashboard/$section')({
-  beforeLoad: ({ params }) => {
-    const validSections = DASHBOARD_SECTION_IDS as unknown as string[]
-    if (!validSections.includes(params.section)) {
-      throw redirect({
-        to: '/dashboard/$section',
-        params: { section: DASHBOARD_DEFAULT_SECTION },
-      })
-    }
-  },
-  component: SkinnedDashboard,
-})
+export function formatGroupRatio(
+  ratio: number | string | undefined
+): string | null {
+  if (ratio == null || ratio === '') return null
+  if (typeof ratio === 'number') {
+    if (!Number.isFinite(ratio)) return null
+    return `${ratio}x`
+  }
+  const numeric = Number(ratio)
+  if (Number.isFinite(numeric)) return `${numeric}x`
+  return ratio
+}

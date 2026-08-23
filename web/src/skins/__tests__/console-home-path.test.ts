@@ -16,23 +16,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { describe, expect, test } from 'vitest'
 
-import {
-  DASHBOARD_SECTION_IDS,
-  DASHBOARD_DEFAULT_SECTION,
-} from '@/features/dashboard/section-registry'
-import { SkinnedDashboard } from '@/skins/dashboard'
+import { isNextConsoleHomePath } from '../console-home-path'
 
-export const Route = createFileRoute('/_authenticated/dashboard/$section')({
-  beforeLoad: ({ params }) => {
-    const validSections = DASHBOARD_SECTION_IDS as unknown as string[]
-    if (!validSections.includes(params.section)) {
-      throw redirect({
-        to: '/dashboard/$section',
-        params: { section: DASHBOARD_DEFAULT_SECTION },
-      })
+describe('isNextConsoleHomePath', () => {
+  test.each(['/dashboard', '/dashboard/overview'])(
+    'treats %s as the next console homepage',
+    (pathname) => {
+      expect(isNextConsoleHomePath(pathname)).toBe(true)
     }
-  },
-  component: SkinnedDashboard,
+  )
+
+  test.each([
+    '/dashboard/models',
+    '/dashboard/flow',
+    '/dashboard/users',
+    '/keys',
+    '/wallet',
+    '/profile',
+    '/',
+  ])('leaves %s on the sidebar shell', (pathname) => {
+    expect(isNextConsoleHomePath(pathname)).toBe(false)
+  })
 })

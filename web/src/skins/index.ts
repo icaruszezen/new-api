@@ -21,6 +21,7 @@ For commercial licensing, please contact support@quantumnous.com
  */
 export { SkinnedAuthenticatedLayout } from './authenticated-layout'
 export { useUiSkin } from './context'
+export { SkinnedDashboard } from './dashboard'
 export { SkinnedHome } from './home'
 export { SkinnedPricing } from './pricing'
 export { DEFAULT_UI_SKIN, parseUiSkin, resolveConsoleSkin } from './registry'

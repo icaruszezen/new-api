@@ -540,11 +540,13 @@ For commercial licensing, please contact support@quantumnous.com
   }
 }
 
-/* Next public pages only. `[data-skin='next']` covers the shell; body
-   `[data-next-public]` covers portaled sheets and menus. Classic pages and
-   the authenticated console keep the global theme tokens. */
+/* Next public pages and the next user-console homepage.
+   `[data-skin='next']` covers the shell; body `[data-next-public]` and
+   `[data-next-console]` cover portaled sheets and menus. Classic pages
+   keep the global theme tokens. */
 [data-skin='next'],
-[data-next-public] {
+[data-next-public],
+[data-next-console] {
   --background: oklch(1 0 0);
   --foreground: oklch(0.09 0 0);
   --card: oklch(1 0 0);
@@ -565,7 +567,8 @@ For commercial licensing, please contact support@quantumnous.com
 }
 
 .dark [data-skin='next'],
-.dark [data-next-public] {
+.dark [data-next-public],
+.dark [data-next-console] {
   /* Charcoal canvas, not OLED black. Surfaces sit above the page so lists
      and sheets keep hierarchy; muted text and borders stay readable. */
   --background: oklch(0.20 0 0);

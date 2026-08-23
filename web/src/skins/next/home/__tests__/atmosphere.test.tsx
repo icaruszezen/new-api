@@ -60,12 +60,10 @@ describe('next landing atmosphere', () => {
     homePageContent.current = { content: '', isLoaded: true, isUrl: false }
   })
 
-  test('paints a decorative wash behind the default landing page without intercepting input', () => {
+  test('does not paint a decorative colour wash behind the default landing page', () => {
     render(<NextHome />)
 
-    const wash = screen.getByTestId('landing-atmosphere')
-    expect(wash).toHaveAttribute('aria-hidden', 'true')
-    expect(wash).toHaveClass('landing-atmosphere', 'pointer-events-none')
+    expect(screen.queryByTestId('landing-atmosphere')).toBeNull()
   })
 
   test('omits the wash when the administrator configured a custom home page', () => {

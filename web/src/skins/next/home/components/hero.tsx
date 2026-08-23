@@ -26,14 +26,9 @@ import { cn } from '@/lib/utils'
 
 const CHAT_COMPLETIONS_PATH = '/v1/chat/completions'
 
-/**
- * The two delays map to the two animations on `landing-animate-headline`: the
- * entrance rise, then the accent beam. Offsetting the beam per line makes the
- * light rake across the headline instead of flashing both lines at once.
- */
 const HEADLINE_LINES = [
-  { text: 'One API.', muted: false, riseDelay: 0, beamDelay: 0 },
-  { text: 'Every model.', muted: true, riseDelay: 120, beamDelay: 500 },
+  { text: 'One API.', muted: false, riseDelay: 0 },
+  { text: 'Every model.', muted: true, riseDelay: 120 },
 ] as const
 
 /**
@@ -63,27 +58,15 @@ export function Hero(props: { isAuthenticated: boolean }) {
     <section className='pt-24 pb-16 md:pt-32 md:pb-24'>
       <h1 className='text-[clamp(2.75rem,7vw,4.5rem)] leading-[0.98] font-medium tracking-[-0.035em]'>
         {HEADLINE_LINES.map((line) => (
-          // The mask is padded on both sides because `leading-[0.98]` is
-          // tighter than the glyph box; the negative margin gives that padding
-          // back so the tight line rhythm is unchanged.
           <span
             key={line.text}
-            className='-my-[0.15em] block overflow-hidden py-[0.15em]'
+            className={cn(
+              'landing-animate-fade-up block',
+              line.muted && 'text-muted-foreground'
+            )}
+            style={{ animationDelay: `${line.riseDelay}ms` }}
           >
-            <span
-              className={cn(
-                'landing-animate-headline block',
-                // Not `text-muted-foreground`: the gradient is the line's
-                // colour now, so the secondary line is dimmed rather than
-                // recoloured, which would paint over the sheen.
-                line.muted && 'opacity-70'
-              )}
-              style={{
-                animationDelay: `${line.riseDelay}ms, ${line.beamDelay}ms`,
-              }}
-            >
-              {t(line.text)}
-            </span>
+            {t(line.text)}
           </span>
         ))}
       </h1>

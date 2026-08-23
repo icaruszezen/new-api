@@ -67,7 +67,7 @@ describe('next landing page and custom home page content', () => {
     expect(screen.getByTestId('next-hero')).toBeInTheDocument()
     expect(screen.getByTestId('next-provider-strip')).toBeInTheDocument()
     expect(screen.getByTestId('footer')).toBeInTheDocument()
-    expect(screen.getByTestId('landing-atmosphere')).toBeInTheDocument()
+    expect(screen.queryByTestId('landing-atmosphere')).toBeNull()
     expect(screen.queryByTestId('classic-home')).toBeNull()
   })
 

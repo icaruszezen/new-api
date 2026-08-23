@@ -112,7 +112,7 @@ export function MinimalFooter() {
   }
 
   return (
-    <footer className='border-border/60 border-t'>
+    <footer className='border-border border-t'>
       <AnimateInView
         ignoreReducedMotion
         className={cn(LANDING_MEASURE_CLASS, 'py-8')}

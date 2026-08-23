@@ -16,12 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-/**
- * Public surface of the UI Skin module.
- */
-export { SkinnedAuthenticatedLayout } from './authenticated-layout'
-export { useUiSkin } from './context'
-export { SkinnedHome } from './home'
-export { SkinnedPricing } from './pricing'
-export { DEFAULT_UI_SKIN, parseUiSkin } from './registry'
-export type { UiSkin } from './types'
+
+/** Shared column track so the list header and each summary row stay aligned. */
+export const MODEL_LIST_GRID_CLASS =
+  'grid grid-cols-[1.25rem_minmax(0,1.5fr)_minmax(4.75rem,1fr)_minmax(4.75rem,1fr)_minmax(5.25rem,1.2fr)_3.75rem] items-center gap-x-2 sm:gap-x-4'

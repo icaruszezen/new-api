@@ -75,6 +75,17 @@ describe('next landing hero', () => {
     ).toHaveTextContent(`${window.location.origin}/v1/chat/completions`)
   })
 
+  test('renders the headline in plain type without the accent sheen', () => {
+    render(<Hero isAuthenticated={false} />)
+
+    expect(screen.getByText('One API.')).not.toHaveClass(
+      'landing-animate-headline'
+    )
+    expect(screen.getByText('Every model.')).toHaveClass(
+      'text-muted-foreground'
+    )
+  })
+
   test('sends signed-out visitors to sign-up and signed-in visitors to the dashboard', () => {
     const { unmount } = render(<Hero isAuthenticated={false} />)
     expect(screen.getByRole('link', { name: 'Get Started' })).toHaveAttribute(

@@ -16,12 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-/**
- * Public surface of the UI Skin module.
- */
-export { SkinnedAuthenticatedLayout } from './authenticated-layout'
-export { useUiSkin } from './context'
-export { SkinnedHome } from './home'
-export { SkinnedPricing } from './pricing'
-export { DEFAULT_UI_SKIN, parseUiSkin } from './registry'
-export type { UiSkin } from './types'
+import { Pricing } from '@/features/pricing'
+
+/** Classic model square: the card/table catalog the site has always rendered. */
+export function ClassicPricing() {
+  return <Pricing />
+}

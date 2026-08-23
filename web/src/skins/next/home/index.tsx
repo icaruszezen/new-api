@@ -22,20 +22,16 @@ import { Home } from '@/features/home'
 import { useHomePageContent } from '@/features/home/hooks'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { LandingAtmosphere } from './components/atmosphere'
+import { NextPublicShell } from '../public-shell'
 import { Hero } from './components/hero'
-import { MinimalFooter } from './components/minimal-footer'
-import { MinimalHeader } from './components/minimal-header'
 import { ProviderStrip } from './components/provider-strip'
-import { LANDING_MEASURE_CLASS } from './layout'
 
 /**
  * Next landing page: a quiet, typography-led single column.
  *
- * `PublicLayout` always renders the classic `PublicHeader`, so this shell is
- * assembled by hand to carry the flat header instead. Administrator-configured
- * home pages (iframe / HTML / Markdown) keep the classic rendering, so this
- * skin only owns the default landing page.
+ * `PublicLayout` always renders the classic `PublicHeader`, so next public
+ * pages use `NextPublicShell`. Administrator-configured home pages
+ * (iframe / HTML / Markdown) keep the classic rendering.
  */
 export function NextHome() {
   const { t } = useTranslation()
@@ -44,9 +40,13 @@ export function NextHome() {
 
   if (!isLoaded) {
     return (
-      <div className='bg-background text-foreground flex min-h-svh items-center justify-center'>
-        <span className='text-muted-foreground text-sm'>{t('Loading...')}</span>
-      </div>
+      <NextPublicShell>
+        <div className='flex min-h-[50vh] items-center justify-center'>
+          <span className='text-muted-foreground text-sm'>
+            {t('Loading...')}
+          </span>
+        </div>
+      </NextPublicShell>
     )
   }
 
@@ -54,23 +54,10 @@ export function NextHome() {
     return <Home />
   }
 
-  // The entrance reveal is this page's whole design, so `data-landing-motion`
-  // keeps it playing even for a visitor who asked for reduced motion. The
-  // console and the classic pages still honour the preference.
   return (
-    <div
-      data-landing-motion='always'
-      className='bg-background text-foreground relative isolate flex min-h-svh flex-col'
-    >
-      <LandingAtmosphere />
-      <MinimalHeader />
-      {/* The shell owns the single measure the page is built on, so the header
-          logo, the headline and the provider row all share one left edge. */}
-      <main className={`${LANDING_MEASURE_CLASS} flex-1`}>
-        <Hero isAuthenticated={!!auth.user} />
-        <ProviderStrip />
-      </main>
-      <MinimalFooter />
-    </div>
+    <NextPublicShell>
+      <Hero isAuthenticated={!!auth.user} />
+      <ProviderStrip />
+    </NextPublicShell>
   )
 }

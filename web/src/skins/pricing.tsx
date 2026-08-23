@@ -16,12 +16,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { ClassicPricing } from './classic/pricing'
+import { UiSkinProvider, useUiSkin } from './context'
+import { NextPricing } from './next/pricing'
+
+function ActiveSkinPricing() {
+  const skin = useUiSkin()
+
+  if (skin === 'next') {
+    return <NextPricing />
+  }
+  return <ClassicPricing />
+}
+
 /**
- * Public surface of the UI Skin module.
+ * Single dispatch point for the public model square. The administrator chooses
+ * the skin site-wide, the same way the landing page is chosen.
  */
-export { SkinnedAuthenticatedLayout } from './authenticated-layout'
-export { useUiSkin } from './context'
-export { SkinnedHome } from './home'
-export { SkinnedPricing } from './pricing'
-export { DEFAULT_UI_SKIN, parseUiSkin } from './registry'
-export type { UiSkin } from './types'
+export function SkinnedPricing() {
+  return (
+    <UiSkinProvider>
+      <ActiveSkinPricing />
+    </UiSkinProvider>
+  )
+}

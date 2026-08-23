@@ -38,7 +38,7 @@ export function ProviderStrip() {
   return (
     <section
       aria-label={t('Supported providers')}
-      className='border-border/60 border-t pt-10 pb-24'
+      className='border-border border-t pt-10 pb-24'
     >
       <AnimateInView
         as='span'

@@ -55,6 +55,7 @@ function ListColumnHeader(props: { tokenUnitLabel: string }) {
     >
       <span />
       <span>{t('Model')}</span>
+      <span className='text-center'>{t('Multiplier')}</span>
       <span className='text-right'>
         {t('Input (per {{unit}} tokens)', { unit: props.tokenUnitLabel })}
       </span>

@@ -16,10 +16,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { cn } from '@/lib/utils'
 
-/** Fixed track for the lowest-ratio tag so every row lines that column up. */
-export const MODEL_LIST_RATIO_COL = '3.75rem'
+export type RatioTagProps = {
+  ratio: number
+  className?: string
+}
 
-/** Shared column track so the list header and each summary row stay aligned. */
-export const MODEL_LIST_GRID_CLASS =
-  'grid grid-cols-[1.25rem_minmax(0,1.5fr)_3.75rem_minmax(4.75rem,1fr)_minmax(4.75rem,1fr)_minmax(5.25rem,1.2fr)_3.75rem] items-center gap-x-2 sm:gap-x-4'
+export function RatioTag(props: RatioTagProps) {
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center rounded-[4px] border border-green-500/25 bg-green-500/15 px-1.5 py-0.5 font-mono text-sm leading-none tabular-nums text-green-700 shadow-sm backdrop-blur-md backdrop-saturate-150 dark:border-green-400/25 dark:bg-green-400/15 dark:text-green-400',
+        props.className
+      )}
+    >
+      {props.ratio}x
+    </span>
+  )
+}

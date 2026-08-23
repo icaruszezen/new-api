@@ -16,10 +16,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { describe, expect, test } from 'vitest'
 
-/** Fixed track for the lowest-ratio tag so every row lines that column up. */
-export const MODEL_LIST_RATIO_COL = '3.75rem'
+import { MODEL_LIST_GRID_CLASS, MODEL_LIST_RATIO_COL } from '../layout'
 
-/** Shared column track so the list header and each summary row stay aligned. */
-export const MODEL_LIST_GRID_CLASS =
-  'grid grid-cols-[1.25rem_minmax(0,1.5fr)_3.75rem_minmax(4.75rem,1fr)_minmax(4.75rem,1fr)_minmax(5.25rem,1.2fr)_3.75rem] items-center gap-x-2 sm:gap-x-4'
+describe('next model square list layout', () => {
+  test('reserves a fixed-width ratio column immediately after the model name', () => {
+    expect(MODEL_LIST_RATIO_COL).toBe('3.75rem')
+    expect(MODEL_LIST_GRID_CLASS).toContain(
+      `minmax(0,1.5fr)_${MODEL_LIST_RATIO_COL}_minmax(4.75rem,1fr)`
+    )
+  })
+})

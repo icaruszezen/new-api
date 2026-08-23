@@ -98,6 +98,7 @@ describe('next model square list', () => {
     expect(screen.getAllByTestId('vendor-icon-Claude').length).toBeGreaterThan(0)
     expect(screen.getAllByTestId('vendor-icon-OpenAI').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Model')).toHaveLength(2)
+    expect(screen.getAllByText('Multiplier')).toHaveLength(2)
     expect(screen.getAllByText('Input (per 1M tokens)')).toHaveLength(2)
     expect(screen.getAllByText('Output (per 1M tokens)')).toHaveLength(2)
     expect(screen.getAllByText('Cached input (per 1M tokens)')).toHaveLength(2)
@@ -137,8 +138,8 @@ describe('next model square list', () => {
     )
 
     expect(screen.getByText('Pricing by Group')).toBeInTheDocument()
-    expect(screen.getByText('1x')).toBeInTheDocument()
-    expect(screen.getByText('0.8x')).toBeInTheDocument()
+    expect(screen.getAllByText('1x')).toHaveLength(2)
+    expect(screen.getAllByText('0.8x')).toHaveLength(2)
     expect(
       screen.getByRole('button', { name: 'Expand claude-sonnet-4 pricing' })
     ).toHaveAttribute('aria-expanded', 'false')

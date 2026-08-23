@@ -106,7 +106,19 @@ describe('next model square row', () => {
       formatPrice(model, 'cache', 'M', false, 1, 1)
     )
     expect(trigger).toHaveTextContent('lowest')
+    expect(trigger).toHaveTextContent('0.8x')
+    expect(trigger).not.toHaveTextContent('1x')
     expect(screen.queryByText('Pricing by Group')).toBeNull()
+  })
+
+  test('keeps the lowest ratio tag out of the model-name cell so the list can align it as a column', () => {
+    renderRow(tokenModel())
+
+    const name = screen.getByText('gpt-4o')
+    const tag = screen.getByText('0.8x')
+    expect(name.parentElement).not.toContainElement(tag)
+    expect(tag).not.toHaveClass('w-full')
+    expect(tag.parentElement).toHaveClass('justify-center')
   })
 
   test('omits the lowest badge when a model belongs to a single group', () => {
@@ -118,6 +130,7 @@ describe('next model square row', () => {
       name: 'Expand gpt-4o pricing',
     })
     expect(trigger).not.toHaveTextContent('lowest')
+    expect(trigger).toHaveTextContent('1x')
   })
 
   test('omits a cache price when the model has no cache ratio', () => {
@@ -144,7 +157,7 @@ describe('next model square row', () => {
     expect(screen.getByText('default')).toBeInTheDocument()
     expect(screen.getByText('vip')).toBeInTheDocument()
     expect(screen.getByText('1x')).toBeInTheDocument()
-    expect(screen.getByText('0.8x')).toBeInTheDocument()
+    expect(screen.getAllByText('0.8x')).toHaveLength(2)
     expect(screen.getByRole('link', { name: 'Model details' })).toBeVisible()
   })
 

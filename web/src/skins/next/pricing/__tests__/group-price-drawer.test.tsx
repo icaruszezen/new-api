@@ -70,6 +70,13 @@ function renderDrawer(model: PricingModel) {
 }
 
 describe('next model square group price drawer', () => {
+  test('renders each group multiplier as a ratio tag', () => {
+    renderDrawer(tokenModel())
+
+    expect(screen.getByText('1x')).toBeInTheDocument()
+    expect(screen.getByText('0.8x')).toBeInTheDocument()
+  })
+
   test('shows only the lowest tier until a group tier menu is opened', async () => {
     const user = userEvent.setup()
     renderDrawer(
@@ -83,6 +90,8 @@ describe('next model square group price drawer', () => {
     expect(screen.getByText('Multiplier')).toBeInTheDocument()
     expect(screen.getByText('default')).toBeInTheDocument()
     expect(screen.getByText('vip')).toBeInTheDocument()
+    expect(screen.getByText('1x')).toBeInTheDocument()
+    expect(screen.getByText('0.8x')).toBeInTheDocument()
     expect(screen.queryByText('standard')).toBeNull()
     expect(screen.queryByText('long_context')).toBeNull()
 

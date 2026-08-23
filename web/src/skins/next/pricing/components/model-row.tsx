@@ -29,7 +29,10 @@ import {
   getDynamicPricingSummary,
   isDynamicPricingModel,
 } from '@/features/pricing/lib/dynamic-price'
-import { isTokenBasedModel } from '@/features/pricing/lib/model-helpers'
+import {
+  getDisplayGroupRatio,
+  isTokenBasedModel,
+} from '@/features/pricing/lib/model-helpers'
 import { formatPrice, formatRequestPrice } from '@/features/pricing/lib/price'
 import type { PricingModel, TokenUnit } from '@/features/pricing/types'
 import { getLobeIcon } from '@/lib/lobe-icon'
@@ -37,6 +40,7 @@ import { cn } from '@/lib/utils'
 
 import { MODEL_LIST_GRID_CLASS } from '../layout'
 import { GroupPriceDrawer } from './group-price-drawer'
+import { RatioTag } from './ratio-tag'
 
 const MISSING_PRICE = '—'
 
@@ -170,6 +174,9 @@ export function ModelRow(props: ModelRowProps) {
           <span className='min-w-0 truncate font-mono text-sm font-medium'>
             {props.model.model_name}
           </span>
+        </span>
+        <span className='flex justify-center'>
+          <RatioTag ratio={getDisplayGroupRatio(props.model)} />
         </span>
         <PriceCell>{inputPrice}</PriceCell>
         <PriceCell>{outputPrice}</PriceCell>

@@ -42,6 +42,8 @@ import {
 } from '@/features/pricing/lib/price'
 import type { PricingModel, TokenUnit } from '@/features/pricing/types'
 
+import { RatioTag } from './ratio-tag'
+
 const MISSING_PRICE = '—'
 
 const DRAWER_HEAD =
@@ -55,10 +57,6 @@ export type GroupPriceDrawerProps = {
   showRechargePrice: boolean
   priceRate: number
   usdExchangeRate: number
-}
-
-function formatMultiplier(ratio: number): string {
-  return `${ratio}x`
 }
 
 export function GroupPriceDrawer(props: GroupPriceDrawerProps) {
@@ -150,8 +148,8 @@ export function GroupPriceDrawer(props: GroupPriceDrawerProps) {
                   >
                     {group}
                   </th>
-                  <td className='text-muted-foreground py-2 text-right font-mono text-xs'>
-                    {formatMultiplier(ratio)}
+                  <td className='py-2 text-right'>
+                    <RatioTag ratio={ratio} />
                   </td>
                   {isTokenBased ? (
                     <>
@@ -249,7 +247,7 @@ function DynamicGroupTable(props: {
   }).slice(0, 3)
   const hasMultipleTiers = tiers.length > 1
   const rowClass =
-    'grid grid-cols-[minmax(0,1.3fr)_3.25rem_minmax(3.5rem,1fr)_minmax(3.5rem,1fr)_minmax(3.5rem,1fr)] items-center gap-x-2'
+    'grid grid-cols-[minmax(0,1.3fr)_4rem_minmax(3.5rem,1fr)_minmax(3.5rem,1fr)_minmax(3.5rem,1fr)] items-center gap-x-2'
 
   return (
     <div>
@@ -285,8 +283,8 @@ function DynamicGroupTable(props: {
               ) : null}
               <span className='truncate'>{group}</span>
             </span>
-            <span className='text-muted-foreground py-2 text-right font-mono text-xs'>
-              {formatMultiplier(ratio)}
+            <span className='flex justify-end py-2'>
+              <RatioTag ratio={ratio} />
             </span>
             {fields.map((field) => (
               <span

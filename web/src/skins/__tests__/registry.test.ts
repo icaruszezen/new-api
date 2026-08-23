@@ -16,21 +16,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { describe, expect, test } from 'vitest'
 
-import { SkinnedAuthenticatedLayout } from '@/skins'
-import { useAuthStore } from '@/stores/auth-store'
+import { parseUiSkin } from '../registry'
 
-export const Route = createFileRoute('/_authenticated')({
-  beforeLoad: ({ location }) => {
-    const { auth } = useAuthStore.getState()
+describe('parseUiSkin', () => {
+  test.each([
+    ['classic', 'classic'],
+    ['next', 'next'],
+  ])('keeps the supported skin %s', (input, expected) => {
+    expect(parseUiSkin(input)).toBe(expected)
+  })
 
-    if (!auth.user || !auth.accessToken) {
-      throw redirect({
-        to: '/sign-in',
-        search: { redirect: location.href },
-      })
-    }
-  },
-  component: SkinnedAuthenticatedLayout,
+  test.each([
+    ['missing value', undefined],
+    ['null value', null],
+    ['empty string', ''],
+    ['blank string', '   '],
+    ['wrong case', 'NEXT'],
+    ['unknown skin', 'legacy'],
+    ['non-string value', 1],
+  ])('falls back to classic for %s', (_label, input) => {
+    expect(parseUiSkin(input)).toBe('classic')
+  })
 })

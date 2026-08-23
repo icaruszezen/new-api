@@ -16,21 +16,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import type { UiSkin } from './types'
 
-import { SkinnedAuthenticatedLayout } from '@/skins'
-import { useAuthStore } from '@/stores/auth-store'
+export const UI_SKIN_VALUES: ReadonlySet<UiSkin> = new Set<UiSkin>([
+  'classic',
+  'next',
+])
 
-export const Route = createFileRoute('/_authenticated')({
-  beforeLoad: ({ location }) => {
-    const { auth } = useAuthStore.getState()
+export const DEFAULT_UI_SKIN: UiSkin = 'classic'
 
-    if (!auth.user || !auth.accessToken) {
-      throw redirect({
-        to: '/sign-in',
-        search: { redirect: location.href },
-      })
-    }
-  },
-  component: SkinnedAuthenticatedLayout,
-})
+/**
+ * Normalize an unknown skin value coming from `/api/status`, persisted state or
+ * the admin form. Missing, empty and unknown values fall back to `classic` so
+ * an unconfigured deployment keeps its current console.
+ */
+export function parseUiSkin(value: unknown): UiSkin {
+  if (typeof value === 'string' && UI_SKIN_VALUES.has(value as UiSkin)) {
+    return value as UiSkin
+  }
+  return DEFAULT_UI_SKIN
+}

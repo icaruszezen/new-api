@@ -20,6 +20,7 @@ import { useEffect, useCallback } from 'react'
 
 import { DEFAULT_SYSTEM_NAME, DEFAULT_LOGO } from '@/lib/constants'
 import { applyFaviconToDom } from '@/lib/dom-utils'
+import { parseUiSkin } from '@/skins/registry'
 import {
   useSystemConfigStore,
   type CurrencyConfig,
@@ -47,6 +48,7 @@ interface StatusApiResponse {
     usd_exchange_rate?: number
     custom_currency_symbol?: string
     custom_currency_exchange_rate?: number
+    ui_skin?: string
   }
 }
 
@@ -98,6 +100,7 @@ export function mapStatusDataToConfig(
     footerHtml: data.footer_html,
     demoSiteEnabled: data.demo_site_enabled,
     displayTokenStatEnabled: data.display_token_stat_enabled,
+    uiSkin: parseUiSkin(data.ui_skin),
     currency,
   }
 }

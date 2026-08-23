@@ -16,21 +16,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { ClassicAuthenticatedLayout } from './classic/authenticated-layout'
+import { UiSkinProvider, useUiSkin } from './context'
+import { NextAuthenticatedLayout } from './next/authenticated-layout'
 
-import { SkinnedAuthenticatedLayout } from '@/skins'
-import { useAuthStore } from '@/stores/auth-store'
+function ActiveSkinLayout() {
+  const skin = useUiSkin()
 
-export const Route = createFileRoute('/_authenticated')({
-  beforeLoad: ({ location }) => {
-    const { auth } = useAuthStore.getState()
+  if (skin === 'next') {
+    return <NextAuthenticatedLayout />
+  }
+  return <ClassicAuthenticatedLayout />
+}
 
-    if (!auth.user || !auth.accessToken) {
-      throw redirect({
-        to: '/sign-in',
-        search: { redirect: location.href },
-      })
-    }
-  },
-  component: SkinnedAuthenticatedLayout,
-})
+/**
+ * Single dispatch point for the authenticated console shell. The administrator
+ * chooses the skin site-wide; users have no switch of their own.
+ */
+export function SkinnedAuthenticatedLayout() {
+  return (
+    <UiSkinProvider>
+      <ActiveSkinLayout />
+    </UiSkinProvider>
+  )
+}

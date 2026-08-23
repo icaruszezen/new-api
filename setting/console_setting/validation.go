@@ -308,3 +308,19 @@ func validateUptimeKumaGroups(groupsStr string) error {
 func GetUptimeKumaGroups() []map[string]interface{} {
 	return getJSONList(GetConsoleSetting().UptimeKumaGroups)
 }
+
+// GetUISkin 返回规范化后的控制台界面外壳标识，空值、缺失与非法值一律回落到 classic
+func GetUISkin() string {
+	if GetConsoleSetting().UISkin == UISkinNext {
+		return UISkinNext
+	}
+	return UISkinClassic
+}
+
+// ValidateUISkin 校验管理员提交的控制台界面外壳取值
+func ValidateUISkin(uiSkin string) error {
+	if uiSkin != UISkinClassic && uiSkin != UISkinNext {
+		return fmt.Errorf("控制台界面只能设置为 %s 或 %s", UISkinClassic, UISkinNext)
+	}
+	return nil
+}

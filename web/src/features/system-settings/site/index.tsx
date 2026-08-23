@@ -35,6 +35,7 @@ const defaultSiteSettings: SiteSettings = {
   ServerAddress: '',
   'legal.user_agreement': '',
   'legal.privacy_policy': '',
+  'console_setting.ui_skin': 'classic',
   HeaderNavModules: '',
   SidebarModulesAdmin: '',
 }

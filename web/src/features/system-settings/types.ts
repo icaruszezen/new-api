@@ -117,6 +117,7 @@ export type SiteSettings = {
   ServerAddress: string
   'legal.user_agreement': string
   'legal.privacy_policy': string
+  'console_setting.ui_skin': string
   HeaderNavModules: string
   SidebarModulesAdmin: string
 }

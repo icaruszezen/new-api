@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { parseUiSkin } from '@/skins/registry'
+
 import { SystemInfoSection } from '../general/system-info-section'
 import {
   parseHeaderNavModules,
@@ -28,6 +30,7 @@ import { NoticeSection } from '../maintenance/notice-section'
 import { SidebarModulesSection } from '../maintenance/sidebar-modules-section'
 import type { SiteSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
+import { ConsoleUiSection } from './console-ui-section'
 
 const SITE_SECTIONS = [
   {
@@ -58,6 +61,19 @@ const SITE_SECTIONS = [
         defaultValues={{
           Notice: settings.Notice ?? '',
           NoticePopupEnabled: settings.NoticePopupEnabled,
+        }}
+      />
+    ),
+  },
+  {
+    id: 'console-ui',
+    titleKey: 'Console interface',
+    build: (settings: SiteSettings) => (
+      <ConsoleUiSection
+        defaultValues={{
+          console_setting: {
+            ui_skin: parseUiSkin(settings['console_setting.ui_skin']),
+          },
         }}
       />
     ),

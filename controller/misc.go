@@ -99,6 +99,9 @@ func GetStatus(c *gin.Context) {
 		"price":             operation_setting.Price,
 		"stripe_unit_price": setting.StripeUnitPrice,
 
+		// 控制台界面外壳（站点级强制，用户不可覆盖）
+		"ui_skin": console_setting.GetUISkin(),
+
 		// 面板启用开关
 		"api_info_enabled":      cs.ApiInfoEnabled,
 		"uptime_kuma_enabled":   cs.UptimeKumaEnabled,

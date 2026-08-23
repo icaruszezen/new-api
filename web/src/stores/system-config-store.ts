@@ -20,6 +20,10 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 import { DEFAULT_SYSTEM_NAME, DEFAULT_LOGO } from '@/lib/constants'
+// Imported from the concrete modules instead of the `@/skins` barrel, which
+// would pull the skin context back into this store.
+import { DEFAULT_UI_SKIN } from '@/skins/registry'
+import type { UiSkin } from '@/skins/types'
 
 export type CurrencyDisplayType = 'USD' | 'CNY' | 'TOKENS' | 'CUSTOM'
 
@@ -44,6 +48,8 @@ export interface SystemConfig {
   footerHtml?: string
   demoSiteEnabled?: boolean
   displayTokenStatEnabled?: boolean
+  /** Console shell forced by the administrator; may be absent in older persisted state */
+  uiSkin?: UiSkin
   currency: CurrencyConfig
 }
 
@@ -75,6 +81,7 @@ export const useSystemConfigStore = create<SystemConfigState>()(
       config: {
         systemName: DEFAULT_SYSTEM_NAME,
         logo: DEFAULT_LOGO,
+        uiSkin: DEFAULT_UI_SKIN,
         currency: { ...DEFAULT_CURRENCY_CONFIG },
       },
       loading: true,

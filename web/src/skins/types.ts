@@ -16,21 +16,5 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute, redirect } from '@tanstack/react-router'
-
-import { SkinnedAuthenticatedLayout } from '@/skins'
-import { useAuthStore } from '@/stores/auth-store'
-
-export const Route = createFileRoute('/_authenticated')({
-  beforeLoad: ({ location }) => {
-    const { auth } = useAuthStore.getState()
-
-    if (!auth.user || !auth.accessToken) {
-      throw redirect({
-        to: '/sign-in',
-        search: { redirect: location.href },
-      })
-    }
-  },
-  component: SkinnedAuthenticatedLayout,
-})
+/** Console shell selected by the administrator (site-wide, users cannot override it) */
+export type UiSkin = 'classic' | 'next'

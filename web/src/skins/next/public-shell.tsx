@@ -32,7 +32,7 @@ type NextPublicShellProps = {
  * Shared next-skin chrome for public pages. `PublicLayout` always mounts the
  * classic header, so next pages assemble this shell instead.
  *
- * `data-skin="next"` scopes the near-black tokens on the page itself.
+ * `data-skin="next"` scopes the charcoal page tokens on the page itself.
  * `data-next-public` is mirrored onto `document.body` so portaled sheets and
  * menus inherit the same tokens without touching the console.
  */

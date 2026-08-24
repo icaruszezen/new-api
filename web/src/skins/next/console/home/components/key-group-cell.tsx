@@ -17,19 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { ChevronsUpDown } from 'lucide-react'
+import { Check, ChevronsUpDown } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
+import { Input } from '@/components/ui/input'
 import {
   Popover,
   PopoverContent,
@@ -168,6 +161,7 @@ export function ConsoleKeyGroupCell(props: ConsoleKeyGroupCellProps) {
         align='start'
         side='bottom'
         sideOffset={6}
+        initialFocus={(openType) => openType === 'keyboard'}
         className='w-80 overflow-hidden rounded-xl p-0 shadow-md'
         onWheel={(event) => event.stopPropagation()}
         onTouchMove={(event) => event.stopPropagation()}
@@ -188,54 +182,70 @@ export function ConsoleKeyGroupCell(props: ConsoleKeyGroupCellProps) {
             </p>
           ) : null}
           {!groupsQuery.isLoading && groups.length > 0 ? (
-            <Command shouldFilter={false}>
-              <CommandInput
-                placeholder={t('Search groups...')}
-                value={searchValue}
-                onValueChange={setSearchValue}
-              />
-              <CommandList className='max-h-64'>
-                <CommandEmpty>{t('No group found.')}</CommandEmpty>
-                <CommandGroup>
-                  {filteredGroups.map((group) => {
-                    const isCurrent = group.value === currentGroup
-                    const optionLabel =
-                      group.value === 'auto' ? t('Cross-group') : group.value
+            <div>
+              <div className='p-1.5 pb-1'>
+                <Input
+                  type='search'
+                  placeholder={t('Search groups...')}
+                  value={searchValue}
+                  onChange={(event) => setSearchValue(event.target.value)}
+                  autoFocus={false}
+                />
+              </div>
+              <div
+                role='listbox'
+                aria-label={t('Switch group')}
+                className='max-h-64 overflow-y-auto overscroll-contain p-1'
+              >
+                {filteredGroups.length === 0 ? (
+                  <p className='text-muted-foreground px-2 py-6 text-center text-sm'>
+                    {t('No group found.')}
+                  </p>
+                ) : null}
+                {filteredGroups.map((group) => {
+                  const isCurrent = group.value === currentGroup
+                  const optionLabel =
+                    group.value === 'auto' ? t('Cross-group') : group.value
 
-                    return (
-                      <CommandItem
-                        key={group.value}
-                        value={group.value}
-                        disabled={pendingGroup !== null}
-                        data-checked={isCurrent ? 'true' : undefined}
-                        aria-current={isCurrent ? 'true' : undefined}
-                        onSelect={() => {
-                          void handleSelect(group.value)
-                        }}
-                        className={cn(
-                          'items-center rounded-lg px-2 py-2',
-                          pendingGroup === group.value && 'opacity-70'
-                        )}
-                      >
-                        <span className='min-w-0 flex-1'>
-                          <span className='block truncate font-medium'>
-                            {optionLabel}
-                          </span>
-                          {group.desc && group.desc !== group.value ? (
-                            <span className='text-muted-foreground block truncate text-xs'>
-                              {group.desc}
-                            </span>
-                          ) : null}
+                  return (
+                    <button
+                      key={group.value}
+                      type='button'
+                      role='option'
+                      aria-selected={isCurrent}
+                      disabled={pendingGroup !== null}
+                      onClick={() => {
+                        void handleSelect(group.value)
+                      }}
+                      className={cn(
+                        'hover:bg-muted/60 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start',
+                        isCurrent && 'bg-muted/40',
+                        pendingGroup === group.value && 'opacity-70'
+                      )}
+                    >
+                      <span className='min-w-0 flex-1'>
+                        <span className='block truncate font-medium'>
+                          {optionLabel}
                         </span>
-                        {typeof group.ratio === 'number' ? (
-                          <RatioTag ratio={group.ratio} />
+                        {group.desc && group.desc !== group.value ? (
+                          <span className='text-muted-foreground block truncate text-xs'>
+                            {group.desc}
+                          </span>
                         ) : null}
-                      </CommandItem>
-                    )
-                  })}
-                </CommandGroup>
-              </CommandList>
-            </Command>
+                      </span>
+                      {typeof group.ratio === 'number' ? (
+                        <RatioTag ratio={group.ratio} />
+                      ) : null}
+                      {isCurrent ? (
+                        <Check className='size-4 shrink-0' aria-hidden='true' />
+                      ) : (
+                        <span className='size-4 shrink-0' aria-hidden='true' />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           ) : null}
         </div>
       </PopoverContent>

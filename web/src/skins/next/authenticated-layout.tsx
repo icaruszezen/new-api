@@ -22,14 +22,15 @@ import { useRouterState } from '@tanstack/react-router'
 // barrel, which reaches the sidebar config and cycles back into features.
 import { AuthenticatedLayout } from '@/components/layout/components/authenticated-layout'
 
-import { isNextConsoleHomePath } from '../console-home-path'
+import { isNextStandaloneShellPath } from '../console-home-path'
 import { useUserConsolePreview } from '../use-user-console-preview'
 import { NextConsoleShell } from './console/shell'
 import { NextConsolePreviewBanner } from './preview-banner'
 
 /**
- * Next console chrome. The user homepage is a standalone page; every other
- * authenticated route still uses the existing sidebar layout.
+ * Next console chrome. The user homepage and personal center are standalone
+ * pages; every other authenticated route still uses the existing sidebar
+ * layout.
  *
  * The preview banner lives on this side so administrators can tell they are
  * looking at the user console without changing classic chrome.
@@ -39,12 +40,12 @@ export function NextAuthenticatedLayout() {
     select: (state) => state.location.pathname,
   })
   const preview = useUserConsolePreview()
-  const isConsoleHome = isNextConsoleHomePath(pathname)
+  const isStandaloneShell = isNextStandaloneShellPath(pathname)
 
   return (
     <>
       <NextConsolePreviewBanner />
-      {isConsoleHome ? (
+      {isStandaloneShell ? (
         <NextConsoleShell previewOffset={preview.isPreviewing} />
       ) : (
         <AuthenticatedLayout />

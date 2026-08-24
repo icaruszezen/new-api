@@ -16,29 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Languages, Loader2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Languages } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { TitledCard } from '@/components/ui/titled-card'
-import {
-  INTERFACE_LANGUAGE_OPTIONS,
-  normalizeInterfaceLanguage,
-} from '@/i18n/languages'
-import { useAuthStore } from '@/stores/auth-store'
 
-import { updateUserLanguage } from '../api'
-import { parseUserSettings } from '../lib'
 import type { UserProfile } from '../types'
+import { LanguageSelectRow } from './language-select-row'
 
 type LanguagePreferencesCardProps = {
   profile: UserProfile | null
@@ -46,61 +30,7 @@ type LanguagePreferencesCardProps = {
 }
 
 export function LanguagePreferencesCard(props: LanguagePreferencesCardProps) {
-  const { t, i18n } = useTranslation()
-  const { auth } = useAuthStore()
-  const [saving, setSaving] = useState(false)
-
-  const savedLanguage = useMemo(() => {
-    const settings = parseUserSettings(props.profile?.setting)
-    return normalizeInterfaceLanguage(settings.language || i18n.language)
-  }, [props.profile?.setting, i18n.language])
-
-  const [currentLanguage, setCurrentLanguage] = useState(savedLanguage)
-
-  useEffect(() => {
-    setCurrentLanguage(savedLanguage)
-  }, [savedLanguage])
-
-  const handleLanguageChange = async (language: string | null) => {
-    if (!language) return
-    const nextLanguage = normalizeInterfaceLanguage(language)
-    if (nextLanguage === currentLanguage) return
-
-    const previousLanguage = currentLanguage
-    setCurrentLanguage(nextLanguage)
-    setSaving(true)
-    await i18n.changeLanguage(nextLanguage)
-
-    try {
-      const response = await updateUserLanguage(nextLanguage)
-      if (!response.success) {
-        throw new Error(response.message || t('Failed to update settings'))
-      }
-
-      if (auth.user) {
-        const existingSetting =
-          typeof auth.user.setting === 'string'
-            ? parseUserSettings(auth.user.setting)
-            : (auth.user.setting ?? {})
-        auth.setUser({
-          ...auth.user,
-          setting: JSON.stringify({
-            ...existingSetting,
-            language: nextLanguage,
-          }),
-        })
-      }
-
-      props.onProfileUpdate()
-      toast.success(t('Language preference saved'))
-    } catch {
-      setCurrentLanguage(previousLanguage)
-      await i18n.changeLanguage(previousLanguage)
-      toast.error(t('Failed to update settings'))
-    } finally {
-      setSaving(false)
-    }
-  }
+  const { t } = useTranslation()
 
   return (
     <TitledCard
@@ -110,43 +40,10 @@ export function LanguagePreferencesCard(props: LanguagePreferencesCardProps) {
       iconTone='chart-4'
       disableHoverEffect
     >
-      <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4'>
-        <div className='space-y-1'>
-          <div className='text-sm font-medium'>{t('Interface Language')}</div>
-          <p className='text-muted-foreground line-clamp-2 text-xs sm:text-sm'>
-            {t(
-              'Language preferences sync across your signed-in devices and affect API error messages.'
-            )}
-          </p>
-        </div>
-        <div className='flex items-center gap-2 sm:min-w-48'>
-          <Select
-            items={INTERFACE_LANGUAGE_OPTIONS.map((language) => ({
-              value: language.code,
-              label: language.label,
-            }))}
-            value={currentLanguage}
-            onValueChange={handleLanguageChange}
-            disabled={saving}
-          >
-            <SelectTrigger className='w-full sm:w-48'>
-              <SelectValue placeholder={t('Select language')} />
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectGroup>
-                {INTERFACE_LANGUAGE_OPTIONS.map((language) => (
-                  <SelectItem key={language.code} value={language.code}>
-                    {language.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          {saving && (
-            <Loader2 className='text-muted-foreground size-4 animate-spin' />
-          )}
-        </div>
-      </div>
+      <LanguageSelectRow
+        profile={props.profile}
+        onProfileUpdate={props.onProfileUpdate}
+      />
     </TitledCard>
   )
 }

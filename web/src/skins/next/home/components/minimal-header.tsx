@@ -192,7 +192,9 @@ export function MinimalHeader() {
             loading={notifications.loading}
           />
 
-          {loading && <Skeleton className='size-10 rounded-md sm:h-8 sm:w-16' />}
+          {loading && (
+            <Skeleton className='size-10 rounded-md sm:h-8 sm:w-16' />
+          )}
           {!loading && isAuthenticated && (
             <ProfileDropdown triggerClassName='size-10 sm:size-6' />
           )}

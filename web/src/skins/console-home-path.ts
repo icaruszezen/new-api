@@ -24,3 +24,12 @@ For commercial licensing, please contact support@quantumnous.com
 export function isNextConsoleHomePath(pathname: string): boolean {
   return pathname === '/dashboard' || pathname === '/dashboard/overview'
 }
+
+/**
+ * Authenticated routes that keep the Next standalone chrome (top bar, no
+ * sidebar). The homepage and personal center share this shell; other
+ * console pages stay on the classic sidebar layout.
+ */
+export function isNextStandaloneShellPath(pathname: string): boolean {
+  return isNextConsoleHomePath(pathname) || pathname === '/profile'
+}

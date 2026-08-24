@@ -191,6 +191,30 @@ describe('next console key group cell', () => {
     expect(await screen.findByRole('option', { name: /vip/ })).toBeVisible()
   })
 
+  test('does not scroll the page when the group picker opens', async () => {
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    })
+    const scrollTo = vi.spyOn(window, 'scrollTo')
+    const user = userEvent.setup()
+    renderSampleCell()
+
+    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await screen.findByRole('option', { name: /vip/ })
+
+    expect(scrollIntoView).not.toHaveBeenCalled()
+    expect(scrollTo).not.toHaveBeenCalled()
+    expect(screen.getByPlaceholderText('Search groups...')).not.toHaveFocus()
+
+    scrollTo.mockRestore()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: () => undefined,
+    })
+  })
+
   test('shows an empty state when no groups are available', async () => {
     const user = userEvent.setup()
     apiMocks.getUserGroups.mockResolvedValue({

@@ -77,10 +77,12 @@ function StatCard(props: StatCardProps) {
 
 export function ConsoleStatsRow() {
   const { t, i18n } = useTranslation()
-  const requestCount = useAuthStore(
-    (state) => Number(state.auth.user?.request_count ?? 0)
+  const requestCount = useAuthStore((state) =>
+    Number(state.auth.user?.request_count ?? 0)
   )
-  const remainQuota = useAuthStore((state) => Number(state.auth.user?.quota ?? 0))
+  const remainQuota = useAuthStore((state) =>
+    Number(state.auth.user?.quota ?? 0)
+  )
   const todayRange = useMemo(() => getCalendarDayRange(), [])
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
 

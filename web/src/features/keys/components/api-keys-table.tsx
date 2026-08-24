@@ -37,8 +37,8 @@ import {
   ERROR_MESSAGES,
   isDisabledApiKeyRow,
 } from '../constants'
-import { ApiKeysMobileList } from './api-keys-mobile-list'
 import { useApiKeysColumns } from './api-keys-columns'
+import { ApiKeysMobileList } from './api-keys-mobile-list'
 import { useApiKeys } from './api-keys-provider'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 

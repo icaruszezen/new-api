@@ -71,6 +71,14 @@ describe('next authenticated layout chrome', () => {
     expect(screen.queryByTestId('sidebar-shell')).toBeNull()
   })
 
+  test('uses the standalone console shell on the personal center', () => {
+    pathnameRef.current = '/profile'
+    render(<NextAuthenticatedLayout />)
+
+    expect(screen.getByTestId('console-home-shell')).toBeInTheDocument()
+    expect(screen.queryByTestId('sidebar-shell')).toBeNull()
+  })
+
   test('keeps the sidebar shell on other console routes', () => {
     pathnameRef.current = '/dashboard/models'
     render(<NextAuthenticatedLayout />)

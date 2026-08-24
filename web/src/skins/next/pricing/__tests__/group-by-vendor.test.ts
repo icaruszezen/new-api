@@ -25,10 +25,7 @@ import {
   groupModelsByVendor,
 } from '../lib/group-by-vendor'
 
-function model(
-  name: string,
-  overrides?: Partial<PricingModel>
-): PricingModel {
+function model(name: string, overrides?: Partial<PricingModel>): PricingModel {
   return {
     id: 1,
     model_name: name,
@@ -82,12 +79,7 @@ describe('groupModelsByVendor', () => {
     ])
 
     const ids = groups.map((group) => group.id)
-    expect(ids.slice(0, 4)).toEqual([
-      'OpenAI',
-      'Anthropic',
-      'Gemini',
-      'Grok',
-    ])
+    expect(ids.slice(0, 4)).toEqual(['OpenAI', 'Anthropic', 'Gemini', 'Grok'])
     expect(ids.at(-1)).toBe(OTHER_VENDOR_GROUP_ID)
     expect(ids.slice(4, -1)).toEqual(
       ['Moonshot', '自动路由（Claude）', '自动路由（GPT）'].sort((a, b) =>

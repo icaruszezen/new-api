@@ -18,7 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, test } from 'vitest'
 
-import { isNextConsoleHomePath } from '../console-home-path'
+import {
+  isNextConsoleHomePath,
+  isNextStandaloneShellPath,
+} from '../console-home-path'
 
 describe('isNextConsoleHomePath', () => {
   test.each(['/dashboard', '/dashboard/overview'])(
@@ -36,7 +39,27 @@ describe('isNextConsoleHomePath', () => {
     '/wallet',
     '/profile',
     '/',
-  ])('leaves %s on the sidebar shell', (pathname) => {
+  ])('does not treat %s as the console homepage', (pathname) => {
     expect(isNextConsoleHomePath(pathname)).toBe(false)
+  })
+})
+
+describe('isNextStandaloneShellPath', () => {
+  test.each(['/dashboard', '/dashboard/overview', '/profile'])(
+    'uses the standalone shell on %s',
+    (pathname) => {
+      expect(isNextStandaloneShellPath(pathname)).toBe(true)
+    }
+  )
+
+  test.each([
+    '/dashboard/models',
+    '/dashboard/flow',
+    '/dashboard/users',
+    '/keys',
+    '/wallet',
+    '/',
+  ])('leaves %s on the sidebar shell', (pathname) => {
+    expect(isNextStandaloneShellPath(pathname)).toBe(false)
   })
 })

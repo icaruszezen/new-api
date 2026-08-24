@@ -18,14 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import dayjs from '@/lib/dayjs'
-import { cn } from '@/lib/utils'
+
 import { Badge } from '@/components/ui/badge'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import dayjs from '@/lib/dayjs'
+import { cn } from '@/lib/utils'
 
 import type { DebugCaptureRecord } from './debug-capture-api'
 
@@ -88,10 +89,7 @@ export function DebugCaptureRecords(props: Props) {
   return (
     <div className='flex flex-col gap-2'>
       {props.records.map((record) => (
-        <Collapsible
-          key={record.id}
-          className='min-w-0 rounded-md border'
-        >
+        <Collapsible key={record.id} className='min-w-0 rounded-md border'>
           <CollapsibleTrigger className='group/trigger hover:bg-muted/40 flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left text-sm'>
             <ChevronDown
               className='text-muted-foreground size-4 shrink-0 transition-transform group-data-[panel-open]/trigger:rotate-180'

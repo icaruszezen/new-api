@@ -225,6 +225,15 @@ describe('next console key list', () => {
     expect(screen.getByText('Quota')).toBeVisible()
     expect(screen.getByText('Group')).toBeVisible()
     expect(screen.getByText('special')).toBeVisible()
+    const groupRow = screen.getByText('Group').parentElement
+    expect(groupRow).toHaveAttribute(
+      'data-slot',
+      'console-key-mobile-group-row'
+    )
+    expect(groupRow).toHaveClass('flex', 'items-center', 'justify-between')
+    expect(groupRow).toContainElement(
+      screen.getByRole('combobox', { name: 'Switch group' })
+    )
     const mobileRatio = screen.getByText('0.12x')
     expect(mobileRatio).toBeVisible()
     expect(mobileRatio).toHaveClass('rounded-[4px]', 'backdrop-blur-md')
@@ -271,6 +280,9 @@ describe('next console key list', () => {
       groupTrigger.querySelector('[data-slot="console-key-group-chevrons"]')
     ).not.toBeNull()
     expect(groupTrigger).toContainElement(ratio)
+    expect(screen.getByText('Group').parentElement).toContainElement(
+      groupTrigger
+    )
   })
 
   test('shows the full mobile group name instead of truncating it beside the ratio', async () => {

@@ -16,22 +16,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ConsoleKeyManagement } from './components/key-management'
-import { ConsoleShortcutRow } from './components/shortcut-row'
-import { ConsoleStatsRow } from './components/stats-row'
+import { Profile } from '@/features/profile'
 
-export function NextConsoleHome() {
-  return (
-    <div className='flex flex-col gap-5 pb-10'>
-      <div className='grid grid-cols-1 gap-3 lg:grid-cols-12 lg:items-stretch'>
-        <div className='h-full min-w-0 lg:col-span-9'>
-          <ConsoleStatsRow />
-        </div>
-        <div className='lg:col-span-3'>
-          <ConsoleShortcutRow />
-        </div>
-      </div>
-      <ConsoleKeyManagement />
-    </div>
-  )
+import { NextProfile } from './next/profile'
+import { useResolvedConsoleSkin } from './use-resolved-console-skin'
+
+/**
+ * Personal center entry. Next users (and administrators previewing the
+ * user console) get the standalone Next page; classic stays on the
+ * existing sidebar profile.
+ */
+export function SkinnedProfile() {
+  const skin = useResolvedConsoleSkin()
+
+  if (skin === 'next') {
+    return <NextProfile />
+  }
+
+  return <Profile />
 }

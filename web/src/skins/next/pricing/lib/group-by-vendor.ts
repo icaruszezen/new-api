@@ -45,7 +45,9 @@ function compareVendorGroups(a: VendorModelGroup, b: VendorModelGroup): number {
   return a.name.localeCompare(b.name)
 }
 
-export function groupModelsByVendor(models: PricingModel[]): VendorModelGroup[] {
+export function groupModelsByVendor(
+  models: PricingModel[]
+): VendorModelGroup[] {
   if (models.length === 0) {
     return []
   }

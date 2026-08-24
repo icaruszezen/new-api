@@ -60,7 +60,9 @@ describe('next model square toolbar', () => {
     const filter = screen.getByRole('button', { name: /Filter/ })
     expect(filter).toHaveTextContent('2')
     expect(filter.querySelector('[data-slot="badge"]')).toBeNull()
-    expect(screen.queryByRole('group', { name: 'Price display mode' })).toBeNull()
+    expect(
+      screen.queryByRole('group', { name: 'Price display mode' })
+    ).toBeNull()
     expect(screen.queryByRole('group', { name: 'Token unit' })).toBeNull()
     expect(screen.queryByRole('button', { name: /Sort|Name/ })).toBeNull()
     expect(screen.queryByText('Standard')).toBeNull()

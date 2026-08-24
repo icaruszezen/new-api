@@ -215,13 +215,16 @@ export function ConsoleKeyList(props: ConsoleKeyListProps) {
           <DataTableRowActions row={row} overflow='delete' />
         )}
         renderGroup={(apiKey) => (
-          <div className='space-y-1'>
-            <div className='text-muted-foreground text-xs'>{t('Group')}</div>
+          <div
+            data-slot='console-key-mobile-group-row'
+            className='flex items-center justify-between gap-2 text-xs'
+          >
+            <span className='text-muted-foreground shrink-0'>{t('Group')}</span>
             <ConsoleKeyGroupCell
               apiKey={apiKey}
               ratio={groupRatios[apiKey.group ?? '']}
               onSwitched={triggerRefresh}
-              className='w-full'
+              className='min-w-0'
             />
           </div>
         )}

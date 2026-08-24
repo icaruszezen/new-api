@@ -571,22 +571,22 @@ For commercial licensing, please contact support@quantumnous.com
 .dark [data-next-console] {
   /* Charcoal canvas, not OLED black. Surfaces sit above the page so lists
      and sheets keep hierarchy; muted text and borders stay readable. */
-  --background: oklch(0.20 0 0);
+  --background: oklch(0.2 0 0);
   --foreground: oklch(0.97 0 0);
   --card: oklch(0.245 0 0);
   --card-foreground: oklch(0.97 0 0);
   --popover: oklch(0.26 0 0);
   --popover-foreground: oklch(0.97 0 0);
   --primary: oklch(0.97 0 0);
-  --primary-foreground: oklch(0.20 0 0);
+  --primary-foreground: oklch(0.2 0 0);
   --secondary: oklch(0.28 0 0);
   --secondary-foreground: oklch(0.97 0 0);
   --muted: oklch(0.28 0 0);
   --muted-foreground: oklch(0.82 0 0);
   --accent: oklch(0.28 0 0);
   --accent-foreground: oklch(0.97 0 0);
-  --border: oklch(0.40 0 0);
-  --input: oklch(0.40 0 0);
+  --border: oklch(0.4 0 0);
+  --input: oklch(0.4 0 0);
   --ring: oklch(0.97 0 0 / 22%);
 }
 

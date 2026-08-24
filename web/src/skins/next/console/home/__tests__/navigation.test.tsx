@@ -149,10 +149,9 @@ describe('next console homepage navigation', () => {
       expect(screen.getByText('plus')).toBeVisible()
     })
 
-    expect(screen.getByRole('link', { name: 'Personal Center' })).toHaveAttribute(
-      'href',
-      '/profile'
-    )
+    expect(
+      screen.getByRole('link', { name: 'Personal Center' })
+    ).toHaveAttribute('href', '/profile')
     expect(screen.getByRole('link', { name: 'Usage records' })).toHaveAttribute(
       'href',
       '/usage-logs/common'
@@ -174,9 +173,9 @@ describe('next console homepage navigation', () => {
       'href',
       '/docs'
     )
-    expect(screen.getByRole('link', { name: 'Usage docs' })).not.toHaveAttribute(
-      'target'
-    )
+    expect(
+      screen.getByRole('link', { name: 'Usage docs' })
+    ).not.toHaveAttribute('target')
   })
 
   test('opens the configured docs link in a new tab', async () => {
@@ -207,7 +206,9 @@ describe('next console homepage navigation', () => {
       expect(screen.getByText('plus')).toBeVisible()
     })
 
-    expect(screen.getByRole('heading', { name: 'Wallet balance' })).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: 'Wallet balance' })
+    ).toBeVisible()
     expect(screen.queryByRole('link', { name: /Wallet balance/ })).toBeNull()
 
     await user.click(screen.getByRole('heading', { name: 'Wallet balance' }))

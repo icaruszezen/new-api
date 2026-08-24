@@ -18,8 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { createFileRoute } from '@tanstack/react-router'
 
-import { Profile } from '@/features/profile'
+import { SkinnedProfile } from '@/skins/profile'
 
 export const Route = createFileRoute('/_authenticated/profile/')({
-  component: Profile,
+  component: SkinnedProfile,
 })

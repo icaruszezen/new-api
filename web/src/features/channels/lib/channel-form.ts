@@ -576,7 +576,8 @@ export function transformChannelToFormDefaults(
         pass_through_body_enabled: parsed.pass_through_body_enabled || false,
         system_prompt: parsed.system_prompt || '',
         system_prompt_override: parsed.system_prompt_override || false,
-        cache_billing_ratio_enabled: parsed.cache_billing_ratio_enabled || false,
+        cache_billing_ratio_enabled:
+          parsed.cache_billing_ratio_enabled || false,
         cache_billing_ratio:
           typeof parsed.cache_billing_ratio === 'number' &&
           parsed.cache_billing_ratio > 0

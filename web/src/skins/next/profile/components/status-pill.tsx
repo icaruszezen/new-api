@@ -16,22 +16,26 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ConsoleKeyManagement } from './components/key-management'
-import { ConsoleShortcutRow } from './components/shortcut-row'
-import { ConsoleStatsRow } from './components/stats-row'
+import type { ReactNode } from 'react'
 
-export function NextConsoleHome() {
+import { cn } from '@/lib/utils'
+
+type NextStatusPillProps = {
+  children: ReactNode
+  tone?: 'default' | 'danger'
+}
+
+export function NextStatusPill(props: NextStatusPillProps) {
   return (
-    <div className='flex flex-col gap-5 pb-10'>
-      <div className='grid grid-cols-1 gap-3 lg:grid-cols-12 lg:items-stretch'>
-        <div className='h-full min-w-0 lg:col-span-9'>
-          <ConsoleStatsRow />
-        </div>
-        <div className='lg:col-span-3'>
-          <ConsoleShortcutRow />
-        </div>
-      </div>
-      <ConsoleKeyManagement />
-    </div>
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full border px-2 py-0.5 text-xs',
+        props.tone === 'danger'
+          ? 'border-destructive/40 text-destructive'
+          : 'border-border text-muted-foreground'
+      )}
+    >
+      {props.children}
+    </span>
   )
 }

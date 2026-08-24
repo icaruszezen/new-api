@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { ApiKey } from '@/features/keys/types'
@@ -32,6 +33,28 @@ const apiMocks = vi.hoisted(() => ({
   getUserModels: vi.fn(),
   getStatus: vi.fn(),
   getTokenAutoGroups: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: (props: {
+    to: string
+    params?: Record<string, string>
+    children: ReactNode
+    className?: string
+  }) => {
+    let href = props.to
+    if (props.params) {
+      href = Object.entries(props.params).reduce(
+        (path, [key, value]) => path.replace(`$${key}`, value),
+        props.to
+      )
+    }
+    return (
+      <a href={href} className={props.className}>
+        {props.children}
+      </a>
+    )
+  },
 }))
 
 vi.mock('@/features/dashboard/api', () => ({
@@ -85,8 +108,9 @@ function renderHome() {
   )
 }
 
-describe('next console homepage inert actions', () => {
+describe('next console homepage navigation', () => {
   beforeEach(() => {
+    window.localStorage.removeItem('status')
     useAuthStore.getState().auth.setUser({
       id: 1,
       username: 'tester',
@@ -114,10 +138,67 @@ describe('next console homepage inert actions', () => {
 
   afterEach(() => {
     useAuthStore.getState().auth.reset()
+    window.localStorage.removeItem('status')
     vi.clearAllMocks()
   })
 
-  test('does not navigate when homepage action buttons are clicked', async () => {
+  test('points personal center, usage records, and recharge at the existing console routes', async () => {
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByText('plus')).toBeVisible()
+    })
+
+    expect(screen.getByRole('link', { name: 'Personal Center' })).toHaveAttribute(
+      'href',
+      '/profile'
+    )
+    expect(screen.getByRole('link', { name: 'Usage records' })).toHaveAttribute(
+      'href',
+      '/usage-logs/common'
+    )
+    expect(screen.getByRole('link', { name: 'Recharge' })).toHaveAttribute(
+      'href',
+      '/wallet'
+    )
+  })
+
+  test('points usage docs at /docs when no external docs link is configured', async () => {
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Usage docs' })).toBeVisible()
+    })
+
+    expect(screen.getByRole('link', { name: 'Usage docs' })).toHaveAttribute(
+      'href',
+      '/docs'
+    )
+    expect(screen.getByRole('link', { name: 'Usage docs' })).not.toHaveAttribute(
+      'target'
+    )
+  })
+
+  test('opens the configured docs link in a new tab', async () => {
+    apiMocks.getStatus.mockResolvedValue({
+      docs_link: 'https://docs.example.com/guide',
+    })
+
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Usage docs' })).toHaveAttribute(
+        'href',
+        'https://docs.example.com/guide'
+      )
+    })
+
+    const usageDocs = screen.getByRole('link', { name: 'Usage docs' })
+    expect(usageDocs).toHaveAttribute('target', '_blank')
+    expect(usageDocs).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  test('keeps the wallet balance card and test connection button from navigating', async () => {
     const user = userEvent.setup()
     const pushState = vi.spyOn(window.history, 'pushState')
     renderHome()
@@ -126,18 +207,11 @@ describe('next console homepage inert actions', () => {
       expect(screen.getByText('plus')).toBeVisible()
     })
 
-    const labels = [
-      'Personal Center',
-      'Usage records',
-      'Recharge',
-      'Test Connection',
-      'Usage docs',
-    ]
+    expect(screen.getByRole('heading', { name: 'Wallet balance' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: /Wallet balance/ })).toBeNull()
 
-    for (const label of labels) {
-      const button = screen.getAllByRole('button', { name: label })[0]
-      await user.click(button)
-    }
+    await user.click(screen.getByRole('heading', { name: 'Wallet balance' }))
+    await user.click(screen.getByRole('button', { name: 'Test Connection' }))
 
     expect(pushState).not.toHaveBeenCalled()
     expect(window.location.pathname).toBe('/')

@@ -28,7 +28,6 @@ export type EndpointToneId =
 
 export type EndpointTone = {
   id: EndpointToneId
-  chip: string
   label: string
 }
 
@@ -41,49 +40,41 @@ export type EndpointToneSource = {
 export const ENDPOINT_TONES: readonly EndpointTone[] = [
   {
     id: 'sky',
-    chip: 'border-sky-200/80 bg-sky-50 dark:border-sky-800/70 dark:bg-sky-950/45',
     label:
       'border-sky-200/80 bg-sky-100 text-sky-800 dark:border-sky-700 dark:bg-sky-900/80 dark:text-sky-100',
   },
   {
     id: 'violet',
-    chip: 'border-violet-200/80 bg-violet-50 dark:border-violet-800/70 dark:bg-violet-950/45',
     label:
       'border-violet-200/80 bg-violet-100 text-violet-800 dark:border-violet-700 dark:bg-violet-900/80 dark:text-violet-100',
   },
   {
     id: 'emerald',
-    chip: 'border-emerald-200/80 bg-emerald-50 dark:border-emerald-800/70 dark:bg-emerald-950/45',
     label:
       'border-emerald-200/80 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/80 dark:text-emerald-100',
   },
   {
     id: 'amber',
-    chip: 'border-amber-200/80 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/45',
     label:
       'border-amber-200/80 bg-amber-100 text-amber-900 dark:border-amber-700 dark:bg-amber-900/80 dark:text-amber-100',
   },
   {
     id: 'rose',
-    chip: 'border-rose-200/80 bg-rose-50 dark:border-rose-800/70 dark:bg-rose-950/45',
     label:
       'border-rose-200/80 bg-rose-100 text-rose-800 dark:border-rose-700 dark:bg-rose-900/80 dark:text-rose-100',
   },
   {
     id: 'cyan',
-    chip: 'border-cyan-200/80 bg-cyan-50 dark:border-cyan-800/70 dark:bg-cyan-950/45',
     label:
       'border-cyan-200/80 bg-cyan-100 text-cyan-800 dark:border-cyan-700 dark:bg-cyan-900/80 dark:text-cyan-100',
   },
   {
     id: 'orange',
-    chip: 'border-orange-200/80 bg-orange-50 dark:border-orange-800/70 dark:bg-orange-950/45',
     label:
       'border-orange-200/80 bg-orange-100 text-orange-800 dark:border-orange-700 dark:bg-orange-900/80 dark:text-orange-100',
   },
   {
     id: 'indigo',
-    chip: 'border-indigo-200/80 bg-indigo-50 dark:border-indigo-800/70 dark:bg-indigo-950/45',
     label:
       'border-indigo-200/80 bg-indigo-100 text-indigo-800 dark:border-indigo-700 dark:bg-indigo-900/80 dark:text-indigo-100',
   },

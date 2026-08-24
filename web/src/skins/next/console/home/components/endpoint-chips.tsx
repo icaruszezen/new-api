@@ -47,13 +47,11 @@ export function ConsoleEndpointChips(props: ConsoleEndpointChipsProps) {
           <div
             key={item.url}
             data-slot='console-endpoint-chip'
-            data-tone={tone.id}
-            className={cn(
-              'flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-1.5',
-              tone.chip
-            )}
+            className='border-border bg-muted/40 flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-1.5'
           >
             <span
+              data-slot='console-endpoint-label'
+              data-tone={tone.id}
               className={cn(
                 'shrink-0 rounded-md border px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap',
                 tone.label

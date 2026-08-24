@@ -16,27 +16,32 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Link } from '@tanstack/react-router'
 import { CreditCard, FileText, UserRound, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+
+import { USAGE_LOGS_DEFAULT_SECTION } from '@/features/usage-logs/section-registry'
+
+const SHORTCUT_CLASS =
+  'bg-card hover:bg-muted/40 flex min-h-14 items-center justify-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-medium transition-colors lg:h-full'
 
 type ShortcutButtonProps = {
   label: string
   icon: LucideIcon
+  to: '/profile' | '/wallet' | '/usage-logs/$section'
+  params?: { section: string }
 }
 
 function ShortcutButton(props: ShortcutButtonProps) {
   const Icon = props.icon
 
   return (
-    <button
-      type='button'
-      className='bg-card hover:bg-muted/40 flex min-h-14 items-center justify-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-medium transition-colors lg:h-full'
-    >
+    <Link to={props.to} params={props.params} className={SHORTCUT_CLASS}>
       <span className='bg-muted text-muted-foreground flex size-8 items-center justify-center rounded-lg'>
         <Icon className='size-4' aria-hidden='true' />
       </span>
       {props.label}
-    </button>
+    </Link>
   )
 }
 
@@ -48,9 +53,18 @@ export function ConsoleShortcutRow() {
       aria-label={t('Quick actions')}
       className='grid grid-cols-1 gap-3 lg:h-full lg:grid-rows-3'
     >
-      <ShortcutButton label={t('Personal Center')} icon={UserRound} />
-      <ShortcutButton label={t('Usage records')} icon={FileText} />
-      <ShortcutButton label={t('Recharge')} icon={CreditCard} />
+      <ShortcutButton
+        label={t('Personal Center')}
+        icon={UserRound}
+        to='/profile'
+      />
+      <ShortcutButton
+        label={t('Usage records')}
+        icon={FileText}
+        to='/usage-logs/$section'
+        params={{ section: USAGE_LOGS_DEFAULT_SECTION }}
+      />
+      <ShortcutButton label={t('Recharge')} icon={CreditCard} to='/wallet' />
     </nav>
   )
 }

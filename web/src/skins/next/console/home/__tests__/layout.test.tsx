@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { ApiKey } from '@/features/keys/types'
@@ -31,6 +32,28 @@ const apiMocks = vi.hoisted(() => ({
   getUserModels: vi.fn(),
   getStatus: vi.fn(),
   getTokenAutoGroups: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: (props: {
+    to: string
+    params?: Record<string, string>
+    children: ReactNode
+    className?: string
+  }) => {
+    let href = props.to
+    if (props.params) {
+      href = Object.entries(props.params).reduce(
+        (path, [key, value]) => path.replace(`$${key}`, value),
+        props.to
+      )
+    }
+    return (
+      <a href={href} className={props.className}>
+        {props.children}
+      </a>
+    )
+  },
 }))
 
 vi.mock('@/features/dashboard/api', () => ({
@@ -146,11 +169,9 @@ describe('next console homepage layout', () => {
       screen.getByRole('heading', { name: 'Wallet balance' })
     ).toBeVisible()
     expect(screen.getByText('Balance depleted')).toBeVisible()
-    expect(
-      screen.getByRole('button', { name: 'Personal Center' })
-    ).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Usage records' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Recharge' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Personal Center' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Usage records' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Recharge' })).toBeVisible()
     expect(
       screen.getByRole('heading', { name: 'Key Management' })
     ).toBeVisible()
@@ -173,10 +194,11 @@ describe('next console homepage layout', () => {
       screen.queryByRole('columnheader', { name: 'Billing rate' })
     ).toBeNull()
     const endpoint = screen.getByText('https://api.example.com')
+    const chip = endpoint.closest('[data-slot="console-endpoint-chip"]')
     expect(endpoint).toBeVisible()
-    expect(
-      endpoint.closest('[data-slot="console-endpoint-chip"]')
-    ).toHaveAttribute('data-tone')
+    expect(chip).toHaveClass('border-border')
+    expect(chip).toHaveClass('bg-muted/40')
+    expect(screen.getByText('Default')).toHaveAttribute('data-tone')
   })
 
   test('places stats and shortcuts above key management', () => {
@@ -250,7 +272,7 @@ describe('next console homepage layout', () => {
     const testConnection = screen.getByRole('button', {
       name: 'Test Connection',
     })
-    const usageDocs = screen.getByRole('button', { name: 'Usage docs' })
+    const usageDocs = screen.getByRole('link', { name: 'Usage docs' })
     const newKey = screen.getByRole('button', { name: 'New key' })
 
     expect(testConnection.nextElementSibling).toBe(usageDocs)

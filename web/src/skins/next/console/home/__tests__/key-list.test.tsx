@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { ApiKey } from '@/features/keys/types'
@@ -34,6 +35,28 @@ const apiMocks = vi.hoisted(() => ({
   getUserModels: vi.fn(),
   getStatus: vi.fn(),
   getTokenAutoGroups: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: (props: {
+    to: string
+    params?: Record<string, string>
+    children: ReactNode
+    className?: string
+  }) => {
+    let href = props.to
+    if (props.params) {
+      href = Object.entries(props.params).reduce(
+        (path, [key, value]) => path.replace(`$${key}`, value),
+        props.to
+      )
+    }
+    return (
+      <a href={href} className={props.className}>
+        {props.children}
+      </a>
+    )
+  },
 }))
 
 vi.mock('@/features/dashboard/api', () => ({

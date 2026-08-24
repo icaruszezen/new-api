@@ -41,7 +41,7 @@ describe('next console endpoint chips', () => {
     ).toBeNull()
   })
 
-  test('gives each endpoint chip its own tone and keeps labels on one line', () => {
+  test('colors only the description labels and keeps the endpoint frames neutral', () => {
     render(
       <ConsoleEndpointChips
         items={[
@@ -60,16 +60,27 @@ describe('next console endpoint chips', () => {
       expect(chip).not.toBeNull()
       return chip as HTMLElement
     })
+    const labels = ['Default', 'Relay', 'OpenAI'].map((name) => {
+      const label = screen.getByText(name)
+      expect(label).toHaveAttribute('data-slot', 'console-endpoint-label')
+      return label
+    })
 
     expect(chips).toHaveLength(3)
-    const tones = chips.map((chip) => chip.getAttribute('data-tone'))
-    expect(new Set(tones).size).toBe(3)
-    expect(chips[1]).toHaveAttribute('data-tone', 'violet')
+    for (const chip of chips) {
+      expect(chip).toHaveClass('border-border')
+      expect(chip).toHaveClass('bg-muted/40')
+      expect(chip).not.toHaveAttribute('data-tone')
+    }
+    expect(chips[0]?.className).toBe(chips[1]?.className)
 
-    expect(screen.getByText('Default')).toHaveClass('whitespace-nowrap')
-    expect(screen.getByText('Relay')).toHaveClass('whitespace-nowrap')
-    expect(chips[0]?.className).not.toBe(chips[1]?.className)
-    expect(chips[0]?.className).not.toBe(chips[2]?.className)
+    const tones = labels.map((label) => label.getAttribute('data-tone'))
+    expect(new Set(tones).size).toBe(3)
+    expect(labels[1]).toHaveAttribute('data-tone', 'violet')
+    expect(labels[0]).toHaveClass('whitespace-nowrap')
+    expect(labels[1]).toHaveClass('whitespace-nowrap')
+    expect(labels[0]?.className).not.toBe(labels[1]?.className)
+    expect(labels[0]?.className).not.toBe(labels[2]?.className)
   })
 
   test('keeps a long endpoint URL truncatable inside the chip', () => {

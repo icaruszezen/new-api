@@ -27,6 +27,7 @@ import {
   ApiKeysProvider,
   useApiKeys,
 } from '@/features/keys/components/api-keys-provider'
+import { useStatus } from '@/hooks/use-status'
 
 import { ConsoleEndpointChips } from './endpoint-chips'
 import { ConsoleKeyList } from './key-list'
@@ -34,7 +35,9 @@ import { ConsoleKeyList } from './key-list'
 function KeyManagementCard() {
   const { t } = useTranslation()
   const apiInfo = useApiInfo()
+  const { status } = useStatus()
   const { refreshTrigger, setOpen } = useApiKeys()
+  const docsLink = status?.docs_link as string | undefined
 
   const keysQuery = useQuery({
     queryKey: ['console', 'home', 'api-keys', refreshTrigger],
@@ -68,13 +71,15 @@ function KeyManagementCard() {
             <Zap className='size-3.5' aria-hidden='true' />
             {t('Test Connection')}
           </button>
-          <button
-            type='button'
+          <a
+            href={docsLink || '/docs'}
+            target={docsLink ? '_blank' : undefined}
+            rel={docsLink ? 'noopener noreferrer' : undefined}
             className='border-border inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium'
           >
             <FileText className='size-3.5' aria-hidden='true' />
             {t('Usage docs')}
-          </button>
+          </a>
           <button
             type='button'
             className='bg-foreground text-background inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-opacity hover:opacity-85'

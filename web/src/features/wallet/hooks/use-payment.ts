@@ -93,10 +93,11 @@ export function usePayment() {
           topupAmount,
           paymentType
         )
-        setAmount(calculatedAmount)
+        if (calculatedAmount > 0) {
+          setAmount(calculatedAmount)
+        }
         return calculatedAmount
       } catch {
-        setAmount(0)
         return 0
       } finally {
         setCalculating(false)

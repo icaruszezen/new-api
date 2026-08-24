@@ -16,24 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { describe, expect, test } from 'vitest'
 
-/**
- * Next user-console homepage. `/dashboard` redirects here; both forms must
- * drop the sidebar shell so the first paint is the standalone console page.
- */
-export function isNextConsoleHomePath(pathname: string): boolean {
-  return pathname === '/dashboard' || pathname === '/dashboard/overview'
-}
+import { getDisplayPaymentAmount } from '../format'
 
-/**
- * Authenticated routes that keep the Next standalone chrome (top bar, no
- * sidebar). The homepage, personal center, and wallet share this shell;
- * other console pages stay on the classic sidebar layout.
- */
-export function isNextStandaloneShellPath(pathname: string): boolean {
-  return (
-    isNextConsoleHomePath(pathname) ||
-    pathname === '/profile' ||
-    pathname === '/wallet'
-  )
-}
+describe('getDisplayPaymentAmount', () => {
+  test('keeps a successful server quote', () => {
+    expect(getDisplayPaymentAmount(110, 100, 1, 1)).toBe(110)
+  })
+
+  test('estimates locally when the server quote is zero', () => {
+    expect(getDisplayPaymentAmount(0, 100, 1, 1)).toBe(100)
+    expect(getDisplayPaymentAmount(0, 100, 7, 0.8)).toBe(560)
+  })
+})

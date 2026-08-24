@@ -95,3 +95,17 @@ export function calculatePresetPricing(
     hasDiscount,
   }
 }
+
+/** Payable amount from the server, or a local estimate when the quote is missing. */
+export function getDisplayPaymentAmount(
+  paymentAmount: number,
+  topupAmount: number,
+  priceRatio: number,
+  discount: number = DEFAULT_DISCOUNT_RATE
+): number {
+  if (paymentAmount > 0) {
+    return paymentAmount
+  }
+  return calculatePresetPricing(topupAmount, priceRatio, discount, 1)
+    .actualPrice
+}

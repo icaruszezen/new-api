@@ -30,6 +30,7 @@ const apiMocks = vi.hoisted(() => ({
   getUserQuotaDates: vi.fn(),
   getApiKeys: vi.fn(),
   getApiKey: vi.fn(),
+  createApiKey: vi.fn(),
   deleteApiKey: vi.fn(),
   updateApiKey: vi.fn(),
   getUserGroups: vi.fn(),
@@ -67,6 +68,7 @@ vi.mock('@/features/dashboard/api', () => ({
 vi.mock('@/features/keys/api', () => ({
   getApiKeys: apiMocks.getApiKeys,
   getApiKey: apiMocks.getApiKey,
+  createApiKey: apiMocks.createApiKey,
   deleteApiKey: apiMocks.deleteApiKey,
   updateApiKey: apiMocks.updateApiKey,
   getTokenAutoGroups: apiMocks.getTokenAutoGroups,
@@ -327,7 +329,7 @@ describe('next console key list', () => {
     ).toHaveLength(2)
   })
 
-  test('opens the update drawer from the row edit action without navigating', async () => {
+  test('opens the update dialog from the row edit action without navigating', async () => {
     const user = userEvent.setup()
     const pushState = vi.spyOn(window.history, 'pushState')
     renderHome()
@@ -339,8 +341,13 @@ describe('next console key list', () => {
     await user.click(screen.getByRole('button', { name: 'Edit' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Update API Key')).toBeVisible()
+      expect(screen.getByRole('dialog')).toBeVisible()
     })
+    expect(screen.getByText('Update API Key')).toBeVisible()
+    expect(
+      document.querySelector('[data-slot="next-api-key-dialog"]')
+    ).toBeTruthy()
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
     expect(pushState).not.toHaveBeenCalled()
     expect(window.location.pathname).toBe('/')
     pushState.mockRestore()

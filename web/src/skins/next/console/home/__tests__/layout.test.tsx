@@ -28,6 +28,8 @@ import { useAuthStore } from '@/stores/auth-store'
 const apiMocks = vi.hoisted(() => ({
   getUserQuotaDates: vi.fn(),
   getApiKeys: vi.fn(),
+  getApiKey: vi.fn(),
+  createApiKey: vi.fn(),
   getUserGroups: vi.fn(),
   getUserModels: vi.fn(),
   getStatus: vi.fn(),
@@ -62,6 +64,8 @@ vi.mock('@/features/dashboard/api', () => ({
 
 vi.mock('@/features/keys/api', () => ({
   getApiKeys: apiMocks.getApiKeys,
+  getApiKey: apiMocks.getApiKey,
+  createApiKey: apiMocks.createApiKey,
   getTokenAutoGroups: apiMocks.getTokenAutoGroups,
 }))
 

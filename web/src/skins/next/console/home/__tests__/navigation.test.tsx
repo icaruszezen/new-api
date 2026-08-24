@@ -29,6 +29,8 @@ import { useAuthStore } from '@/stores/auth-store'
 const apiMocks = vi.hoisted(() => ({
   getUserQuotaDates: vi.fn(),
   getApiKeys: vi.fn(),
+  getApiKey: vi.fn(),
+  createApiKey: vi.fn(),
   getUserGroups: vi.fn(),
   getUserModels: vi.fn(),
   getStatus: vi.fn(),
@@ -63,6 +65,8 @@ vi.mock('@/features/dashboard/api', () => ({
 
 vi.mock('@/features/keys/api', () => ({
   getApiKeys: apiMocks.getApiKeys,
+  getApiKey: apiMocks.getApiKey,
+  createApiKey: apiMocks.createApiKey,
   getTokenAutoGroups: apiMocks.getTokenAutoGroups,
 }))
 
@@ -219,7 +223,7 @@ describe('next console homepage navigation', () => {
     pushState.mockRestore()
   })
 
-  test('opens the create drawer when New key is clicked', async () => {
+  test('opens the create dialog when New key is clicked', async () => {
     const user = userEvent.setup()
     const pushState = vi.spyOn(window.history, 'pushState')
     renderHome()
@@ -231,8 +235,13 @@ describe('next console homepage navigation', () => {
     await user.click(screen.getByRole('button', { name: 'New key' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Create API Key')).toBeVisible()
+      expect(screen.getByRole('dialog')).toBeVisible()
     })
+    expect(screen.getByText('Create API Key')).toBeVisible()
+    expect(
+      document.querySelector('[data-slot="next-api-key-dialog"]')
+    ).toBeTruthy()
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
     expect(pushState).not.toHaveBeenCalled()
     expect(window.location.pathname).toBe('/')
     pushState.mockRestore()

@@ -46,4 +46,19 @@ describe('payment amount routing', () => {
     expect(amount).toBe(18.75)
     expect(calls).toEqual(['waffo:120'])
   })
+
+  test('returns zero when the amount quote is rejected', async () => {
+    const amount = await requestPaymentAmount(1, 'alipay', {
+      regular: async () => ({
+        success: false,
+        message: 'error',
+        data: '充值金额过低',
+      }),
+      stripe: async () => ({ success: true, data: '2' }),
+      waffo: async () => ({ success: true, data: '3' }),
+      waffoPancake: async () => ({ success: true, data: '4' }),
+    })
+
+    expect(amount).toBe(0)
+  })
 })

@@ -22,13 +22,15 @@ import { useTranslation } from 'react-i18next'
 
 import { useApiInfo } from '@/features/dashboard/hooks/use-status-data'
 import { getApiKeys } from '@/features/keys/api'
-import { ApiKeysDialogs } from '@/features/keys/components/api-keys-dialogs'
+import { ApiKeysDeleteDialog } from '@/features/keys/components/api-keys-delete-dialog'
 import {
   ApiKeysProvider,
   useApiKeys,
 } from '@/features/keys/components/api-keys-provider'
+import { CCSwitchDialog } from '@/features/keys/components/dialogs/cc-switch-dialog'
 import { useStatus } from '@/hooks/use-status'
 
+import { NextApiKeyDialog } from './api-key-dialog'
 import { ConsoleEndpointChips } from './endpoint-chips'
 import { ConsoleKeyList } from './key-list'
 
@@ -100,11 +102,27 @@ function KeyManagementCard() {
   )
 }
 
+function NextKeyDialogs() {
+  const { open, setOpen, resolvedKey } = useApiKeys()
+
+  return (
+    <>
+      <NextApiKeyDialog />
+      <ApiKeysDeleteDialog />
+      <CCSwitchDialog
+        open={open === 'cc-switch'}
+        onOpenChange={(isOpen) => !isOpen && setOpen(null)}
+        tokenKey={resolvedKey}
+      />
+    </>
+  )
+}
+
 export function ConsoleKeyManagement() {
   return (
     <ApiKeysProvider>
       <KeyManagementCard />
-      <ApiKeysDialogs />
+      <NextKeyDialogs />
     </ApiKeysProvider>
   )
 }

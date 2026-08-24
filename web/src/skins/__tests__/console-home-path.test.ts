@@ -45,7 +45,7 @@ describe('isNextConsoleHomePath', () => {
 })
 
 describe('isNextStandaloneShellPath', () => {
-  test.each(['/dashboard', '/dashboard/overview', '/profile'])(
+  test.each(['/dashboard', '/dashboard/overview', '/profile', '/wallet'])(
     'uses the standalone shell on %s',
     (pathname) => {
       expect(isNextStandaloneShellPath(pathname)).toBe(true)
@@ -57,7 +57,6 @@ describe('isNextStandaloneShellPath', () => {
     '/dashboard/flow',
     '/dashboard/users',
     '/keys',
-    '/wallet',
     '/',
   ])('leaves %s on the sidebar shell', (pathname) => {
     expect(isNextStandaloneShellPath(pathname)).toBe(false)

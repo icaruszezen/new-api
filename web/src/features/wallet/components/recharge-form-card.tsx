@@ -37,9 +37,11 @@ import {
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
+import { DEFAULT_DISCOUNT_RATE } from '../constants'
 import {
   formatCurrency,
   getDiscountLabel,
+  getDisplayPaymentAmount,
   getPaymentIcon,
   getMinTopupAmount,
   calculatePresetPricing,
@@ -141,6 +143,12 @@ export function RechargeFormCard({
   const hasWaffoPaymentMethods =
     Array.isArray(waffoPayMethods) && waffoPayMethods.length > 0
   const minTopup = getMinTopupAmount(topupInfo)
+  const payableAmount = getDisplayPaymentAmount(
+    paymentAmount,
+    topupAmount,
+    priceRatio,
+    topupInfo?.discount?.[topupAmount] || DEFAULT_DISCOUNT_RATE
+  )
   const redemptionEnabled = topupInfo?.enable_redemption !== false
 
   if (loading) {
@@ -302,11 +310,11 @@ export function RechargeFormCard({
                     <span className='text-muted-foreground truncate text-xs'>
                       {t('Amount to pay:')}
                     </span>
-                    {calculating ? (
+                    {calculating && payableAmount <= 0 ? (
                       <Skeleton className='h-5 w-16' />
                     ) : (
                       <span className='text-sm font-semibold'>
-                        {formatCurrency(paymentAmount)}
+                        {formatCurrency(payableAmount)}
                       </span>
                     )}
                   </div>

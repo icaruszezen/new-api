@@ -16,24 +16,26 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Wallet } from '@/features/wallet'
 
-/**
- * Next user-console homepage. `/dashboard` redirects here; both forms must
- * drop the sidebar shell so the first paint is the standalone console page.
- */
-export function isNextConsoleHomePath(pathname: string): boolean {
-  return pathname === '/dashboard' || pathname === '/dashboard/overview'
+import { NextWallet } from './next/wallet'
+import { useResolvedConsoleSkin } from './use-resolved-console-skin'
+
+type SkinnedWalletProps = {
+  initialShowHistory?: boolean
 }
 
 /**
- * Authenticated routes that keep the Next standalone chrome (top bar, no
- * sidebar). The homepage, personal center, and wallet share this shell;
- * other console pages stay on the classic sidebar layout.
+ * Wallet entry. Next users (and administrators previewing the user
+ * console) get the standalone Next page; classic stays on the existing
+ * sidebar wallet.
  */
-export function isNextStandaloneShellPath(pathname: string): boolean {
-  return (
-    isNextConsoleHomePath(pathname) ||
-    pathname === '/profile' ||
-    pathname === '/wallet'
-  )
+export function SkinnedWallet(props: SkinnedWalletProps) {
+  const skin = useResolvedConsoleSkin()
+
+  if (skin === 'next') {
+    return <NextWallet initialShowHistory={props.initialShowHistory} />
+  }
+
+  return <Wallet initialShowHistory={props.initialShowHistory} />
 }

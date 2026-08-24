@@ -65,7 +65,7 @@ export function useApiKeyMutateForm(params: UseApiKeyMutateFormParams) {
 
   const { data: modelsData } = useQuery({
     queryKey: ['user-models'],
-    queryFn: getUserModels,
+    queryFn: () => getUserModels(),
     enabled: params.open,
     staleTime: 0,
   })

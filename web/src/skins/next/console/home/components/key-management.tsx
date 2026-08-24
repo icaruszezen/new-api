@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { FileText, Plus, Zap } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApiInfo } from '@/features/dashboard/hooks/use-status-data'
@@ -33,13 +34,19 @@ import { useStatus } from '@/hooks/use-status'
 import { NextApiKeyDialog } from './api-key-dialog'
 import { ConsoleEndpointChips } from './endpoint-chips'
 import { ConsoleKeyList } from './key-list'
+import { TestConnectionDialog } from './test-connection-dialog'
 
 function KeyManagementCard() {
   const { t } = useTranslation()
   const apiInfo = useApiInfo()
   const { status } = useStatus()
   const { refreshTrigger, setOpen } = useApiKeys()
+  const [testConnectionOpen, setTestConnectionOpen] = useState(false)
   const docsLink = status?.docs_link as string | undefined
+  const serverAddress =
+    typeof status?.server_address === 'string'
+      ? status.server_address
+      : undefined
 
   const keysQuery = useQuery({
     queryKey: ['console', 'home', 'api-keys', refreshTrigger],
@@ -69,6 +76,7 @@ function KeyManagementCard() {
           <button
             type='button'
             className='border-border inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium'
+            onClick={() => setTestConnectionOpen(true)}
           >
             <Zap className='size-3.5' aria-hidden='true' />
             {t('Test Connection')}
@@ -98,6 +106,14 @@ function KeyManagementCard() {
       </div>
 
       <ConsoleKeyList isLoading={keysQuery.isLoading} keys={keys} />
+
+      <TestConnectionDialog
+        open={testConnectionOpen}
+        onOpenChange={setTestConnectionOpen}
+        keys={keys}
+        apiInfoItems={apiInfo.items}
+        serverAddress={serverAddress}
+      />
     </section>
   )
 }

@@ -220,6 +220,11 @@ describe('next console homepage navigation', () => {
 
     expect(pushState).not.toHaveBeenCalled()
     expect(window.location.pathname).toBe('/')
+    expect(screen.getByRole('dialog')).toBeVisible()
+    expect(screen.getByText('Test request link')).toBeVisible()
+    expect(
+      document.querySelector('[data-slot="next-test-connection-dialog"]')
+    ).toBeTruthy()
     pushState.mockRestore()
   })
 

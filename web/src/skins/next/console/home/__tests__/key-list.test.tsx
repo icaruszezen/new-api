@@ -31,6 +31,7 @@ const apiMocks = vi.hoisted(() => ({
   getApiKeys: vi.fn(),
   getApiKey: vi.fn(),
   deleteApiKey: vi.fn(),
+  updateApiKey: vi.fn(),
   getUserGroups: vi.fn(),
   getUserModels: vi.fn(),
   getStatus: vi.fn(),
@@ -67,6 +68,7 @@ vi.mock('@/features/keys/api', () => ({
   getApiKeys: apiMocks.getApiKeys,
   getApiKey: apiMocks.getApiKey,
   deleteApiKey: apiMocks.deleteApiKey,
+  updateApiKey: apiMocks.updateApiKey,
   getTokenAutoGroups: apiMocks.getTokenAutoGroups,
 }))
 
@@ -162,6 +164,7 @@ describe('next console key list', () => {
       data: { groups: [], max_count: 3 },
     })
     apiMocks.deleteApiKey.mockResolvedValue({ success: true })
+    apiMocks.updateApiKey.mockResolvedValue({ success: true, data: sampleKey })
   })
 
   afterEach(() => {
@@ -190,11 +193,12 @@ describe('next console key list', () => {
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Open menu' })).toBeNull()
-    const groupBadge = screen
-      .getByText('special')
-      .closest('[data-slot="status-badge"]')
+    const groupTrigger = screen.getByRole('combobox', { name: 'Switch group' })
     const ratio = screen.getByText('0.12x')
-    expect(groupBadge).toHaveClass('text-muted-foreground')
+    expect(groupTrigger).toHaveClass('border', 'rounded-lg')
+    expect(
+      groupTrigger.querySelector('[data-slot="console-key-group-chevrons"]')
+    ).not.toBeNull()
     expect(ratio).toHaveClass('rounded-[4px]', 'backdrop-blur-md')
     expect(ratio.className).toMatch(/bg-green-(500|400)\/15/)
     expect(screen.queryByRole('columnheader', { name: 'Created' })).toBeNull()
@@ -256,22 +260,17 @@ describe('next console key list', () => {
       expect(screen.getByText('0.12x')).toBeVisible()
     })
 
+    const groupTrigger = screen.getByRole('combobox', { name: 'Switch group' })
     const groupName = screen.getByText(longGroupName)
     const ratio = screen.getByText('0.12x')
     expect(groupName).toBeVisible()
-    expect(groupName).toHaveAttribute('data-slot', 'api-key-mobile-group-name')
-    expect(groupName).toHaveClass('break-all')
-    expect(groupName).not.toHaveClass('truncate')
-    expect(screen.getByText('Group').nextElementSibling).toHaveAttribute(
-      'data-slot',
-      'api-key-mobile-group-ratio'
-    )
+    expect(groupName).toHaveAttribute('data-slot', 'console-key-group-name')
+    expect(groupName).toHaveClass('truncate')
+    expect(ratio).toHaveClass('shrink-0')
     expect(
-      ratio.closest('[data-slot="api-key-mobile-group-ratio"]')
+      groupTrigger.querySelector('[data-slot="console-key-group-chevrons"]')
     ).not.toBeNull()
-    expect(groupName.parentElement).not.toBe(
-      screen.getByText('Group').parentElement
-    )
+    expect(groupTrigger).toContainElement(ratio)
   })
 
   test('shows the full mobile group name instead of truncating it beside the ratio', async () => {
@@ -307,12 +306,13 @@ describe('next console key list', () => {
       expect(screen.getByText('plus-special')).toBeVisible()
     })
 
-    expect(screen.getByText('plus-special')).toHaveClass('break-all')
-    expect(screen.getByText('kiro-claude-official')).toHaveClass('break-all')
+    expect(screen.getByText('plus-special')).toBeVisible()
+    expect(screen.getByText('kiro-claude-official')).toBeVisible()
     expect(screen.getByText('0.08x')).toBeVisible()
     expect(screen.getByText('0.2x')).toBeVisible()
-    expect(screen.queryByText('plus-...')).toBeNull()
-    expect(screen.queryByText(/^k\.\.\.$/)).toBeNull()
+    expect(
+      screen.getAllByRole('combobox', { name: 'Switch group' })
+    ).toHaveLength(2)
   })
 
   test('opens the update drawer from the row edit action without navigating', async () => {
@@ -430,5 +430,177 @@ describe('next console key list', () => {
     expect(
       document.querySelector('[data-slot="console-key-desktop-table"]')
     ).toHaveTextContent('plus')
+  })
+
+  test('opens a compact group picker from the group cell and lists available groups', async () => {
+    const user = userEvent.setup()
+    apiMocks.getUserGroups.mockResolvedValue({
+      success: true,
+      data: {
+        special: { desc: 'Sale', ratio: 0.12 },
+        vip: { desc: 'VIP', ratio: 3 },
+      },
+    })
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByText('plus')).toBeVisible()
+    })
+
+    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+
+    const picker = await waitFor(() => {
+      const node = document.querySelector(
+        '[data-slot="console-key-group-picker"]'
+      )
+      expect(node).not.toBeNull()
+      return node as HTMLElement
+    })
+    expect(
+      within(picker).getByPlaceholderText('Search groups...')
+    ).toBeVisible()
+    expect(
+      within(picker).getByRole('option', { name: /special/ })
+    ).toBeVisible()
+    expect(within(picker).getByRole('option', { name: /vip/ })).toBeVisible()
+    expect(within(picker).getByText('3x')).toBeVisible()
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
+    expect(apiMocks.updateApiKey).not.toHaveBeenCalled()
+  })
+
+  test('updates the API key with the full payload when another group is selected', async () => {
+    const user = userEvent.setup()
+    apiMocks.getUserGroups.mockResolvedValue({
+      success: true,
+      data: {
+        special: { desc: 'Sale', ratio: 0.12 },
+        vip: { desc: 'VIP', ratio: 3 },
+      },
+    })
+    apiMocks.getApiKey.mockResolvedValue({
+      success: true,
+      data: { ...sampleKey, remain_quota: 88 },
+    })
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByText('plus')).toBeVisible()
+    })
+
+    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    const vipOption = await screen.findByRole('option', { name: /vip/ })
+    apiMocks.getApiKeys.mockResolvedValue({
+      success: true,
+      data: {
+        items: [{ ...sampleKey, group: 'vip' }],
+        total: 1,
+        page: 1,
+        page_size: 50,
+      },
+    })
+    await user.click(vipOption)
+
+    await waitFor(() => {
+      expect(apiMocks.getApiKey).toHaveBeenCalledWith(1)
+      expect(apiMocks.updateApiKey).toHaveBeenCalledWith({
+        id: 1,
+        name: 'plus',
+        remain_quota: 88,
+        expired_time: -1,
+        unlimited_quota: true,
+        model_limits_enabled: false,
+        model_limits: '',
+        allow_ips: '',
+        group: 'vip',
+        auto_groups: [],
+        cross_group_retry: false,
+      })
+    })
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-slot="console-key-group-picker"]')
+      ).toBeNull()
+    })
+    expect(
+      document.querySelector('[data-slot="console-key-group-cell"]')
+    ).toHaveTextContent('vip')
+  })
+
+  test('closes the group picker without a request when the current group is selected', async () => {
+    const user = userEvent.setup()
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByText('plus')).toBeVisible()
+    })
+
+    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(await screen.findByRole('option', { name: /special/ }))
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-slot="console-key-group-picker"]')
+      ).toBeNull()
+    })
+    expect(apiMocks.getApiKey).not.toHaveBeenCalled()
+    expect(apiMocks.updateApiKey).not.toHaveBeenCalled()
+  })
+
+  test('keeps the group picker open when switching groups fails', async () => {
+    const user = userEvent.setup()
+    apiMocks.getUserGroups.mockResolvedValue({
+      success: true,
+      data: {
+        special: { desc: 'Sale', ratio: 0.12 },
+        vip: { desc: 'VIP', ratio: 3 },
+      },
+    })
+    apiMocks.updateApiKey.mockResolvedValue({
+      success: false,
+      message: 'cannot move this key',
+    })
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByText('plus')).toBeVisible()
+    })
+
+    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(await screen.findByRole('option', { name: /vip/ }))
+
+    await waitFor(() => {
+      expect(apiMocks.updateApiKey).toHaveBeenCalled()
+    })
+    expect(
+      document.querySelector('[data-slot="console-key-group-picker"]')
+    ).not.toBeNull()
+    expect(
+      document.querySelector('[data-slot="console-key-group-cell"]')
+    ).toHaveTextContent('special')
+  })
+
+  test('opens the group picker from the mobile group control', async () => {
+    const user = userEvent.setup()
+    stubMatchMedia(true)
+    apiMocks.getUserGroups.mockResolvedValue({
+      success: true,
+      data: {
+        special: { desc: 'Sale', ratio: 0.12 },
+        vip: { desc: 'VIP', ratio: 3 },
+      },
+    })
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByText('plus')).toBeVisible()
+    })
+
+    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+
+    expect(
+      document.querySelector('[data-slot="console-key-group-picker"]')
+    ).not.toBeNull()
+    expect(await screen.findByRole('option', { name: /vip/ })).toBeVisible()
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
   })
 })

@@ -31,12 +31,12 @@ import {
   useGroupRatios,
 } from '@/features/keys/components/api-keys-columns'
 import { ApiKeysMobileList } from '@/features/keys/components/api-keys-mobile-list'
+import { useApiKeys } from '@/features/keys/components/api-keys-provider'
 import { DataTableRowActions } from '@/features/keys/components/data-table-row-actions'
 import { isDisabledApiKeyRow } from '@/features/keys/constants'
 import type { ApiKey } from '@/features/keys/types'
 import { useMediaQuery } from '@/hooks'
 import { cn } from '@/lib/utils'
-import { RatioTag } from '@/skins/next/pricing/components/ratio-tag'
 
 import { ConsoleKeyGroupCell } from './key-group-cell'
 
@@ -133,6 +133,7 @@ function ConsoleKeyDesktopTable(props: {
 
 export function ConsoleKeyList(props: ConsoleKeyListProps) {
   const { t } = useTranslation()
+  const { triggerRefresh } = useApiKeys()
   const [now, setNow] = useState(() => Date.now())
   const isMobile = useMediaQuery('(max-width: 640px)')
   const allColumns = useApiKeysColumns(now)
@@ -169,8 +170,9 @@ export function ConsoleKeyList(props: ConsoleKeyListProps) {
                 const group = row.original.group ?? ''
                 return (
                   <ConsoleKeyGroupCell
-                    group={group}
+                    apiKey={row.original}
                     ratio={groupRatios[group]}
+                    onSwitched={triggerRefresh}
                   />
                 )
               },
@@ -178,7 +180,7 @@ export function ConsoleKeyList(props: ConsoleKeyListProps) {
           }
           return column
         }),
-    [allColumns, groupRatios]
+    [allColumns, groupRatios, triggerRefresh]
   )
 
   useEffect(() => {
@@ -212,7 +214,17 @@ export function ConsoleKeyList(props: ConsoleKeyListProps) {
         renderRowActions={(row) => (
           <DataTableRowActions row={row} overflow='delete' />
         )}
-        renderRatio={(ratio) => <RatioTag ratio={ratio} />}
+        renderGroup={(apiKey) => (
+          <div className='space-y-1'>
+            <div className='text-muted-foreground text-xs'>{t('Group')}</div>
+            <ConsoleKeyGroupCell
+              apiKey={apiKey}
+              ratio={groupRatios[apiKey.group ?? '']}
+              onSwitched={triggerRefresh}
+              className='w-full'
+            />
+          </div>
+        )}
       />
     )
   }

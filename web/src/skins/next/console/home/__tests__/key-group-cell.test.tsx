@@ -16,42 +16,139 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
-import { describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { TooltipProvider } from '@/components/ui/tooltip'
+import type { ApiKey } from '@/features/keys/types'
 
 import { ConsoleKeyGroupCell } from '../components/key-group-cell'
 
-function renderGroupCell(ui: ReactElement) {
-  return render(<TooltipProvider>{ui}</TooltipProvider>)
+const apiMocks = vi.hoisted(() => ({
+  getApiKey: vi.fn(),
+  updateApiKey: vi.fn(),
+  getUserGroups: vi.fn(),
+}))
+
+vi.mock('@/features/keys/api', () => ({
+  getApiKey: apiMocks.getApiKey,
+  updateApiKey: apiMocks.updateApiKey,
+}))
+
+vi.mock('@/lib/api', () => ({
+  getUserGroups: apiMocks.getUserGroups,
+}))
+
+const sampleKey: ApiKey = {
+  id: 7,
+  name: 'plus',
+  key: 'd7af123443e0',
+  status: 1,
+  remain_quota: 120,
+  used_quota: 10,
+  unlimited_quota: false,
+  expired_time: 99,
+  created_time: 1,
+  accessed_time: 0,
+  group: 'special',
+  auto_groups: ['vip'],
+  cross_group_retry: true,
+  model_limits_enabled: true,
+  model_limits: 'gpt-4',
+  allow_ips: '127.0.0.1',
+}
+
+function renderGroupCell(ui: ReactElement, onSwitched = vi.fn()) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return {
+    onSwitched,
+    ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>),
+  }
+}
+
+function renderSampleCell(overrides?: Partial<ConsoleKeyGroupCellPropsLike>) {
+  const onSwitched = vi.fn()
+  return renderGroupCell(
+    <ConsoleKeyGroupCell
+      apiKey={overrides?.apiKey ?? sampleKey}
+      ratio={overrides?.ratio ?? 0.12}
+      onSwitched={onSwitched}
+      className={overrides?.className}
+    />,
+    onSwitched
+  )
+}
+
+type ConsoleKeyGroupCellPropsLike = {
+  apiKey: ApiKey
+  ratio?: number | string | null
+  className?: string
 }
 
 describe('next console key group cell', () => {
-  test('renders every group name in the same muted badge color', () => {
-    const { rerender } = renderGroupCell(
-      <ConsoleKeyGroupCell group='special' ratio={0.12} />
-    )
+  beforeEach(() => {
+    apiMocks.getUserGroups.mockResolvedValue({
+      success: true,
+      data: {
+        special: { desc: 'Sale', ratio: 0.12 },
+        vip: { desc: 'VIP', ratio: 3 },
+        auto: { desc: 'Automatic routing', ratio: 'auto' },
+      },
+    })
+    apiMocks.getApiKey.mockResolvedValue({
+      success: true,
+      data: sampleKey,
+    })
+    apiMocks.updateApiKey.mockResolvedValue({
+      success: true,
+      data: { ...sampleKey, group: 'vip' },
+    })
+  })
 
-    const special = screen
-      .getByText('special')
-      .closest('[data-slot="status-badge"]')
-    expect(special).toHaveClass('text-muted-foreground')
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  test('renders the group as a bordered combobox with chevrons', () => {
+    renderSampleCell()
+
+    const trigger = screen.getByRole('combobox', { name: 'Switch group' })
+    expect(trigger).toHaveAttribute('data-slot', 'console-key-group-cell')
+    expect(trigger).toHaveClass('border', 'rounded-lg', 'cursor-pointer')
+    expect(
+      trigger.querySelector('[data-slot="console-key-group-chevrons"]')
+    ).not.toBeNull()
+    expect(screen.getByText('special')).toBeVisible()
+  })
+
+  test('keeps every group name in the same trigger style', () => {
+    const { rerender } = renderSampleCell()
+    const special = screen.getByRole('combobox', { name: 'Switch group' })
 
     rerender(
-      <TooltipProvider>
-        <ConsoleKeyGroupCell group='vip' ratio={3} />
-      </TooltipProvider>
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <ConsoleKeyGroupCell
+          apiKey={{ ...sampleKey, group: 'vip' }}
+          ratio={3}
+          onSwitched={() => undefined}
+        />
+      </QueryClientProvider>
     )
 
-    const vip = screen.getByText('vip').closest('[data-slot="status-badge"]')
-    expect(vip).toHaveClass('text-muted-foreground')
-    expect(vip?.className).toBe(special?.className)
+    const vip = screen.getByRole('combobox', { name: 'Switch group' })
+    expect(vip.className).toBe(special.className)
   })
 
   test('shows the model-square ratio tag beside a numeric group ratio', () => {
-    renderGroupCell(<ConsoleKeyGroupCell group='special' ratio={0.12} />)
+    renderSampleCell()
 
     const ratio = screen.getByText('0.12x')
     expect(ratio).toHaveClass(
@@ -67,13 +164,95 @@ describe('next console key group cell', () => {
   })
 
   test('keeps the auto group monochrome and hides a non-numeric ratio', () => {
-    renderGroupCell(<ConsoleKeyGroupCell group='auto' ratio='Auto' />)
+    renderSampleCell({
+      apiKey: { ...sampleKey, group: 'auto' },
+      ratio: 'Auto',
+    })
 
-    const badge = screen
-      .getByText('Cross-group')
-      .closest('[data-slot="status-badge"]')
-    expect(badge).toHaveClass('text-muted-foreground')
+    expect(screen.getByText('Cross-group')).toBeVisible()
     expect(screen.queryByText(/x$/)).toBeNull()
     expect(screen.queryByText('Auto Ratio')).toBeNull()
+  })
+
+  test('opens a compact picker under the trigger instead of a side drawer', async () => {
+    const user = userEvent.setup()
+    renderSampleCell()
+
+    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+
+    expect(await screen.findByPlaceholderText('Search groups...')).toBeVisible()
+    expect(
+      document.querySelector('[data-slot="console-key-group-picker"]')
+    ).not.toBeNull()
+    expect(
+      document.querySelector('[data-slot="console-key-group-drawer"]')
+    ).toBeNull()
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
+    expect(await screen.findByRole('option', { name: /vip/ })).toBeVisible()
+  })
+
+  test('shows an empty state when no groups are available', async () => {
+    const user = userEvent.setup()
+    apiMocks.getUserGroups.mockResolvedValue({
+      success: true,
+      data: {},
+    })
+    renderSampleCell()
+
+    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+
+    expect(await screen.findByText('No groups available')).toBeVisible()
+  })
+
+  test('falls back to the list row when fetching the latest key fails', async () => {
+    const user = userEvent.setup()
+    apiMocks.getApiKey.mockResolvedValue({
+      success: false,
+      message: 'not found',
+    })
+    const { onSwitched } = renderSampleCell()
+
+    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(await screen.findByRole('option', { name: /vip/ }))
+
+    await waitFor(() => {
+      expect(apiMocks.updateApiKey).toHaveBeenCalledWith({
+        id: 7,
+        name: 'plus',
+        remain_quota: 120,
+        expired_time: 99,
+        unlimited_quota: false,
+        model_limits_enabled: true,
+        model_limits: 'gpt-4',
+        allow_ips: '127.0.0.1',
+        group: 'vip',
+        auto_groups: [],
+        cross_group_retry: false,
+      })
+    })
+    expect(onSwitched).toHaveBeenCalledTimes(1)
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-slot="console-key-group-picker"]')
+      ).toBeNull()
+    })
+  })
+
+  test('keeps auto groups and turns on retry when switching to auto', async () => {
+    const user = userEvent.setup()
+    renderSampleCell()
+
+    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(await screen.findByRole('option', { name: /Cross-group/ }))
+
+    await waitFor(() => {
+      expect(apiMocks.updateApiKey).toHaveBeenCalledWith(
+        expect.objectContaining({
+          group: 'auto',
+          auto_groups: ['vip'],
+          cross_group_retry: true,
+        })
+      )
+    })
   })
 })

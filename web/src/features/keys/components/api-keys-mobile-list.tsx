@@ -90,20 +90,22 @@ function ApiKeyMobileGroupRatio(props: {
     )
   }
 
+  const groupName = props.group ? (
+    <div
+      data-slot='api-key-mobile-group-name'
+      className='min-w-0 text-end font-medium break-all'
+    >
+      {props.group === 'auto' ? t('Cross-group') : props.group}
+    </div>
+  ) : null
+
   return (
     <div className='space-y-1 text-xs'>
       <div className='flex items-center justify-between gap-2'>
         <span className='text-muted-foreground shrink-0'>{t('Group')}</span>
         {ratioValue}
       </div>
-      {props.group ? (
-        <div
-          data-slot='api-key-mobile-group-name'
-          className='min-w-0 text-end font-medium break-all'
-        >
-          {props.group === 'auto' ? t('Cross-group') : props.group}
-        </div>
-      ) : null}
+      {groupName}
     </div>
   )
 }
@@ -145,6 +147,7 @@ type ApiKeysMobileListProps = {
   showGroupRatio?: boolean
   renderRowActions?: (row: Row<ApiKey>) => ReactNode
   renderRatio?: (ratio: number) => ReactNode
+  renderGroup?: (apiKey: ApiKey) => ReactNode
 }
 
 export function ApiKeysMobileList(props: ApiKeysMobileListProps) {
@@ -245,7 +248,10 @@ export function ApiKeysMobileList(props: ApiKeysMobileListProps) {
               )}
             </div>
 
-            {props.showGroupRatio ? (
+            {props.showGroupRatio && props.renderGroup
+              ? props.renderGroup(apiKey)
+              : null}
+            {props.showGroupRatio && !props.renderGroup ? (
               <ApiKeyMobileGroupRatio
                 group={group}
                 ratio={groupRatios[group]}

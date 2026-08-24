@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { getUserQuotaDates } from '@/features/dashboard/api'
 import { toIntlLocale } from '@/i18n/languages'
 import { formatCompactNumber, formatQuota } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import {
@@ -41,13 +42,17 @@ type StatCardProps = {
   description: string
   icon: LucideIcon
   loading: boolean
+  className?: string
 }
 
 function StatCard(props: StatCardProps) {
   const Icon = props.icon
 
   return (
-    <article className='bg-card rounded-xl border px-4 py-4 sm:px-5'>
+    <article
+      data-slot='console-stat-cell'
+      className={cn('min-w-0 px-4 py-4 sm:px-5', props.className)}
+    >
       <div className='flex items-start justify-between gap-3'>
         <h2 className='text-muted-foreground text-sm font-medium'>
           {props.title}
@@ -115,7 +120,8 @@ export function ConsoleStatsRow() {
   return (
     <section
       aria-label={t("Today's usage")}
-      className='grid grid-cols-2 gap-3'
+      data-slot='console-stat-panel'
+      className='bg-card grid h-full grid-cols-2 overflow-hidden rounded-xl border'
     >
       <StatCard
         title={t("Today's calls")}
@@ -125,6 +131,7 @@ export function ConsoleStatsRow() {
         })}
         icon={Send}
         loading={todayQuery.isLoading}
+        className='border-border border-r border-b'
       />
       <StatCard
         title={t("Today's tokens")}
@@ -135,6 +142,7 @@ export function ConsoleStatsRow() {
         })}
         icon={Braces}
         loading={todayQuery.isLoading}
+        className='border-border border-b'
       />
       <StatCard
         title={t('Lifetime tokens')}
@@ -145,6 +153,7 @@ export function ConsoleStatsRow() {
         })}
         icon={Database}
         loading={false}
+        className='border-border border-r'
       />
       <StatCard
         title={t('Wallet balance')}

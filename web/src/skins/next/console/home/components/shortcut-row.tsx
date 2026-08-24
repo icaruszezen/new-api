@@ -30,7 +30,7 @@ function ShortcutButton(props: ShortcutButtonProps) {
   return (
     <button
       type='button'
-      className='bg-card hover:bg-muted/40 flex min-h-14 items-center justify-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-medium transition-colors'
+      className='bg-card hover:bg-muted/40 flex min-h-14 items-center justify-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-medium transition-colors lg:h-full'
     >
       <span className='bg-muted text-muted-foreground flex size-8 items-center justify-center rounded-lg'>
         <Icon className='size-4' aria-hidden='true' />
@@ -46,7 +46,7 @@ export function ConsoleShortcutRow() {
   return (
     <nav
       aria-label={t('Quick actions')}
-      className='grid grid-cols-1 gap-3'
+      className='grid grid-cols-1 gap-3 lg:h-full lg:grid-rows-3'
     >
       <ShortcutButton label={t('Personal Center')} icon={UserRound} />
       <ShortcutButton label={t('Usage records')} icon={FileText} />

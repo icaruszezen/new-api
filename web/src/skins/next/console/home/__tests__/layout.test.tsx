@@ -173,7 +173,7 @@ describe('next console homepage layout', () => {
     expect(screen.getByText('https://api.example.com')).toBeVisible()
   })
 
-  test('places stats and shortcuts in a left column beside key management', () => {
+  test('places stats and shortcuts above key management', () => {
     renderHome()
 
     const stats = screen.getByRole('region', { name: "Today's usage" })
@@ -181,20 +181,61 @@ describe('next console homepage layout', () => {
     const keys = screen
       .getByRole('heading', { name: 'Key Management' })
       .closest('section')
+    const topRow = stats.parentElement?.parentElement
 
-    expect(stats.parentElement).toBe(shortcuts.parentElement)
-    expect(stats.parentElement).toHaveClass('lg:col-span-4')
+    expect(stats.parentElement?.parentElement).toBe(
+      shortcuts.parentElement?.parentElement
+    )
+    expect(stats.parentElement).toHaveClass('lg:col-span-9')
+    expect(shortcuts.parentElement).toHaveClass('lg:col-span-3')
+    expect(stats.parentElement?.nextElementSibling).toBe(
+      shortcuts.parentElement
+    )
+    expect(topRow).toHaveClass('lg:grid-cols-12')
+    expect(topRow).toHaveClass('lg:items-stretch')
+    expect(stats).toHaveAttribute('data-slot', 'console-stat-panel')
     expect(stats).toHaveClass('grid-cols-2')
+    expect(stats).toHaveClass('rounded-xl')
+    expect(stats).toHaveClass('border')
+    expect(stats).toHaveClass('overflow-hidden')
+    expect(stats).not.toHaveClass('gap-3')
     expect(stats).not.toHaveClass('xl:grid-cols-4')
     expect(shortcuts).toHaveClass('grid-cols-1')
+    expect(shortcuts).toHaveClass('lg:h-full')
+    expect(shortcuts).toHaveClass('lg:grid-rows-3')
     expect(shortcuts).not.toHaveClass('sm:grid-cols-3')
 
     expect(keys).toBeTruthy()
-    expect(keys?.parentElement).toHaveClass('min-w-0')
-    expect(keys?.parentElement).toHaveClass('lg:col-span-8')
-    expect(keys?.parentElement?.previousElementSibling).toBe(
-      stats.parentElement
-    )
+    expect(keys?.parentElement).toHaveClass('flex-col')
+    expect(keys?.parentElement).not.toHaveClass('lg:col-span-8')
+    expect(keys?.previousElementSibling).toBe(topRow)
+  })
+
+  test('renders the four stats as quadrants of one panel', () => {
+    renderHome()
+
+    const stats = screen.getByRole('region', { name: "Today's usage" })
+    const cells = stats.querySelectorAll('[data-slot="console-stat-cell"]')
+
+    expect(cells).toHaveLength(4)
+    expect(stats.children[0]).toBe(cells[0])
+    expect(stats.children[1]).toBe(cells[1])
+    expect(stats.children[2]).toBe(cells[2])
+    expect(stats.children[3]).toBe(cells[3])
+
+    for (const cell of cells) {
+      expect(cell).not.toHaveClass('rounded-xl')
+      expect(cell).not.toHaveClass('border')
+    }
+
+    expect(cells[0]).toHaveClass('border-r')
+    expect(cells[0]).toHaveClass('border-b')
+    expect(cells[1]).toHaveClass('border-b')
+    expect(cells[1]).not.toHaveClass('border-r')
+    expect(cells[2]).toHaveClass('border-r')
+    expect(cells[2]).not.toHaveClass('border-b')
+    expect(cells[3]).not.toHaveClass('border-r')
+    expect(cells[3]).not.toHaveClass('border-b')
   })
 
   test('places the test connection button immediately before usage docs', () => {

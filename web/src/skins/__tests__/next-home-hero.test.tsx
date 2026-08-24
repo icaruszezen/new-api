@@ -75,15 +75,24 @@ describe('next landing hero', () => {
     ).toHaveTextContent(`${window.location.origin}/v1/chat/completions`)
   })
 
-  test('renders the headline in plain type without the accent sheen', () => {
+  test('sweeps a metallic sheen across the headline without the rise-and-accent class', () => {
     render(<Hero isAuthenticated={false} />)
 
-    expect(screen.getByText('One API.')).not.toHaveClass(
-      'landing-animate-headline'
-    )
-    expect(screen.getByText('Every model.')).toHaveClass(
-      'text-muted-foreground'
-    )
+    const firstLine = screen.getByText('One API.')
+    expect(firstLine).toHaveClass('landing-headline-sheen')
+    expect(firstLine).toHaveAttribute('data-landing-motion', 'always')
+    expect(firstLine).not.toHaveClass('landing-animate-headline')
+    expect(firstLine).not.toHaveClass('landing-animate-fade-up')
+    expect(firstLine.parentElement).toHaveClass('landing-animate-fade-up')
+    expect(firstLine.parentElement).toHaveStyle({ animationDelay: '0ms' })
+
+    const secondLine = screen.getByText('Every model.')
+    expect(secondLine).toHaveClass('text-muted-foreground')
+    expect(secondLine).not.toHaveClass('landing-headline-sheen')
+    expect(secondLine).not.toHaveAttribute('data-landing-motion')
+    expect(secondLine).not.toHaveClass('landing-animate-fade-up')
+    expect(secondLine.parentElement).toHaveClass('landing-animate-fade-up')
+    expect(secondLine.parentElement).toHaveStyle({ animationDelay: '120ms' })
   })
 
   test('sends signed-out visitors to sign-up and signed-in visitors to the dashboard', () => {

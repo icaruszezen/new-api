@@ -23,6 +23,7 @@ import { useHomePageContent } from '@/features/home/hooks'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { NextPublicShell } from '../public-shell'
+import { LandingAtmosphere } from './components/atmosphere'
 import { Hero } from './components/hero'
 import { ProviderStrip } from './components/provider-strip'
 
@@ -55,7 +56,7 @@ export function NextHome() {
   }
 
   return (
-    <NextPublicShell>
+    <NextPublicShell atmosphere={<LandingAtmosphere />}>
       <Hero isAuthenticated={!!auth.user} />
       <ProviderStrip />
     </NextPublicShell>

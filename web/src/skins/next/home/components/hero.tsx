@@ -60,13 +60,19 @@ export function Hero(props: { isAuthenticated: boolean }) {
         {HEADLINE_LINES.map((line) => (
           <span
             key={line.text}
-            className={cn(
-              'landing-animate-fade-up block',
-              line.muted && 'text-muted-foreground'
-            )}
+            className='landing-animate-fade-up block'
             style={{ animationDelay: `${line.riseDelay}ms` }}
           >
-            {t(line.text)}
+            <span
+              data-landing-motion={line.muted ? undefined : 'always'}
+              className={cn(
+                line.muted
+                  ? 'text-muted-foreground'
+                  : 'landing-headline-sheen'
+              )}
+            >
+              {t(line.text)}
+            </span>
           </span>
         ))}
       </h1>

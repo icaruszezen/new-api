@@ -16,7 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { flexRender, type Table as TanstackTable } from '@tanstack/react-table'
+import {
+  flexRender,
+  type Row,
+  type Table as TanstackTable,
+} from '@tanstack/react-table'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -24,6 +28,7 @@ import { DISABLED_ROW_DESKTOP, useDataTable } from '@/components/data-table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useApiKeysColumns } from '@/features/keys/components/api-keys-columns'
 import { ApiKeysMobileList } from '@/features/keys/components/api-keys-mobile-list'
+import { DataTableRowActions } from '@/features/keys/components/data-table-row-actions'
 import { isDisabledApiKeyRow } from '@/features/keys/constants'
 import type { ApiKey } from '@/features/keys/types'
 import { useMediaQuery } from '@/hooks'
@@ -126,7 +131,27 @@ export function ConsoleKeyList(props: ConsoleKeyListProps) {
   const isMobile = useMediaQuery('(max-width: 640px)')
   const allColumns = useApiKeysColumns(now)
   const columns = useMemo(
-    () => allColumns.filter((column) => column.id !== 'select'),
+    () =>
+      allColumns
+        .filter((column) => {
+          const columnId =
+            column.id ??
+            ('accessorKey' in column ? column.accessorKey : undefined)
+          return (
+            columnId !== 'select' &&
+            columnId !== 'created_time' &&
+            columnId !== 'accessed_time'
+          )
+        })
+        .map((column) => {
+          if (column.id !== 'actions') return column
+          return {
+            ...column,
+            cell: ({ row }: { row: Row<ApiKey> }) => (
+              <DataTableRowActions row={row} overflow='delete' />
+            ),
+          }
+        }),
     [allColumns]
   )
 
@@ -158,11 +183,12 @@ export function ConsoleKeyList(props: ConsoleKeyListProps) {
         className='rounded-none border-0'
         emptyTitle={t('No API keys yet')}
         emptyDescription=''
+        renderRowActions={(row) => (
+          <DataTableRowActions row={row} overflow='delete' />
+        )}
       />
     )
   }
 
-  return (
-    <ConsoleKeyDesktopTable table={table} isLoading={props.isLoading} />
-  )
+  return <ConsoleKeyDesktopTable table={table} isLoading={props.isLoading} />
 }

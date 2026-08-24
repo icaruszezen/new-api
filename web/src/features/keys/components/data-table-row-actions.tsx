@@ -73,10 +73,12 @@ function getServerAddress(): string {
 
 type DataTableRowActionsProps<TData> = {
   row: Row<TData>
+  overflow?: 'menu' | 'delete'
 }
 
 export function DataTableRowActions<TData>({
   row,
+  overflow = 'menu',
 }: DataTableRowActionsProps<TData>) {
   const { t } = useTranslation()
   const apiKey = apiKeySchema.parse(row.original)
@@ -232,91 +234,114 @@ export function DataTableRowActions<TData>({
         <TooltipContent>{t('Edit')}</TooltipContent>
       </Tooltip>
 
-      <DataTableRowActionMenu
-        ariaLabel={t('Open menu')}
-        contentClassName='w-[200px]'
-        modal={false}
-        onOpenChange={handleMenuOpenChange}
-      >
-        <DropdownMenuItem
-          onClick={async () => {
-            const realKey = getCachedRealKey()
-            if (!realKey) return
-            const ok = await copyToClipboard(realKey)
-            if (ok) toast.success(t('Copied'))
-          }}
+      {overflow === 'delete' ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant='ghost'
+                size='icon-sm'
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setCurrentRow(apiKey)
+                  setOpen('delete')
+                }}
+                aria-label={t('Delete')}
+                className='text-destructive hover:text-destructive'
+              />
+            }
+          >
+            <Trash2 />
+          </TooltipTrigger>
+          <TooltipContent>{t('Delete')}</TooltipContent>
+        </Tooltip>
+      ) : (
+        <DataTableRowActionMenu
+          ariaLabel={t('Open menu')}
+          contentClassName='w-[200px]'
+          modal={false}
+          onOpenChange={handleMenuOpenChange}
         >
-          {t('Copy Key')}
-          <DropdownMenuShortcut>
-            <Copy size={16} />
-          </DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={async () => {
-            const realKey = getCachedRealKey()
-            if (!realKey) return
-            const connStr = encodeChannelConnectionInfo(
-              realKey,
-              getServerAddress()
-            )
-            const ok = await copyToClipboard(connStr)
-            if (ok) toast.success(t('Copied'))
-          }}
-        >
-          {t('Copy Connection Info')}
-          <DropdownMenuShortcut>
-            <Link size={16} />
-          </DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={async () => {
-            const realKey = await resolveRealKey(apiKey.id)
-            if (!realKey) return
-            setResolvedKey(realKey)
-            setCurrentRow(apiKey)
-            setOpen('cc-switch')
-          }}
-        >
-          {t('CC Switch')}
-          <DropdownMenuShortcut>
-            <ArrowRightLeft size={16} />
-          </DropdownMenuShortcut>
-        </DropdownMenuItem>
-        {hasChatPresets && (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>{t('Chat')}</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              {chatPresets.map((preset) => (
-                <DropdownMenuItem
-                  key={preset.id}
-                  onClick={() => handleOpenChatPreset(preset)}
-                >
-                  {preset.name}
-                  {preset.type !== 'web' && (
-                    <DropdownMenuShortcut>
-                      <ExternalLink size={16} />
-                    </DropdownMenuShortcut>
-                  )}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => {
-            setCurrentRow(apiKey)
-            setOpen('delete')
-          }}
-          className='text-destructive focus:text-destructive'
-        >
-          {t('Delete')}
-          <DropdownMenuShortcut>
-            <Trash2 size={16} />
-          </DropdownMenuShortcut>
-        </DropdownMenuItem>
-      </DataTableRowActionMenu>
+          <DropdownMenuItem
+            onClick={async () => {
+              const realKey = getCachedRealKey()
+              if (!realKey) return
+              const ok = await copyToClipboard(realKey)
+              if (ok) toast.success(t('Copied'))
+            }}
+          >
+            {t('Copy Key')}
+            <DropdownMenuShortcut>
+              <Copy size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={async () => {
+              const realKey = getCachedRealKey()
+              if (!realKey) return
+              const connStr = encodeChannelConnectionInfo(
+                realKey,
+                getServerAddress()
+              )
+              const ok = await copyToClipboard(connStr)
+              if (ok) toast.success(t('Copied'))
+            }}
+          >
+            {t('Copy Connection Info')}
+            <DropdownMenuShortcut>
+              <Link size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={async () => {
+              const realKey = await resolveRealKey(apiKey.id)
+              if (!realKey) return
+              setResolvedKey(realKey)
+              setCurrentRow(apiKey)
+              setOpen('cc-switch')
+            }}
+          >
+            {t('CC Switch')}
+            <DropdownMenuShortcut>
+              <ArrowRightLeft size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+          {hasChatPresets && (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>{t('Chat')}</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {chatPresets.map((preset) => (
+                  <DropdownMenuItem
+                    key={preset.id}
+                    onClick={() => handleOpenChatPreset(preset)}
+                  >
+                    {preset.name}
+                    {preset.type !== 'web' && (
+                      <DropdownMenuShortcut>
+                        <ExternalLink size={16} />
+                      </DropdownMenuShortcut>
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => {
+              setCurrentRow(apiKey)
+              setOpen('delete')
+            }}
+            className='text-destructive focus:text-destructive'
+          >
+            {t('Delete')}
+            <DropdownMenuShortcut>
+              <Trash2 size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+        </DataTableRowActionMenu>
+      )}
     </div>
   )
 }

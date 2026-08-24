@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
@@ -29,6 +29,7 @@ const apiMocks = vi.hoisted(() => ({
   getUserQuotaDates: vi.fn(),
   getApiKeys: vi.fn(),
   getApiKey: vi.fn(),
+  deleteApiKey: vi.fn(),
   getUserGroups: vi.fn(),
   getUserModels: vi.fn(),
   getStatus: vi.fn(),
@@ -42,6 +43,7 @@ vi.mock('@/features/dashboard/api', () => ({
 vi.mock('@/features/keys/api', () => ({
   getApiKeys: apiMocks.getApiKeys,
   getApiKey: apiMocks.getApiKey,
+  deleteApiKey: apiMocks.deleteApiKey,
   getTokenAutoGroups: apiMocks.getTokenAutoGroups,
 }))
 
@@ -136,6 +138,7 @@ describe('next console key list', () => {
       success: true,
       data: { groups: [], max_count: 3 },
     })
+    apiMocks.deleteApiKey.mockResolvedValue({ success: true })
   })
 
   afterEach(() => {
@@ -144,7 +147,7 @@ describe('next console key list', () => {
     vi.clearAllMocks()
   })
 
-  test('shows classic columns with group ratio and hides preview-only columns', async () => {
+  test('shows console key columns with group ratio and hides created, last used, and preview-only columns', async () => {
     renderHome()
 
     await waitFor(() => {
@@ -160,11 +163,13 @@ describe('next console key list', () => {
     expect(
       screen.getByRole('columnheader', { name: 'IP Restriction' })
     ).toBeVisible()
-    expect(screen.getByRole('columnheader', { name: 'Created' })).toBeVisible()
-    expect(screen.getByRole('columnheader', { name: 'Last Used' })).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'Expires' })).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Open menu' })).toBeNull()
     expect(screen.getByText('0.12x')).toBeVisible()
+    expect(screen.queryByRole('columnheader', { name: 'Created' })).toBeNull()
+    expect(screen.queryByRole('columnheader', { name: 'Last Used' })).toBeNull()
     expect(screen.queryByRole('columnheader', { name: 'Platform' })).toBeNull()
     expect(screen.queryByRole('columnheader', { name: 'Usage' })).toBeNull()
     expect(
@@ -188,6 +193,8 @@ describe('next console key list', () => {
     expect(screen.getByText('Group')).toBeVisible()
     expect(screen.getByText('special')).toBeVisible()
     expect(screen.getByText('0.12x')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Open menu' })).toBeNull()
     expect(screen.queryByRole('columnheader', { name: 'Models' })).toBeNull()
     expect(
       screen.queryByRole('columnheader', { name: 'IP Restriction' })
@@ -231,7 +238,9 @@ describe('next console key list', () => {
     expect(
       ratio.closest('[data-slot="api-key-mobile-group-ratio"]')
     ).not.toBeNull()
-    expect(groupName.parentElement).not.toBe(screen.getByText('Group').parentElement)
+    expect(groupName.parentElement).not.toBe(
+      screen.getByText('Group').parentElement
+    )
   })
 
   test('shows the full mobile group name instead of truncating it beside the ratio', async () => {
@@ -292,5 +301,103 @@ describe('next console key list', () => {
     expect(pushState).not.toHaveBeenCalled()
     expect(window.location.pathname).toBe('/')
     pushState.mockRestore()
+  })
+
+  test('opens the delete confirmation from the row delete button without a more-actions menu', async () => {
+    const user = userEvent.setup()
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByText('plus')).toBeVisible()
+    })
+
+    expect(screen.queryByRole('button', { name: 'Open menu' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText('Are you sure?')).toBeVisible()
+    expect(within(dialog).getByText('plus')).toBeVisible()
+    expect(apiMocks.deleteApiKey).not.toHaveBeenCalled()
+  })
+
+  test('deletes the API key after the confirmation is accepted', async () => {
+    const user = userEvent.setup()
+    apiMocks.deleteApiKey.mockResolvedValue({ success: true })
+    apiMocks.getApiKeys
+      .mockResolvedValueOnce({
+        success: true,
+        data: { items: [sampleKey], total: 1, page: 1, page_size: 50 },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { items: [], total: 0, page: 1, page_size: 50 },
+      })
+
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByText('plus')).toBeVisible()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(apiMocks.deleteApiKey).toHaveBeenCalledWith(1)
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+    })
+    await waitFor(() => {
+      expect(screen.getByText('No API keys yet')).toBeVisible()
+    })
+  })
+
+  test('keeps the API key when delete confirmation is cancelled', async () => {
+    const user = userEvent.setup()
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByText('plus')).toBeVisible()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+    })
+    expect(apiMocks.deleteApiKey).not.toHaveBeenCalled()
+    expect(screen.getByText('plus')).toBeVisible()
+  })
+
+  test('keeps the confirmation open when deleting the API key fails', async () => {
+    const user = userEvent.setup()
+    apiMocks.deleteApiKey.mockResolvedValue({
+      success: false,
+      message: 'cannot delete this key',
+    })
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByText('plus')).toBeVisible()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(apiMocks.deleteApiKey).toHaveBeenCalledWith(1)
+    })
+    expect(screen.getByRole('alertdialog')).toBeVisible()
+    expect(
+      within(screen.getByRole('alertdialog')).getByText('plus')
+    ).toBeVisible()
+    expect(
+      document.querySelector('[data-slot="console-key-desktop-table"]')
+    ).toHaveTextContent('plus')
   })
 })

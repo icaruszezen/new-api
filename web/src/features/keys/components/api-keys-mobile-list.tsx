@@ -16,8 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { Table as TanstackTable } from '@tanstack/react-table'
+import type { Row, Table as TanstackTable } from '@tanstack/react-table'
 import { Database } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DISABLED_ROW_MOBILE } from '@/components/data-table'
@@ -37,9 +38,9 @@ import { cn } from '@/lib/utils'
 
 import { API_KEY_STATUSES, isDisabledApiKeyRow } from '../constants'
 import type { ApiKey } from '../types'
-import { GroupRatioBadge } from './auto-group-visuals'
 import { ApiKeyCell, UnlimitedQuotaBadge } from './api-keys-cells'
 import { useGroupRatios } from './api-keys-columns'
+import { GroupRatioBadge } from './auto-group-visuals'
 import { DataTableRowActions } from './data-table-row-actions'
 
 const API_KEYS_MOBILE_SKELETON_IDS = Array.from(
@@ -93,7 +94,7 @@ function ApiKeyMobileGroupRatio(props: {
       {props.group ? (
         <div
           data-slot='api-key-mobile-group-name'
-          className='min-w-0 break-all text-end font-medium'
+          className='min-w-0 text-end font-medium break-all'
         >
           {props.group === 'auto' ? t('Cross-group') : props.group}
         </div>
@@ -137,6 +138,7 @@ type ApiKeysMobileListProps = {
   emptyTitle?: string
   emptyDescription?: string
   showGroupRatio?: boolean
+  renderRowActions?: (row: Row<ApiKey>) => ReactNode
 }
 
 export function ApiKeysMobileList(props: ApiKeysMobileListProps) {
@@ -215,7 +217,11 @@ export function ApiKeysMobileList(props: ApiKeysMobileListProps) {
               <div className='min-w-0 flex-1 [&_button:first-child]:max-w-full [&_button:first-child]:truncate [&_button:first-child]:px-0'>
                 <ApiKeyCell apiKey={apiKey} />
               </div>
-              <DataTableRowActions row={row} />
+              {props.renderRowActions ? (
+                props.renderRowActions(row)
+              ) : (
+                <DataTableRowActions row={row} />
+              )}
             </div>
 
             <div className='flex items-center justify-between gap-2 text-xs'>

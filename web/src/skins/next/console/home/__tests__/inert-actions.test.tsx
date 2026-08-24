@@ -29,6 +29,9 @@ const apiMocks = vi.hoisted(() => ({
   getUserQuotaDates: vi.fn(),
   getApiKeys: vi.fn(),
   getUserGroups: vi.fn(),
+  getUserModels: vi.fn(),
+  getStatus: vi.fn(),
+  getTokenAutoGroups: vi.fn(),
 }))
 
 vi.mock('@/features/dashboard/api', () => ({
@@ -37,10 +40,13 @@ vi.mock('@/features/dashboard/api', () => ({
 
 vi.mock('@/features/keys/api', () => ({
   getApiKeys: apiMocks.getApiKeys,
+  getTokenAutoGroups: apiMocks.getTokenAutoGroups,
 }))
 
 vi.mock('@/lib/api', () => ({
   getUserGroups: apiMocks.getUserGroups,
+  getUserModels: apiMocks.getUserModels,
+  getStatus: apiMocks.getStatus,
 }))
 
 vi.mock('@/features/dashboard/hooks/use-status-data', () => ({
@@ -98,6 +104,12 @@ describe('next console homepage inert actions', () => {
       success: true,
       data: {},
     })
+    apiMocks.getUserModels.mockResolvedValue({ success: true, data: [] })
+    apiMocks.getStatus.mockResolvedValue({})
+    apiMocks.getTokenAutoGroups.mockResolvedValue({
+      success: true,
+      data: { groups: [], max_count: 3 },
+    })
   })
 
   afterEach(() => {
@@ -120,12 +132,6 @@ describe('next console homepage inert actions', () => {
       'Recharge',
       'Test Connection',
       'Usage docs',
-      'New key',
-      'Copy',
-      'Test',
-      'Edit',
-      'Disable',
-      'Delete',
     ]
 
     for (const label of labels) {
@@ -133,6 +139,25 @@ describe('next console homepage inert actions', () => {
       await user.click(button)
     }
 
+    expect(pushState).not.toHaveBeenCalled()
+    expect(window.location.pathname).toBe('/')
+    pushState.mockRestore()
+  })
+
+  test('opens the create drawer when New key is clicked', async () => {
+    const user = userEvent.setup()
+    const pushState = vi.spyOn(window.history, 'pushState')
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByText('plus')).toBeVisible()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'New key' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Create API Key')).toBeVisible()
+    })
     expect(pushState).not.toHaveBeenCalled()
     expect(window.location.pathname).toBe('/')
     pushState.mockRestore()

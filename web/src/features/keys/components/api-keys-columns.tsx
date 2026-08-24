@@ -53,7 +53,7 @@ function getQuotaProgressColor(percentage: number): string {
   return '[&_[data-slot=progress-indicator]]:bg-emerald-500'
 }
 
-function useGroupRatios(): Record<string, number | string> {
+export function useGroupRatios(): Record<string, number | string> {
   const { data } = useQuery({
     queryKey: ['user-groups'],
     queryFn: getUserGroups,

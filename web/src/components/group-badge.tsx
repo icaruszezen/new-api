@@ -96,14 +96,20 @@ export function GroupBadge(props: GroupBadgeProps) {
   return (
     <span className='inline-flex max-w-full min-w-0 items-center gap-2 text-xs'>
       <span className='max-w-full min-w-0 overflow-hidden'>{badge}</span>
-      <span
-        className={cn(
-          'inline-flex h-5 shrink-0 items-center rounded-full px-1.5 font-mono text-xs leading-none font-medium tabular-nums',
-          getGroupRatioClassName(ratio)
-        )}
-      >
-        <span>{ratio}x</span>
-      </span>
+      <GroupRatioPill ratio={ratio} />
+    </span>
+  )
+}
+
+export function GroupRatioPill(props: { ratio: number }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex h-5 shrink-0 items-center rounded-full px-1.5 font-mono text-xs leading-none font-medium tabular-nums',
+        getGroupRatioClassName(props.ratio)
+      )}
+    >
+      <span>{props.ratio}x</span>
     </span>
   )
 }

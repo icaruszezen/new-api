@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type StatusBadgeProps } from '@/components/status-badge'
+import type { StatusBadgeProps } from '@/components/status-badge'
 
 // ============================================================================
 // API Key Status Configuration
@@ -65,6 +65,10 @@ export const API_KEY_STATUS_OPTIONS = Object.values(API_KEY_STATUSES).map(
     value: String(config.value),
   })
 )
+
+export function isDisabledApiKeyRow(apiKey: { status: number }) {
+  return apiKey.status !== API_KEY_STATUS.ENABLED
+}
 
 // ============================================================================
 // Default Values

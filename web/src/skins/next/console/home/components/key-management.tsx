@@ -17,92 +17,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import {
-  CircleSlash,
-  Copy,
-  FileText,
-  Pencil,
-  Plus,
-  Send,
-  Trash2,
-  Zap,
-} from 'lucide-react'
-import type { ReactNode } from 'react'
+import { FileText, Plus, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { CopyButton } from '@/components/copy-button'
-import { Skeleton } from '@/components/ui/skeleton'
 import { useApiInfo } from '@/features/dashboard/hooks/use-status-data'
 import { getApiKeys } from '@/features/keys/api'
-import type { ApiKey } from '@/features/keys/types'
-import { getUserGroups } from '@/lib/api'
+import { ApiKeysDialogs } from '@/features/keys/components/api-keys-dialogs'
+import {
+  ApiKeysProvider,
+  useApiKeys,
+} from '@/features/keys/components/api-keys-provider'
 
-import { formatGroupRatio, maskApiKey } from '../lib/mask-key'
-import { MISSING_METRIC } from '../lib/stats'
+import { ConsoleKeyList } from './key-list'
 
-type GroupInfo = { desc: string; ratio: number | string }
-
-function InertIconButton(props: { label: string; children: ReactNode }) {
-  return (
-    <button
-      type='button'
-      aria-label={props.label}
-      className='text-muted-foreground hover:text-foreground inline-flex size-8 items-center justify-center rounded-md transition-colors'
-    >
-      {props.children}
-    </button>
-  )
-}
-
-function KeyRow(props: {
-  apiKey: ApiKey
-  groups: Record<string, GroupInfo>
-}) {
-  const { t } = useTranslation()
-  const group = props.apiKey.group ?? ''
-  const groupInfo = group ? props.groups[group] : undefined
-  const groupLabel = groupInfo?.desc || group || MISSING_METRIC
-  const ratioLabel = formatGroupRatio(groupInfo?.ratio) ?? MISSING_METRIC
-
-  return (
-    <tr className='border-border/70 border-t'>
-      <td className='px-4 py-3 font-medium'>{props.apiKey.name}</td>
-      <td className='text-muted-foreground px-4 py-3'>{t('OpenAI')}</td>
-      <td className='px-4 py-3 font-mono text-xs tabular-nums'>
-        {maskApiKey(props.apiKey.key)}
-      </td>
-      <td className='px-4 py-3'>{groupLabel}</td>
-      <td className='px-4 py-3 font-mono text-xs tabular-nums'>{ratioLabel}</td>
-      <td className='text-muted-foreground px-4 py-3'>{MISSING_METRIC}</td>
-      <td className='px-4 py-3'>
-        <div className='flex items-center justify-end gap-0.5'>
-          <InertIconButton label={t('Copy')}>
-            <Copy className='size-3.5' aria-hidden='true' />
-          </InertIconButton>
-          <InertIconButton label={t('Test')}>
-            <Send className='size-3.5' aria-hidden='true' />
-          </InertIconButton>
-          <InertIconButton label={t('Edit')}>
-            <Pencil className='size-3.5' aria-hidden='true' />
-          </InertIconButton>
-          <InertIconButton label={t('Disable')}>
-            <CircleSlash className='size-3.5' aria-hidden='true' />
-          </InertIconButton>
-          <InertIconButton label={t('Delete')}>
-            <Trash2 className='size-3.5' aria-hidden='true' />
-          </InertIconButton>
-        </div>
-      </td>
-    </tr>
-  )
-}
-
-export function ConsoleKeyManagement() {
+function KeyManagementCard() {
   const { t } = useTranslation()
   const apiInfo = useApiInfo()
+  const { refreshTrigger, setOpen } = useApiKeys()
 
   const keysQuery = useQuery({
-    queryKey: ['console', 'home', 'api-keys'],
+    queryKey: ['console', 'home', 'api-keys', refreshTrigger],
     queryFn: async () => {
       const result = await getApiKeys({ p: 1, size: 50 })
       return result.success ? (result.data?.items ?? []) : []
@@ -110,17 +45,7 @@ export function ConsoleKeyManagement() {
     staleTime: 60 * 1000,
   })
 
-  const groupsQuery = useQuery({
-    queryKey: ['console', 'home', 'user-groups'],
-    queryFn: async () => {
-      const result = await getUserGroups()
-      return result.success ? (result.data ?? {}) : {}
-    },
-    staleTime: 60 * 1000,
-  })
-
   const keys = keysQuery.data ?? []
-  const groups = groupsQuery.data ?? {}
 
   return (
     <section className='bg-card overflow-hidden rounded-xl border'>
@@ -153,6 +78,7 @@ export function ConsoleKeyManagement() {
           <button
             type='button'
             className='bg-foreground text-background inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-opacity hover:opacity-85'
+            onClick={() => setOpen('create')}
           >
             <Plus className='size-3.5' aria-hidden='true' />
             {t('New key')}
@@ -184,45 +110,16 @@ export function ConsoleKeyManagement() {
         </div>
       </div>
 
-      <div className='overflow-x-auto'>
-        <table className='w-full min-w-[56rem] text-left text-sm'>
-          <thead>
-            <tr className='text-muted-foreground border-border/70 border-t text-xs font-medium'>
-              <th className='px-4 py-2.5 font-medium'>{t('Name')}</th>
-              <th className='px-4 py-2.5 font-medium'>{t('Platform')}</th>
-              <th className='px-4 py-2.5 font-medium'>{t('API Key')}</th>
-              <th className='px-4 py-2.5 font-medium'>{t('Billing group')}</th>
-              <th className='px-4 py-2.5 font-medium'>{t('Billing rate')}</th>
-              <th className='px-4 py-2.5 font-medium'>{t('Usage')}</th>
-              <th className='px-4 py-2.5 text-end font-medium'>
-                {t('Actions')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {keysQuery.isLoading ? (
-              <tr className='border-border/70 border-t'>
-                <td colSpan={7} className='px-4 py-6'>
-                  <Skeleton className='h-8 w-full' />
-                </td>
-              </tr>
-            ) : null}
-            {!keysQuery.isLoading && keys.length === 0 ? (
-              <tr className='border-border/70 border-t'>
-                <td
-                  colSpan={7}
-                  className='text-muted-foreground px-4 py-8 text-center'
-                >
-                  {t('No API keys yet')}
-                </td>
-              </tr>
-            ) : null}
-            {keys.map((apiKey) => (
-              <KeyRow key={apiKey.id} apiKey={apiKey} groups={groups} />
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ConsoleKeyList isLoading={keysQuery.isLoading} keys={keys} />
     </section>
+  )
+}
+
+export function ConsoleKeyManagement() {
+  return (
+    <ApiKeysProvider>
+      <KeyManagementCard />
+      <ApiKeysDialogs />
+    </ApiKeysProvider>
   )
 }

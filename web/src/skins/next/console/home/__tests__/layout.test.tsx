@@ -28,6 +28,9 @@ const apiMocks = vi.hoisted(() => ({
   getUserQuotaDates: vi.fn(),
   getApiKeys: vi.fn(),
   getUserGroups: vi.fn(),
+  getUserModels: vi.fn(),
+  getStatus: vi.fn(),
+  getTokenAutoGroups: vi.fn(),
 }))
 
 vi.mock('@/features/dashboard/api', () => ({
@@ -36,10 +39,13 @@ vi.mock('@/features/dashboard/api', () => ({
 
 vi.mock('@/features/keys/api', () => ({
   getApiKeys: apiMocks.getApiKeys,
+  getTokenAutoGroups: apiMocks.getTokenAutoGroups,
 }))
 
 vi.mock('@/lib/api', () => ({
   getUserGroups: apiMocks.getUserGroups,
+  getUserModels: apiMocks.getUserModels,
+  getStatus: apiMocks.getStatus,
 }))
 
 vi.mock('@/features/dashboard/hooks/use-status-data', () => ({
@@ -113,6 +119,12 @@ describe('next console homepage layout', () => {
       success: true,
       data: { special: { desc: 'Sale', ratio: 0.12 } },
     })
+    apiMocks.getUserModels.mockResolvedValue({ success: true, data: [] })
+    apiMocks.getStatus.mockResolvedValue({})
+    apiMocks.getTokenAutoGroups.mockResolvedValue({
+      success: true,
+      data: { groups: [], max_count: 3 },
+    })
   })
 
   afterEach(() => {
@@ -146,9 +158,18 @@ describe('next console homepage layout', () => {
     await waitFor(() => {
       expect(screen.getByText('plus')).toBeVisible()
     })
-    expect(screen.getByText('sk-d7af***43e0')).toBeVisible()
-    expect(screen.getByText('Sale')).toBeVisible()
+    expect(screen.getByText('sk-d7af123443e0')).toBeVisible()
+    expect(screen.getByText('special')).toBeVisible()
     expect(screen.getByText('0.12x')).toBeVisible()
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeVisible()
+    expect(screen.getByRole('columnheader', { name: 'Quota' })).toBeVisible()
+    expect(screen.getByRole('columnheader', { name: 'Group' })).toBeVisible()
+    expect(screen.getByRole('columnheader', { name: 'Expires' })).toBeVisible()
+    expect(screen.queryByRole('columnheader', { name: 'Platform' })).toBeNull()
+    expect(screen.queryByRole('columnheader', { name: 'Usage' })).toBeNull()
+    expect(
+      screen.queryByRole('columnheader', { name: 'Billing rate' })
+    ).toBeNull()
     expect(screen.getByText('https://api.example.com')).toBeVisible()
   })
 

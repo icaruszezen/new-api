@@ -172,7 +172,11 @@ describe('next console homepage layout', () => {
     expect(
       screen.queryByRole('columnheader', { name: 'Billing rate' })
     ).toBeNull()
-    expect(screen.getByText('https://api.example.com')).toBeVisible()
+    const endpoint = screen.getByText('https://api.example.com')
+    expect(endpoint).toBeVisible()
+    expect(
+      endpoint.closest('[data-slot="console-endpoint-chip"]')
+    ).toHaveAttribute('data-tone')
   })
 
   test('places stats and shortcuts above key management', () => {

@@ -20,7 +20,6 @@ import { useQuery } from '@tanstack/react-query'
 import { FileText, Plus, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { CopyButton } from '@/components/copy-button'
 import { useApiInfo } from '@/features/dashboard/hooks/use-status-data'
 import { getApiKeys } from '@/features/keys/api'
 import { ApiKeysDialogs } from '@/features/keys/components/api-keys-dialogs'
@@ -29,6 +28,7 @@ import {
   useApiKeys,
 } from '@/features/keys/components/api-keys-provider'
 
+import { ConsoleEndpointChips } from './endpoint-chips'
 import { ConsoleKeyList } from './key-list'
 
 function KeyManagementCard() {
@@ -87,27 +87,7 @@ function KeyManagementCard() {
       </div>
 
       <div className='border-border/70 flex flex-col gap-3 border-t px-5 py-3 sm:flex-row sm:items-center'>
-        <div className='flex min-w-0 flex-1 flex-wrap items-center gap-2'>
-          {apiInfo.items.map((item) => (
-            <div
-              key={item.url}
-              className='border-border bg-muted/40 flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-1.5'
-            >
-              <span className='bg-background text-muted-foreground shrink-0 rounded-md border px-1.5 py-0.5 text-[11px] font-medium'>
-                {item.description || item.route || t('Default')}
-              </span>
-              <code className='min-w-0 truncate font-mono text-xs'>
-                {item.url}
-              </code>
-              <CopyButton
-                value={item.url}
-                size='icon'
-                className='text-muted-foreground hover:text-foreground size-7'
-                aria-label={t('Copy')}
-              />
-            </div>
-          ))}
-        </div>
+        <ConsoleEndpointChips items={apiInfo.items} />
       </div>
 
       <ConsoleKeyList isLoading={keysQuery.isLoading} keys={keys} />

@@ -52,6 +52,7 @@ function ApiKeyMobileGroupRatio(props: {
   group: string
   ratio?: number | string
   shouldReduceMotion: boolean
+  renderRatio?: (ratio: number) => ReactNode
 }) {
   const { t } = useTranslation()
   let ratioValue = (
@@ -65,7 +66,11 @@ function ApiKeyMobileGroupRatio(props: {
   if (typeof props.ratio === 'number') {
     ratioValue = (
       <span data-slot='api-key-mobile-group-ratio'>
-        <GroupRatioPill ratio={props.ratio} />
+        {props.renderRatio ? (
+          props.renderRatio(props.ratio)
+        ) : (
+          <GroupRatioPill ratio={props.ratio} />
+        )}
       </span>
     )
   } else if (
@@ -139,6 +144,7 @@ type ApiKeysMobileListProps = {
   emptyDescription?: string
   showGroupRatio?: boolean
   renderRowActions?: (row: Row<ApiKey>) => ReactNode
+  renderRatio?: (ratio: number) => ReactNode
 }
 
 export function ApiKeysMobileList(props: ApiKeysMobileListProps) {
@@ -244,6 +250,7 @@ export function ApiKeysMobileList(props: ApiKeysMobileListProps) {
                 group={group}
                 ratio={groupRatios[group]}
                 shouldReduceMotion={shouldReduceMotion}
+                renderRatio={props.renderRatio}
               />
             ) : null}
           </div>

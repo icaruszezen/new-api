@@ -26,13 +26,19 @@ import { useTranslation } from 'react-i18next'
 
 import { DISABLED_ROW_DESKTOP, useDataTable } from '@/components/data-table'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useApiKeysColumns } from '@/features/keys/components/api-keys-columns'
+import {
+  useApiKeysColumns,
+  useGroupRatios,
+} from '@/features/keys/components/api-keys-columns'
 import { ApiKeysMobileList } from '@/features/keys/components/api-keys-mobile-list'
 import { DataTableRowActions } from '@/features/keys/components/data-table-row-actions'
 import { isDisabledApiKeyRow } from '@/features/keys/constants'
 import type { ApiKey } from '@/features/keys/types'
 import { useMediaQuery } from '@/hooks'
 import { cn } from '@/lib/utils'
+import { RatioTag } from '@/skins/next/pricing/components/ratio-tag'
+
+import { ConsoleKeyGroupCell } from './key-group-cell'
 
 type ConsoleKeyListProps = {
   isLoading: boolean
@@ -130,6 +136,7 @@ export function ConsoleKeyList(props: ConsoleKeyListProps) {
   const [now, setNow] = useState(() => Date.now())
   const isMobile = useMediaQuery('(max-width: 640px)')
   const allColumns = useApiKeysColumns(now)
+  const groupRatios = useGroupRatios()
   const columns = useMemo(
     () =>
       allColumns
@@ -144,15 +151,34 @@ export function ConsoleKeyList(props: ConsoleKeyListProps) {
           )
         })
         .map((column) => {
-          if (column.id !== 'actions') return column
-          return {
-            ...column,
-            cell: ({ row }: { row: Row<ApiKey> }) => (
-              <DataTableRowActions row={row} overflow='delete' />
-            ),
+          const columnId =
+            column.id ??
+            ('accessorKey' in column ? column.accessorKey : undefined)
+          if (columnId === 'actions') {
+            return {
+              ...column,
+              cell: ({ row }: { row: Row<ApiKey> }) => (
+                <DataTableRowActions row={row} overflow='delete' />
+              ),
+            }
           }
+          if (columnId === 'group') {
+            return {
+              ...column,
+              cell: ({ row }: { row: Row<ApiKey> }) => {
+                const group = row.original.group ?? ''
+                return (
+                  <ConsoleKeyGroupCell
+                    group={group}
+                    ratio={groupRatios[group]}
+                  />
+                )
+              },
+            }
+          }
+          return column
         }),
-    [allColumns]
+    [allColumns, groupRatios]
   )
 
   useEffect(() => {
@@ -186,6 +212,7 @@ export function ConsoleKeyList(props: ConsoleKeyListProps) {
         renderRowActions={(row) => (
           <DataTableRowActions row={row} overflow='delete' />
         )}
+        renderRatio={(ratio) => <RatioTag ratio={ratio} />}
       />
     )
   }

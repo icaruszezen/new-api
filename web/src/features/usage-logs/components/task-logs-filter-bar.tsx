@@ -41,6 +41,7 @@ type TaskLogsFilters = DrawingLogFilters | TaskLogFilters
 interface TaskLogsFilterBarProps<TData> {
   table: Table<TData>
   logCategory: TaskLikeLogCategory
+  className?: string
 }
 
 function getFilterValue(
@@ -202,6 +203,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
   return (
     <LogsFilterToolbar
       table={props.table}
+      className={props.className}
       primaryFilters={
         <>
           {dateRangeFilter}

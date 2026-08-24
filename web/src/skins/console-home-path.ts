@@ -26,14 +26,23 @@ export function isNextConsoleHomePath(pathname: string): boolean {
 }
 
 /**
+ * Usage-logs routes share the standalone Next chrome but fill the remaining
+ * viewport like classic list pages, instead of the landing max-width measure.
+ */
+export function isNextUsageLogsPath(pathname: string): boolean {
+  return pathname === '/usage-logs' || pathname.startsWith('/usage-logs/')
+}
+
+/**
  * Authenticated routes that keep the Next standalone chrome (top bar, no
- * sidebar). The homepage, personal center, and wallet share this shell;
- * other console pages stay on the classic sidebar layout.
+ * sidebar). The homepage, personal center, wallet, and usage logs share
+ * this shell; other console pages stay on the classic sidebar layout.
  */
 export function isNextStandaloneShellPath(pathname: string): boolean {
   return (
     isNextConsoleHomePath(pathname) ||
     pathname === '/profile' ||
-    pathname === '/wallet'
+    pathname === '/wallet' ||
+    isNextUsageLogsPath(pathname)
   )
 }

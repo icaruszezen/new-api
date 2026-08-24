@@ -22,8 +22,10 @@ import { persist } from 'zustand/middleware'
 import { DEFAULT_SYSTEM_NAME, DEFAULT_LOGO } from '@/lib/constants'
 // Imported from the concrete modules instead of the `@/skins` barrel, which
 // would pull the skin context back into this store.
-import { DEFAULT_UI_SKIN } from '@/skins/registry'
+import { DEFAULT_UI_SKIN, parseUiSkin } from '@/skins/registry'
 import type { UiSkin } from '@/skins/types'
+
+export const SYSTEM_CONFIG_STORAGE_KEY = 'system-config-storage'
 
 export type CurrencyDisplayType = 'USD' | 'CNY' | 'TOKENS' | 'CUSTOM'
 
@@ -101,7 +103,7 @@ export const useSystemConfigStore = create<SystemConfigState>()(
       setLoading: (loading) => set({ loading }),
     }),
     {
-      name: 'system-config-storage',
+      name: SYSTEM_CONFIG_STORAGE_KEY,
       partialize: (state) => ({
         config: state.config,
         loadedLogoUrl: state.loadedLogoUrl,
@@ -109,6 +111,26 @@ export const useSystemConfigStore = create<SystemConfigState>()(
     }
   )
 )
+
+/**
+ * Read the last known site skin from persist storage. Zustand rehydrates
+ * asynchronously, so the live store can still be the classic default on the
+ * first paint of a returning visit.
+ */
+export function readPersistedUiSkin(): UiSkin {
+  if (typeof localStorage === 'undefined') return DEFAULT_UI_SKIN
+  try {
+    const raw = localStorage.getItem(SYSTEM_CONFIG_STORAGE_KEY)
+    if (!raw) return DEFAULT_UI_SKIN
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return DEFAULT_UI_SKIN
+    const state = (parsed as { state?: { config?: { uiSkin?: unknown } } })
+      .state
+    return parseUiSkin(state?.config?.uiSkin)
+  } catch {
+    return DEFAULT_UI_SKIN
+  }
+}
 
 // Selector helpers for convenience
 export const getSystemName = () =>

@@ -21,6 +21,7 @@ import { describe, expect, test } from 'vitest'
 import {
   isNextConsoleHomePath,
   isNextStandaloneShellPath,
+  isNextUsageLogsPath,
 } from '../console-home-path'
 
 describe('isNextConsoleHomePath', () => {
@@ -44,13 +45,37 @@ describe('isNextConsoleHomePath', () => {
   })
 })
 
-describe('isNextStandaloneShellPath', () => {
-  test.each(['/dashboard', '/dashboard/overview', '/profile', '/wallet'])(
-    'uses the standalone shell on %s',
+describe('isNextUsageLogsPath', () => {
+  test.each([
+    '/usage-logs',
+    '/usage-logs/common',
+    '/usage-logs/drawing',
+    '/usage-logs/task',
+  ])('treats %s as a usage-logs path', (pathname) => {
+    expect(isNextUsageLogsPath(pathname)).toBe(true)
+  })
+
+  test.each(['/dashboard', '/profile', '/wallet', '/keys', '/'])(
+    'does not treat %s as a usage-logs path',
     (pathname) => {
-      expect(isNextStandaloneShellPath(pathname)).toBe(true)
+      expect(isNextUsageLogsPath(pathname)).toBe(false)
     }
   )
+})
+
+describe('isNextStandaloneShellPath', () => {
+  test.each([
+    '/dashboard',
+    '/dashboard/overview',
+    '/profile',
+    '/wallet',
+    '/usage-logs',
+    '/usage-logs/common',
+    '/usage-logs/drawing',
+    '/usage-logs/task',
+  ])('uses the standalone shell on %s', (pathname) => {
+    expect(isNextStandaloneShellPath(pathname)).toBe(true)
+  })
 
   test.each([
     '/dashboard/models',

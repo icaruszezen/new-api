@@ -26,8 +26,18 @@ import {
 } from 'react'
 
 import { getCookie, setCookie, removeCookie } from '@/lib/cookies'
+import { parseUiSkin } from '@/skins/registry'
+import {
+  readPersistedUiSkin,
+  useSystemConfigStore,
+} from '@/stores/system-config-store'
 
-type Theme = 'dark' | 'light' | 'system'
+import {
+  defaultThemeForUiSkin,
+  getSiteDefaultTheme,
+  type Theme,
+} from './theme-defaults'
+
 type ResolvedTheme = Exclude<Theme, 'system'>
 
 const DEFAULT_THEME = 'system'
@@ -70,6 +80,11 @@ function resolveTheme(theme: Theme): ResolvedTheme {
   return theme === 'system' ? getSystemTheme() : theme
 }
 
+function hasStoredTheme(storageKey: string): boolean {
+  const storedTheme = getCookie(storageKey)
+  return Boolean(storedTheme && THEMES.has(storedTheme as Theme))
+}
+
 function getStoredTheme(storageKey: string, fallback: Theme): Theme {
   const storedTheme = getCookie(storageKey) as Theme | undefined
   return storedTheme && THEMES.has(storedTheme) ? storedTheme : fallback
@@ -77,16 +92,36 @@ function getStoredTheme(storageKey: string, fallback: Theme): Theme {
 
 export function ThemeProvider({
   children,
-  defaultTheme = DEFAULT_THEME,
+  defaultTheme: defaultThemeProp,
   storageKey = THEME_COOKIE_NAME,
   ...props
 }: ThemeProviderProps) {
+  const uiSkin = useSystemConfigStore((state) =>
+    parseUiSkin(state.config.uiSkin)
+  )
+  const [persistedSkin, setPersistedSkin] = useState(readPersistedUiSkin)
+
+  useEffect(() => {
+    setPersistedSkin(readPersistedUiSkin())
+  }, [uiSkin])
+
+  const defaultTheme =
+    defaultThemeProp ??
+    defaultThemeForUiSkin(uiSkin === 'next' ? uiSkin : persistedSkin)
+
   const [theme, _setTheme] = useState<Theme>(() =>
-    getStoredTheme(storageKey, defaultTheme)
+    getStoredTheme(storageKey, getSiteDefaultTheme(defaultThemeProp))
   )
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
-    resolveTheme(getStoredTheme(storageKey, defaultTheme))
+    resolveTheme(
+      getStoredTheme(storageKey, getSiteDefaultTheme(defaultThemeProp))
+    )
   )
+
+  useEffect(() => {
+    if (hasStoredTheme(storageKey)) return
+    _setTheme(defaultTheme)
+  }, [defaultTheme, storageKey])
 
   useEffect(() => {
     const root = window.document.documentElement

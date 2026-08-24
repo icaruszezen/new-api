@@ -107,6 +107,7 @@ function buildSearchSourceKey(values: {
 
 interface CommonLogsFilterBarProps<TData> {
   table: Table<TData>
+  className?: string
 }
 
 export function CommonLogsFilterBar<TData>(
@@ -414,6 +415,7 @@ export function CommonLogsFilterBar<TData>(
   return (
     <LogsFilterToolbar
       table={props.table}
+      className={props.className}
       stats={statsBar}
       actionStart={sensitiveToggle}
       primaryFilters={

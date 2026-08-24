@@ -16,16 +16,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { UsageLogs } from '@/features/usage-logs'
+
+import { NextUsageLogs } from './next/usage-logs'
+import { useResolvedConsoleSkin } from './use-resolved-console-skin'
+
 /**
- * Public surface of the UI Skin module.
+ * Usage logs entry. Next users (and administrators previewing the user
+ * console) get the standalone Next page; classic stays on the existing
+ * sidebar usage logs.
  */
-export { SkinnedAuthenticatedLayout } from './authenticated-layout'
-export { useUiSkin } from './context'
-export { SkinnedDashboard } from './dashboard'
-export { SkinnedHome } from './home'
-export { SkinnedPricing } from './pricing'
-export { SkinnedProfile } from './profile'
-export { SkinnedUsageLogs } from './usage-logs'
-export { SkinnedWallet } from './wallet'
-export { DEFAULT_UI_SKIN, parseUiSkin, resolveConsoleSkin } from './registry'
-export type { UiSkin } from './types'
+export function SkinnedUsageLogs() {
+  const skin = useResolvedConsoleSkin()
+
+  if (skin === 'next') {
+    return <NextUsageLogs />
+  }
+
+  return <UsageLogs />
+}

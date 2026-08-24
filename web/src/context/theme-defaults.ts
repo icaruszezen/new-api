@@ -16,16 +16,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-/**
- * Public surface of the UI Skin module.
- */
-export { SkinnedAuthenticatedLayout } from './authenticated-layout'
-export { useUiSkin } from './context'
-export { SkinnedDashboard } from './dashboard'
-export { SkinnedHome } from './home'
-export { SkinnedPricing } from './pricing'
-export { SkinnedProfile } from './profile'
-export { SkinnedUsageLogs } from './usage-logs'
-export { SkinnedWallet } from './wallet'
-export { DEFAULT_UI_SKIN, parseUiSkin, resolveConsoleSkin } from './registry'
-export type { UiSkin } from './types'
+import { parseUiSkin } from '@/skins/registry'
+import type { UiSkin } from '@/skins/types'
+import {
+  readPersistedUiSkin,
+  useSystemConfigStore,
+} from '@/stores/system-config-store'
+
+export type Theme = 'dark' | 'light' | 'system'
+
+const DEFAULT_THEME: Theme = 'system'
+
+export function defaultThemeForUiSkin(skin: UiSkin): Theme {
+  return skin === 'next' ? 'light' : DEFAULT_THEME
+}
+
+export function getSiteDefaultTheme(explicitDefault?: Theme): Theme {
+  if (explicitDefault) return explicitDefault
+  const liveSkin = parseUiSkin(useSystemConfigStore.getState().config.uiSkin)
+  if (liveSkin === 'next') return defaultThemeForUiSkin(liveSkin)
+  return defaultThemeForUiSkin(readPersistedUiSkin())
+}

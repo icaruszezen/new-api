@@ -19,8 +19,16 @@ For commercial licensing, please contact support@quantumnous.com
 import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
+const pathnameRef = { current: '/dashboard/overview' }
+
 vi.mock('@tanstack/react-router', () => ({
   Outlet: () => <div data-testid='console-outlet' />,
+  useRouterState: (options?: {
+    select?: (state: { location: { pathname: string } }) => unknown
+  }) => {
+    const state = { location: { pathname: pathnameRef.current } }
+    return options?.select ? options.select(state) : state
+  },
 }))
 
 vi.mock('../../home/components/minimal-header', () => ({
@@ -31,6 +39,7 @@ const { NextConsoleShell } = await import('../shell')
 
 describe('next console shell', () => {
   afterEach(() => {
+    pathnameRef.current = '/dashboard/overview'
     document.body.removeAttribute('data-next-console')
   })
 
@@ -40,6 +49,9 @@ describe('next console shell', () => {
     expect(document.body.hasAttribute('data-next-console')).toBe(true)
     expect(screen.getByRole('main')).toHaveAttribute('id', 'content')
     expect(screen.getByRole('main')).toHaveClass('max-w-7xl')
+    expect(screen.getByRole('main')).toHaveClass('flex')
+    expect(screen.getByRole('main')).toHaveClass('flex-col')
+    expect(screen.getByRole('main')).toHaveClass('min-h-0')
     expect(view.container.firstElementChild).toHaveAttribute(
       'data-skin',
       'next'
@@ -49,5 +61,17 @@ describe('next console shell', () => {
 
     view.unmount()
     expect(document.body.hasAttribute('data-next-console')).toBe(false)
+  })
+
+  test('fills the viewport on usage-logs without the landing side gutters', () => {
+    pathnameRef.current = '/usage-logs/common'
+    render(<NextConsoleShell />)
+
+    const main = screen.getByRole('main')
+    expect(main).toHaveClass('w-full')
+    expect(main).toHaveClass('px-0')
+    expect(main).toHaveClass('py-0')
+    expect(main).not.toHaveClass('max-w-7xl')
+    expect(main).not.toHaveClass('px-6')
   })
 })

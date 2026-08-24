@@ -19,9 +19,19 @@ For commercial licensing, please contact support@quantumnous.com
 import type { QuotaDataItem } from '@/features/dashboard/types'
 import { dateToUnixTimestamp, getStartOfDay } from '@/lib/time'
 
-export const MISSING_METRIC = '--'
+/**
+ * Requests a window must cover before its cache read rate is worth showing. A
+ * handful of calls swings the rate between 0% and 100%, so below this the
+ * homepage says the rate is still being collected.
+ */
+export const CACHE_RATE_MIN_SAMPLE = 50
 
-export type QuotaSumField = 'count' | 'token_used' | 'quota'
+export type QuotaSumField =
+  | 'count'
+  | 'token_used'
+  | 'prompt_tokens'
+  | 'cache_tokens'
+  | 'quota'
 
 export type RunwayEstimate =
   | { kind: 'days'; days: number }
@@ -79,6 +89,36 @@ export function formatKnownMetric(
   return formatNumber(value)
 }
 
-export function formatMissingMetric(): string {
-  return MISSING_METRIC
+/**
+ * Requests whose bucket carries input tokens. Buckets written before the cache
+ * columns existed report none, so they must not count toward the sample that
+ * unlocks the cache read rate.
+ */
+export function sumCacheSampledCalls(items: QuotaDataItem[]): number {
+  let total = 0
+  for (const item of items) {
+    if ((Number(item.prompt_tokens) || 0) > 0) {
+      total += Number(item.count) || 0
+    }
+  }
+  return total
+}
+
+/**
+ * Share of input tokens served from the upstream prompt cache, matching the
+ * usage log's Cache-read over Input reading. Returns null while the sample is
+ * too thin to state a rate, which the caller renders as still collecting.
+ */
+export function formatCacheReadRate(
+  cacheTokens: number,
+  promptTokens: number,
+  sampledCalls: number,
+  formatRate: (rate: number) => string
+): string | null {
+  if (!Number.isFinite(sampledCalls) || sampledCalls < CACHE_RATE_MIN_SAMPLE) {
+    return null
+  }
+  if (!Number.isFinite(promptTokens) || promptTokens <= 0) return null
+  if (!Number.isFinite(cacheTokens) || cacheTokens < 0) return null
+  return formatRate(Math.min(cacheTokens / promptTokens, 1) * 100)
 }

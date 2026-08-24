@@ -62,6 +62,10 @@ func GetQuotaDatesByUser(c *gin.Context) {
 
 func GetUserQuotaDates(c *gin.Context) {
 	userId := c.GetInt("id")
+	if c.Query("lifetime") == "1" {
+		GetUserQuotaDataSummary(c)
+		return
+	}
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	// 判断时间跨度是否超过 1 个月
@@ -83,6 +87,19 @@ func GetUserQuotaDates(c *gin.Context) {
 		"data":    dates,
 	})
 	return
+}
+
+func GetUserQuotaDataSummary(c *gin.Context) {
+	summary, err := model.GetQuotaDataSummaryByUserId(c.GetInt("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    summary,
+	})
 }
 
 func GetAllFlowQuotaDates(c *gin.Context) {

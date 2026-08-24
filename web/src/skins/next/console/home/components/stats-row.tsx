@@ -22,17 +22,21 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Skeleton } from '@/components/ui/skeleton'
-import { getUserQuotaDates } from '@/features/dashboard/api'
+import {
+  getUserQuotaDates,
+  getUserQuotaSummary,
+} from '@/features/dashboard/api'
 import { toIntlLocale } from '@/i18n/languages'
-import { formatCompactNumber, formatQuota } from '@/lib/format'
+import { formatCompactNumber, formatPercent, formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import {
+  formatCacheReadRate,
   formatKnownMetric,
-  formatMissingMetric,
   getCalendarDayRange,
   getRunwayEstimate,
+  sumCacheSampledCalls,
   sumQuotaField,
 } from '../lib/stats'
 
@@ -83,6 +87,7 @@ export function ConsoleStatsRow() {
   const remainQuota = useAuthStore((state) =>
     Number(state.auth.user?.quota ?? 0)
   )
+  const canLoadStats = useAuthStore((state) => Boolean(state.auth.accessToken))
   const todayRange = useMemo(() => getCalendarDayRange(), [])
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
 
@@ -100,6 +105,14 @@ export function ConsoleStatsRow() {
         end_timestamp: todayRange.end_timestamp,
         default_time: 'hour',
       }),
+    enabled: canLoadStats,
+    staleTime: 60 * 1000,
+  })
+
+  const lifetimeQuery = useQuery({
+    queryKey: ['console', 'home', 'lifetime-stats'],
+    queryFn: getUserQuotaSummary,
+    enabled: canLoadStats,
     staleTime: 60 * 1000,
   })
 
@@ -107,8 +120,33 @@ export function ConsoleStatsRow() {
   const todayCalls = sumQuotaField(todayItems, 'count')
   const todayTokens = sumQuotaField(todayItems, 'token_used')
   const todayQuota = sumQuotaField(todayItems, 'quota')
+  const todayCacheRate = formatCacheReadRate(
+    sumQuotaField(todayItems, 'cache_tokens'),
+    sumQuotaField(todayItems, 'prompt_tokens'),
+    sumCacheSampledCalls(todayItems),
+    formatPercent
+  )
+  const lifetime = lifetimeQuery.data?.data
+  const lifetimeTokens = Number(lifetime?.token_used ?? 0)
+  const lifetimeCacheRate = formatCacheReadRate(
+    Number(lifetime?.cache_tokens ?? 0),
+    Number(lifetime?.prompt_tokens ?? 0),
+    Number(lifetime?.cache_sampled_count ?? 0),
+    formatPercent
+  )
+  let todayCacheDescription = t('Cache read rate pending')
+  if (todayCacheRate !== null) {
+    todayCacheDescription = t('Cache read rate {{rate}}', {
+      rate: todayCacheRate,
+    })
+  }
+  let lifetimeCacheDescription = t('Cache read rate pending')
+  if (lifetimeCacheRate !== null) {
+    lifetimeCacheDescription = t('Cache read rate {{rate}}', {
+      rate: lifetimeCacheRate,
+    })
+  }
   const formatNumber = (value: number) => formatCompactNumber(value, locale)
-  const missing = formatMissingMetric()
   const runway = getRunwayEstimate(remainQuota, todayQuota)
   let runwayDescription = t('No recent usage')
   if (runway.kind === 'days') {
@@ -138,23 +176,17 @@ export function ConsoleStatsRow() {
       <StatCard
         title={t("Today's tokens")}
         value={formatKnownMetric(todayTokens, formatNumber)}
-        description={t('Input {{input}} · Output {{output}}', {
-          input: missing,
-          output: missing,
-        })}
+        description={todayCacheDescription}
         icon={Braces}
         loading={todayQuery.isLoading}
         className='border-border border-b'
       />
       <StatCard
         title={t('Lifetime tokens')}
-        value={missing}
-        description={t('Input {{input}} · Output {{output}}', {
-          input: missing,
-          output: missing,
-        })}
+        value={formatKnownMetric(lifetimeTokens, formatNumber)}
+        description={lifetimeCacheDescription}
         icon={Database}
-        loading={false}
+        loading={lifetimeQuery.isLoading}
         className='border-border border-r'
       />
       <StatCard

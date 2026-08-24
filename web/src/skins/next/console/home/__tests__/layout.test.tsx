@@ -27,6 +27,7 @@ import { useAuthStore } from '@/stores/auth-store'
 
 const apiMocks = vi.hoisted(() => ({
   getUserQuotaDates: vi.fn(),
+  getUserQuotaSummary: vi.fn(),
   getApiKeys: vi.fn(),
   getApiKey: vi.fn(),
   createApiKey: vi.fn(),
@@ -60,6 +61,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('@/features/dashboard/api', () => ({
   getUserQuotaDates: apiMocks.getUserQuotaDates,
+  getUserQuotaSummary: apiMocks.getUserQuotaSummary,
 }))
 
 vi.mock('@/features/keys/api', () => ({
@@ -129,9 +131,29 @@ describe('next console homepage layout', () => {
       role: ROLE.USER,
       request_count: 71703,
     })
+    useAuthStore.setState((state) => ({
+      auth: { ...state.auth, accessToken: 'test-token' },
+    }))
     apiMocks.getUserQuotaDates.mockResolvedValue({
       success: true,
-      data: [{ created_at: 1, count: 107, token_used: 16100000 }],
+      data: [
+        {
+          created_at: 1,
+          count: 107,
+          token_used: 16100000,
+          prompt_tokens: 1000,
+          cache_tokens: 250,
+        },
+      ],
+    })
+    apiMocks.getUserQuotaSummary.mockResolvedValue({
+      success: true,
+      data: {
+        token_used: 42000000,
+        prompt_tokens: 2000,
+        cache_tokens: 900,
+        cache_sampled_count: 640,
+      },
     })
     apiMocks.getApiKeys.mockResolvedValue({
       success: true,
@@ -157,6 +179,15 @@ describe('next console homepage layout', () => {
   afterEach(() => {
     useAuthStore.getState().auth.reset()
     vi.clearAllMocks()
+  })
+
+  test('does not fetch usage stats before a session token exists', () => {
+    useAuthStore.getState().auth.reset()
+
+    renderHome()
+
+    expect(apiMocks.getUserQuotaDates).not.toHaveBeenCalled()
+    expect(apiMocks.getUserQuotaSummary).not.toHaveBeenCalled()
   })
 
   test('renders four stats, three shortcuts, and the key section', async () => {
@@ -306,17 +337,64 @@ describe('next console homepage layout', () => {
     ).toBeVisible()
   })
 
-  test('shows missing marks for metrics the current APIs cannot supply', async () => {
+  test('shows lifetime tokens and cache read rates from the usage APIs', async () => {
     renderHome()
 
     await waitFor(() => {
-      expect(screen.getByText('plus')).toBeVisible()
+      expect(screen.getByText('42M')).toBeVisible()
     })
 
-    expect(screen.getAllByText('--').length).toBeGreaterThan(0)
-    expect(
-      screen.queryByRole('heading', { name: 'Average response' })
-    ).toBeNull()
+    expect(screen.getByText('Cache read rate 25%')).toBeVisible()
+    expect(screen.getByText('Cache read rate 45%')).toBeVisible()
+    expect(screen.queryByText(/Input .* · Output/)).toBeNull()
+  })
+
+  test('reports the cache read rate as pending while the sample is too thin', async () => {
+    apiMocks.getUserQuotaDates.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          created_at: 1,
+          count: 3,
+          token_used: 500,
+          prompt_tokens: 400,
+          cache_tokens: 100,
+        },
+      ],
+    })
+    apiMocks.getUserQuotaSummary.mockResolvedValue({
+      success: true,
+      data: {
+        token_used: 500,
+        prompt_tokens: 400,
+        cache_tokens: 100,
+        cache_sampled_count: 3,
+      },
+    })
+
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Cache read rate pending')).toHaveLength(2)
+    })
+    expect(screen.queryByText(/Cache read rate --/)).toBeNull()
+  })
+
+  test('reports the cache read rate as pending when legacy buckets carry no input tokens', async () => {
+    apiMocks.getUserQuotaDates.mockResolvedValue({
+      success: true,
+      data: [{ created_at: 1, count: 900, token_used: 500 }],
+    })
+    apiMocks.getUserQuotaSummary.mockResolvedValue({
+      success: true,
+      data: { token_used: 500 },
+    })
+
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Cache read rate pending')).toHaveLength(2)
+    })
   })
 
   test('keeps the key table structure when the user has no keys', async () => {

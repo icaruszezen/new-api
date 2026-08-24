@@ -21,6 +21,7 @@ import { api } from '@/lib/api'
 import type {
   FlowQuotaDataItem,
   QuotaDataItem,
+  QuotaDataSummary,
   UptimeGroupResult,
 } from './types'
 
@@ -47,6 +48,20 @@ export async function getUserQuotaDates(
   const res = await api.get<{ success: boolean; data: QuotaDataItem[] }>(
     endpoint,
     { params }
+  )
+  return res.data
+}
+
+// Get the signed-in user's lifetime usage totals, unbounded by the 30-day
+// window that the default /api/data/self series query enforces.
+export async function getUserQuotaSummary() {
+  const res = await api.get<{ success: boolean; data: QuotaDataSummary }>(
+    '/api/data/self',
+    {
+      params: { lifetime: 1 },
+      skipErrorHandler: true,
+      skipAuthRefresh: true,
+    }
   )
   return res.data
 }

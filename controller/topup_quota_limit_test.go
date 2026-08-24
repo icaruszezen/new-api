@@ -161,7 +161,7 @@ func TestRequestAmountRejectsTopUpThatWouldOverflowWallet(t *testing.T) {
 	RequestAmount(ctx)
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.JSONEq(t, `{"message":"error","data":"top-up quota limit exceeded"}`, recorder.Body.String())
+	assert.JSONEq(t, `{"message":"error","data":"当前账户余额过高，继续充值会超出系统可记录的额度上限。请降低充值金额，或联系管理员处理账户余额"}`, recorder.Body.String())
 }
 
 func TestValidateCreditedQuotaRejectsOverflow(t *testing.T) {

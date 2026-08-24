@@ -29,8 +29,19 @@ export interface QuotaDataItem {
   model_name?: string
   created_at: number
   token_used?: number
+  prompt_tokens?: number
+  cache_tokens?: number
   count?: number
   quota?: number
+}
+
+/** Lifetime usage totals for the signed-in user, without the 30-day window. */
+export interface QuotaDataSummary {
+  token_used?: number
+  prompt_tokens?: number
+  cache_tokens?: number
+  /** Requests behind the cache read rate, excluding buckets without input tokens. */
+  cache_sampled_count?: number
 }
 
 export interface FlowQuotaDataItem {

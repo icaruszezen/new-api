@@ -30,6 +30,7 @@ import {
   isApiSuccess,
 } from '../api'
 import {
+  getPaymentErrorMessage,
   isStripePayment,
   isWaffoPayment,
   isWaffoPancakePayment,
@@ -126,7 +127,7 @@ export function usePayment() {
             })
 
         if (!isApiSuccess(response)) {
-          toast.error(response.message || i18next.t('Payment request failed'))
+          toast.error(getPaymentErrorMessage(response.message, response.data))
           return false
         }
 

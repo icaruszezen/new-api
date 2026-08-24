@@ -28,6 +28,7 @@ import { useAuthStore } from '@/stores/auth-store'
 
 const apiMocks = vi.hoisted(() => ({
   getUserQuotaDates: vi.fn(),
+  getUserQuotaSummary: vi.fn(),
   getApiKeys: vi.fn(),
   getApiKey: vi.fn(),
   createApiKey: vi.fn(),
@@ -63,6 +64,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('@/features/dashboard/api', () => ({
   getUserQuotaDates: apiMocks.getUserQuotaDates,
+  getUserQuotaSummary: apiMocks.getUserQuotaSummary,
 }))
 
 vi.mock('@/features/keys/api', () => ({
@@ -143,6 +145,9 @@ describe('next console key list', () => {
       username: 'tester',
       role: ROLE.USER,
     })
+    useAuthStore.setState((state) => ({
+      auth: { ...state.auth, accessToken: 'test-token' },
+    }))
     apiMocks.getUserQuotaDates.mockResolvedValue({
       success: true,
       data: [],

@@ -21,6 +21,7 @@ import { describe, expect, test } from 'vitest'
 import { PAYMENT_TYPES } from '../constants'
 import {
   dispatchSelectedPayment,
+  getPaymentErrorMessage,
   isStripePayment,
   isWaffoPayment,
   isWaffoPancakePayment,
@@ -81,5 +82,26 @@ describe('payment dispatch', () => {
 
     expect(success).toBe(false)
     expect(called).toBe(false)
+  })
+})
+
+describe('payment error message', () => {
+  test('prefers the backend data reason over a generic error message', () => {
+    expect(getPaymentErrorMessage('error', '拉起支付失败')).toBe(
+      '拉起支付失败'
+    )
+  })
+
+  test('falls back to the response message when data is not a reason string', () => {
+    expect(getPaymentErrorMessage('Payment request failed', { url: '' })).toBe(
+      'Payment request failed'
+    )
+    expect(getPaymentErrorMessage('error', '   ')).toBe('error')
+  })
+
+  test('falls back to the default copy when both message and data are empty', () => {
+    expect(getPaymentErrorMessage(undefined, undefined)).toBe(
+      'Payment request failed'
+    )
   })
 })

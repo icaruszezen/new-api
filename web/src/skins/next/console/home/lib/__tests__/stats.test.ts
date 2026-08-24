@@ -19,13 +19,18 @@ For commercial licensing, please contact support@quantumnous.com
 import { describe, expect, test } from 'vitest'
 
 import {
+  CACHE_RATE_MIN_SAMPLE,
+  formatCacheReadRate,
   formatKnownMetric,
-  formatMissingMetric,
   getCalendarDayRange,
   getRunwayEstimate,
-  MISSING_METRIC,
+  sumCacheSampledCalls,
   sumQuotaField,
 } from '../stats'
+
+const ENOUGH_CALLS = CACHE_RATE_MIN_SAMPLE
+
+const asPercent = (rate: number) => `${rate}%`
 
 describe('console homepage stats', () => {
   test('sums today call and token fields and treats missing numbers as zero', () => {
@@ -53,8 +58,43 @@ describe('console homepage stats', () => {
   test('keeps a zero total visible instead of collapsing it to a missing mark', () => {
     expect(sumQuotaField([], 'count')).toBe(0)
     expect(formatKnownMetric(0, (value) => String(value))).toBe('0')
-    expect(formatMissingMetric()).toBe(MISSING_METRIC)
-    expect(formatMissingMetric()).toBe('--')
+  })
+
+  test('reports the cache read rate as a share of input tokens', () => {
+    expect(formatCacheReadRate(250, 1000, ENOUGH_CALLS, asPercent)).toBe('25%')
+    expect(formatCacheReadRate(0, 1000, ENOUGH_CALLS, asPercent)).toBe('0%')
+  })
+
+  test('withholds the cache read rate until the sample reaches the threshold', () => {
+    expect(
+      formatCacheReadRate(250, 1000, CACHE_RATE_MIN_SAMPLE - 1, asPercent)
+    ).toBeNull()
+    expect(formatCacheReadRate(250, 1000, 0, asPercent)).toBeNull()
+  })
+
+  test('withholds the cache read rate when the sample carries no input tokens', () => {
+    expect(formatCacheReadRate(0, 0, ENOUGH_CALLS, asPercent)).toBeNull()
+    expect(formatCacheReadRate(120, 0, ENOUGH_CALLS, asPercent)).toBeNull()
+    expect(
+      formatCacheReadRate(10, Number.NaN, ENOUGH_CALLS, asPercent)
+    ).toBeNull()
+  })
+
+  test('counts only buckets carrying input tokens toward the sample', () => {
+    expect(
+      sumCacheSampledCalls([
+        { created_at: 1, count: 30, prompt_tokens: 900 },
+        { created_at: 2, count: 25, prompt_tokens: 0 },
+        { created_at: 3, count: 12 },
+        { created_at: 4, prompt_tokens: 400 },
+      ])
+    ).toBe(30)
+  })
+
+  test('caps the cache read rate at 100 percent when cache exceeds input', () => {
+    expect(formatCacheReadRate(1500, 1000, ENOUGH_CALLS, asPercent)).toBe(
+      '100%'
+    )
   })
 
   test('uses local midnight through the supplied instant for today', () => {

@@ -46,7 +46,7 @@ var (
 	ErrTopUpNotFound           = errors.New("topup not found")
 	ErrTopUpStatusInvalid      = errors.New("topup status invalid")
 	ErrInvalidTopUpQuota       = errors.New("invalid top-up quota")
-	ErrTopUpQuotaLimitExceeded = errors.New("top-up quota limit exceeded")
+	ErrTopUpQuotaLimitExceeded = errors.New("当前账户余额过高，继续充值会超出系统可记录的额度上限。请降低充值金额，或联系管理员处理账户余额")
 )
 
 func (topUp *TopUp) Insert() error {

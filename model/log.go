@@ -388,17 +388,33 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		logger.LogError(c, "failed to record log: "+err.Error())
 	}
 	if common.DataExportEnabled {
+		// other["cache_tokens"] 由各计费路径写入，这里原样带进看板，保证首页缓存读取率
+		// 与用量日志的 Cache↓ / Input 展示一致。
+		cacheTokens := 0
+		switch v := params.Other["cache_tokens"].(type) {
+		case int:
+			cacheTokens = v
+		case int64:
+			cacheTokens = int(v)
+		case float64:
+			cacheTokens = int(v)
+		}
+		if cacheTokens < 0 {
+			cacheTokens = 0
+		}
 		LogQuotaData(QuotaDataLogParams{
-			UserID:    userId,
-			Username:  username,
-			ModelName: params.ModelName,
-			Quota:     params.Quota,
-			CreatedAt: createdAt,
-			TokenUsed: params.PromptTokens + params.CompletionTokens,
-			UseGroup:  params.Group,
-			TokenID:   params.TokenId,
-			ChannelID: params.ChannelId,
-			NodeName:  common.NodeName,
+			UserID:       userId,
+			Username:     username,
+			ModelName:    params.ModelName,
+			Quota:        params.Quota,
+			CreatedAt:    createdAt,
+			TokenUsed:    params.PromptTokens + params.CompletionTokens,
+			PromptTokens: params.PromptTokens,
+			CacheTokens:  cacheTokens,
+			UseGroup:     params.Group,
+			TokenID:      params.TokenId,
+			ChannelID:    params.ChannelId,
+			NodeName:     common.NodeName,
 		})
 	}
 }

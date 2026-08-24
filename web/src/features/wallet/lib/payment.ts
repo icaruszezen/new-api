@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import i18next from 'i18next'
+
 import {
   PAYMENT_TYPES,
   DEFAULT_PRESET_MULTIPLIERS,
@@ -91,6 +93,21 @@ export function isWaffoPayment(paymentType: string): boolean {
  */
 export function isWaffoPancakePayment(paymentType: string): boolean {
   return paymentType === PAYMENT_TYPES.WAFFO_PANCAKE
+}
+
+/**
+ * Backend payment failures use `{ message: "error", data: "<reason>" }`.
+ * Prefer the string `data` so the toast shows the real reason, not "error".
+ */
+export function getPaymentErrorMessage(
+  message: string | undefined,
+  data: unknown
+): string {
+  if (typeof data === 'string' && data.trim()) {
+    return data
+  }
+
+  return message || i18next.t('Payment request failed')
 }
 
 export interface PaymentProcessors {

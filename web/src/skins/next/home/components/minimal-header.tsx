@@ -44,6 +44,7 @@ import { useTopNavLinks, type TopNavLink } from '@/hooks/use-top-nav-links'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
+import { isNextConsoleHomePath } from '../../../console-home-path'
 import { LANDING_MEASURE_CLASS } from '../layout'
 
 const NAV_LINK_CLASS =
@@ -65,10 +66,14 @@ function HeaderNavLinks(props: HeaderNavLinksProps) {
   return (
     <div className={props.className}>
       {props.links.map((link) => {
+        const isActive =
+          props.pathname === link.href ||
+          (isNextConsoleHomePath(link.href) &&
+            isNextConsoleHomePath(props.pathname))
         const className = cn(
           NAV_LINK_CLASS,
           props.linkClassName,
-          props.pathname === link.href && ACTIVE_NAV_LINK_CLASS,
+          isActive && ACTIVE_NAV_LINK_CLASS,
           link.disabled && 'pointer-events-none opacity-50'
         )
 

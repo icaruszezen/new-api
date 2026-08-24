@@ -32,6 +32,7 @@ const authUserRef = vi.hoisted(() => ({
 
 const NAV_LINKS: TopNavLink[] = [
   { title: 'Home', href: '/' },
+  { title: 'Console', href: '/dashboard' },
   { title: 'Model Square', href: '/pricing' },
   { title: 'Docs', href: '/docs' },
 ]
@@ -203,6 +204,45 @@ describe('next public header', () => {
     expect(modelSquare).toHaveClass('text-foreground')
 
     expect(screen.getByRole('link', { name: 'Home' })).not.toHaveClass(
+      'underline'
+    )
+    expect(screen.getByRole('link', { name: 'Console' })).not.toHaveClass(
+      'underline'
+    )
+  })
+
+  test('underlines Console after /dashboard redirects to the overview homepage', async () => {
+    const user = userEvent.setup()
+    routerStateRef.pathname = '/dashboard/overview'
+    render(<MinimalHeader />)
+
+    const consoleLink = screen.getByRole('link', { name: 'Console' })
+    expect(consoleLink).toHaveClass('underline')
+    expect(consoleLink).toHaveClass('text-foreground')
+    expect(consoleLink).toHaveClass('underline-offset-8')
+
+    expect(screen.getByRole('link', { name: 'Home' })).not.toHaveClass(
+      'underline'
+    )
+    expect(screen.getByRole('link', { name: 'Model Square' })).not.toHaveClass(
+      'underline'
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+
+    const dialog = await screen.findByRole('dialog')
+    const mobileConsole = within(dialog).getByRole('link', { name: 'Console' })
+    expect(mobileConsole).toHaveClass('underline')
+    expect(within(dialog).getByRole('link', { name: 'Home' })).not.toHaveClass(
+      'underline'
+    )
+  })
+
+  test('does not underline Console on other dashboard analytics sections', () => {
+    routerStateRef.pathname = '/dashboard/models'
+    render(<MinimalHeader />)
+
+    expect(screen.getByRole('link', { name: 'Console' })).not.toHaveClass(
       'underline'
     )
   })

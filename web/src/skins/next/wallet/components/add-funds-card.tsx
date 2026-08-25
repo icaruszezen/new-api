@@ -42,6 +42,7 @@ import {
   getDisplayPaymentAmount,
   getMinTopupAmount,
   getPaymentIcon,
+  getPaymentMethodKey,
 } from '@/features/wallet/lib'
 import type {
   CreemProduct,
@@ -266,8 +267,11 @@ export function NextWalletAddFundsCard(props: NextWalletAddFundsCardProps) {
                           minTopup
                         )
                         const disabled = methodMin > props.topupAmount
+                        const methodKey = getPaymentMethodKey(method)
                         const selected =
-                          props.selectedPaymentMethod?.type === method.type &&
+                          !!props.selectedPaymentMethod &&
+                          getPaymentMethodKey(props.selectedPaymentMethod) ===
+                            methodKey &&
                           props.selectedWaffoMethodIndex === null
                         let methodAccessory = (
                           <span className='border-border size-4 shrink-0 rounded-full border' />
@@ -288,7 +292,7 @@ export function NextWalletAddFundsCard(props: NextWalletAddFundsCardProps) {
                         }
                         const button = (
                           <button
-                            key={method.type}
+                            key={methodKey}
                             type='button'
                             disabled={disabled || !!props.paymentLoading}
                             onClick={() => props.onPaymentMethodSelect(method)}
@@ -301,7 +305,7 @@ export function NextWalletAddFundsCard(props: NextWalletAddFundsCardProps) {
                             )}
                           >
                             <span className='flex size-8 items-center justify-center'>
-                              {props.paymentLoading === method.type ? (
+                              {props.paymentLoading === methodKey ? (
                                 <Loader2 className='size-4 animate-spin' />
                               ) : (
                                 getPaymentIcon(
@@ -322,7 +326,7 @@ export function NextWalletAddFundsCard(props: NextWalletAddFundsCardProps) {
                         if (!disabled) return button
 
                         return (
-                          <TooltipProvider key={method.type}>
+                          <TooltipProvider key={methodKey}>
                             <Tooltip>
                               <TooltipTrigger render={button} />
                               <TooltipContent>

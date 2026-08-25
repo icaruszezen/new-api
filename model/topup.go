@@ -19,6 +19,7 @@ type TopUp struct {
 	TradeNo         string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
 	PaymentMethod   string  `json:"payment_method" gorm:"type:varchar(50)"`
 	PaymentProvider string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
+	GatewayId       string  `json:"gateway_id" gorm:"type:varchar(64);default:''"`
 	CreateTime      int64   `json:"create_time"`
 	CompleteTime    int64   `json:"complete_time"`
 	Status          string  `json:"status"`
@@ -43,6 +44,7 @@ const (
 
 var (
 	ErrPaymentMethodMismatch   = errors.New("payment method mismatch")
+	ErrPaymentGatewayMismatch  = errors.New("payment gateway mismatch")
 	ErrTopUpNotFound           = errors.New("topup not found")
 	ErrTopUpStatusInvalid      = errors.New("topup status invalid")
 	ErrInvalidTopUpQuota       = errors.New("invalid top-up quota")
@@ -173,7 +175,9 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 // 在同一个事务内完成，因此同一订单的并发/重复回调（包括多实例部署下）最多充值一次。
 // alreadyDone=true 表示订单此前已完成，本次为幂等重复回调。
 // 进程内的 LockOrder 只是优化，正确性由本函数的数据库行锁保证。
-func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (alreadyDone bool, err error) {
+// expectedGatewayId 必须与下单时绑定的网关一致，否则拒绝：否则任意一个已配置
+// 网关的密钥都能为其它网关的订单伪造成功回调。
+func RechargeEpay(tradeNo string, actualPaymentMethod string, expectedGatewayId string, callerIp string) (alreadyDone bool, err error) {
 	if tradeNo == "" {
 		return false, errors.New("未提供支付单号")
 	}
@@ -191,6 +195,9 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 		}
 		if topUp.PaymentProvider != PaymentProviderEpay {
 			return ErrPaymentMethodMismatch
+		}
+		if topUp.GatewayId != expectedGatewayId {
+			return ErrPaymentGatewayMismatch
 		}
 		if topUp.Status == common.TopUpStatusSuccess {
 			alreadyDone = true
@@ -217,7 +224,8 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 		return creditTopUpQuota(tx, topUp.UserId, quotaToAdd, nil)
 	})
 	if err != nil {
-		if !errors.Is(err, ErrTopUpNotFound) && !errors.Is(err, ErrPaymentMethodMismatch) && !errors.Is(err, ErrTopUpStatusInvalid) {
+		if !errors.Is(err, ErrTopUpNotFound) && !errors.Is(err, ErrPaymentMethodMismatch) &&
+			!errors.Is(err, ErrPaymentGatewayMismatch) && !errors.Is(err, ErrTopUpStatusInvalid) {
 			common.SysError("epay topup failed: " + err.Error())
 		}
 		return false, err

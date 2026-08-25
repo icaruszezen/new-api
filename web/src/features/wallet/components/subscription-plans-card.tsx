@@ -68,9 +68,18 @@ interface SubscriptionPlansCardProps {
   onPurchaseSuccess?: () => void | Promise<void>
 }
 
+// Types with their own checkout flow cannot be charged through the epay
+// endpoint, so they never belong in the epay method list.
+const NON_EPAY_PAYMENT_TYPES = new Set<string>([
+  'stripe',
+  'creem',
+  'waffo',
+  'waffo_pancake',
+])
+
 function getEpayMethods(payMethods: PaymentMethod[] = []): PaymentMethod[] {
   return payMethods.filter(
-    (m) => m?.type && m.type !== 'stripe' && m.type !== 'creem'
+    (m) => m?.type && !NON_EPAY_PAYMENT_TYPES.has(m.type)
   )
 }
 

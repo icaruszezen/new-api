@@ -22,6 +22,7 @@ import { PAYMENT_TYPES } from '../constants'
 import {
   dispatchSelectedPayment,
   getPaymentErrorMessage,
+  getPaymentMethodKey,
   isStripePayment,
   isWaffoPayment,
   isWaffoPancakePayment,
@@ -83,13 +84,68 @@ describe('payment dispatch', () => {
     expect(success).toBe(false)
     expect(called).toBe(false)
   })
+
+  test('charges an epay method through the gateway it is bound to', async () => {
+    const calls: string[] = []
+    const success = await dispatchSelectedPayment(
+      { name: 'Alipay Backup', type: 'alipay', gateway_id: 'gw_backup' },
+      50,
+      null,
+      {
+        regular: async (amount, paymentType, gatewayId) => {
+          calls.push(`regular:${amount}:${paymentType}:${gatewayId}`)
+          return true
+        },
+        waffo: async () => false,
+        waffoPancake: async () => false,
+      }
+    )
+
+    expect(success).toBe(true)
+    expect(calls).toEqual(['regular:50:alipay:gw_backup'])
+  })
+
+  test('leaves the gateway unset for a method on the default gateway', async () => {
+    const calls: (string | undefined)[] = []
+    await dispatchSelectedPayment(
+      { name: 'Alipay', type: 'alipay' },
+      50,
+      null,
+      {
+        regular: async (_amount, _paymentType, gatewayId) => {
+          calls.push(gatewayId)
+          return true
+        },
+        waffo: async () => false,
+        waffoPancake: async () => false,
+      }
+    )
+
+    expect(calls).toEqual([undefined])
+  })
+})
+
+describe('payment method identity', () => {
+  test('separates the same epay type configured on different gateways', () => {
+    const defaultGatewayMethod = { name: 'Alipay', type: 'alipay' }
+    const backupGatewayMethod = {
+      name: 'Alipay Backup',
+      type: 'alipay',
+      gateway_id: 'gw_backup',
+    }
+
+    expect(getPaymentMethodKey(defaultGatewayMethod)).toBe(
+      getPaymentMethodKey({ name: 'Alipay renamed', type: 'alipay' })
+    )
+    expect(getPaymentMethodKey(defaultGatewayMethod)).not.toBe(
+      getPaymentMethodKey(backupGatewayMethod)
+    )
+  })
 })
 
 describe('payment error message', () => {
   test('prefers the backend data reason over a generic error message', () => {
-    expect(getPaymentErrorMessage('error', '拉起支付失败')).toBe(
-      '拉起支付失败'
-    )
+    expect(getPaymentErrorMessage('error', '拉起支付失败')).toBe('拉起支付失败')
   })
 
   test('falls back to the response message when data is not a reason string', () => {

@@ -220,6 +220,7 @@ type SubscriptionOrder struct {
 	TradeNo         string `json:"trade_no" gorm:"unique;type:varchar(255);index"`
 	PaymentMethod   string `json:"payment_method" gorm:"type:varchar(50)"`
 	PaymentProvider string `json:"payment_provider" gorm:"type:varchar(50);default:''"`
+	GatewayId       string `json:"gateway_id" gorm:"type:varchar(64);default:''"`
 	Status          string `json:"status"`
 	CreateTime      int64  `json:"create_time"`
 	CompleteTime    int64  `json:"complete_time"`
@@ -565,8 +566,11 @@ func refreshSubscriptionUserGroupCache(userId int, operation string) {
 
 // Complete a subscription order (idempotent). Creates a UserSubscription snapshot from the plan.
 // expectedPaymentProvider guards against cross-gateway callback attacks (empty skips the check).
+// expectedGatewayId must match the epay gateway the order was created with, so a callback signed
+// by one configured gateway cannot complete another gateway's order. Providers without gateways
+// pass an empty id, which matches their orders.
 // actualPaymentMethod updates the order's PaymentMethod to reflect the real payment type used (empty skips update).
-func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedPaymentProvider string, actualPaymentMethod string) error {
+func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedPaymentProvider string, expectedGatewayId string, actualPaymentMethod string) error {
 	if tradeNo == "" {
 		return errors.New("tradeNo is empty")
 	}
@@ -586,6 +590,9 @@ func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedP
 		}
 		if expectedPaymentProvider != "" && order.PaymentProvider != expectedPaymentProvider {
 			return ErrPaymentMethodMismatch
+		}
+		if order.GatewayId != expectedGatewayId {
+			return ErrPaymentGatewayMismatch
 		}
 		if order.Status == common.TopUpStatusSuccess {
 			return nil

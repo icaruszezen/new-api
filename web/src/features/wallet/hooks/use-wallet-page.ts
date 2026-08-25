@@ -29,6 +29,7 @@ import {
   getDefaultPaymentType,
   getDisplayPaymentAmount,
   getMinTopupAmount,
+  getPaymentMethodKey,
 } from '../lib'
 import type {
   CreemProduct,
@@ -176,7 +177,7 @@ export function useWalletPage(options: UseWalletPageOptions = {}) {
       return
     }
 
-    setPaymentLoading(method.type)
+    setPaymentLoading(getPaymentMethodKey(method))
     try {
       const minTopup = getMinTopupAmount(topupInfo)
       if (topupAmount < minTopup) {
@@ -275,7 +276,7 @@ export function useWalletPage(options: UseWalletPageOptions = {}) {
     const minTopup = getMinTopupAmount(topupInfo)
     if (topupAmount < minTopup) return
 
-    setPaymentLoading(selectedPaymentMethod.type)
+    setPaymentLoading(getPaymentMethodKey(selectedPaymentMethod))
     try {
       await calculatePaymentAmount(topupAmount, selectedPaymentMethod.type)
       setConfirmDialogOpen(true)

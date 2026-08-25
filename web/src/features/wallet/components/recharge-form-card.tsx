@@ -43,6 +43,7 @@ import {
   getDiscountLabel,
   getDisplayPaymentAmount,
   getPaymentIcon,
+  getPaymentMethodKey,
   getMinTopupAmount,
   calculatePresetPricing,
 } from '../lib'
@@ -341,10 +342,11 @@ export function RechargeFormCard({
                       const disabledLabel = disabled
                         ? `${t('Minimum:')} ${minTopup}`
                         : undefined
+                      const methodKey = getPaymentMethodKey(method)
 
                       const button = (
                         <Button
-                          key={method.type}
+                          key={methodKey}
                           variant='outline'
                           onClick={() => onPaymentMethodSelect(method)}
                           disabled={disabled || !!paymentLoading}
@@ -356,7 +358,7 @@ export function RechargeFormCard({
                           }
                           className='min-h-14 min-w-0 justify-start gap-2 rounded-lg px-3 py-2 text-left'
                         >
-                          {paymentLoading === method.type ? (
+                          {paymentLoading === methodKey ? (
                             <Loader2 className='h-4 w-4 animate-spin' />
                           ) : (
                             getPaymentIcon(
@@ -380,7 +382,7 @@ export function RechargeFormCard({
                       )
 
                       return disabled ? (
-                        <TooltipProvider key={method.type}>
+                        <TooltipProvider key={methodKey}>
                           <Tooltip>
                             <TooltipTrigger render={button} />
                             <TooltipContent>{disabledReason}</TooltipContent>

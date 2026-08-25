@@ -3,14 +3,12 @@ package controller
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 
 	"github.com/Calcium-Ion/go-epay/epay"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
@@ -19,6 +17,7 @@ import (
 type SubscriptionEpayPayRequest struct {
 	PlanId        int    `json:"plan_id"`
 	PaymentMethod string `json:"payment_method"`
+	GatewayId     string `json:"gateway_id"`
 }
 
 func SubscriptionRequestEpay(c *gin.Context) {
@@ -45,7 +44,7 @@ func SubscriptionRequestEpay(c *gin.Context) {
 		common.ApiErrorMsg(c, "套餐金额过低")
 		return
 	}
-	if !operation_setting.ContainsPayMethod(req.PaymentMethod) {
+	if _, ok := operation_setting.FindPayMethod(req.PaymentMethod, req.GatewayId); !ok {
 		common.ApiErrorMsg(c, "支付方式不存在")
 		return
 	}
@@ -63,13 +62,17 @@ func SubscriptionRequestEpay(c *gin.Context) {
 		}
 	}
 
-	callBackAddress := service.GetCallbackAddress()
-	returnUrl, err := url.Parse(callBackAddress + "/api/subscription/epay/return")
+	gateway, ok := resolveEpayGateway(req.GatewayId)
+	if !ok {
+		common.ApiErrorMsg(c, "当前管理员未配置支付信息")
+		return
+	}
+	returnUrl, err := epayCallbackURL(gateway, "/api/subscription/epay/return")
 	if err != nil {
 		common.ApiErrorMsg(c, "回调地址配置错误")
 		return
 	}
-	notifyUrl, err := url.Parse(callBackAddress + "/api/subscription/epay/notify")
+	notifyUrl, err := epayCallbackURL(gateway, "/api/subscription/epay/notify")
 	if err != nil {
 		common.ApiErrorMsg(c, "回调地址配置错误")
 		return
@@ -78,7 +81,7 @@ func SubscriptionRequestEpay(c *gin.Context) {
 	tradeNo := fmt.Sprintf("%s%d", common.GetRandomString(6), time.Now().Unix())
 	tradeNo = fmt.Sprintf("SUBUSR%dNO%s", userId, tradeNo)
 
-	client := GetEpayClient()
+	client := GetEpayClient(gateway)
 	if client == nil {
 		common.ApiErrorMsg(c, "当前管理员未配置支付信息")
 		return
@@ -91,6 +94,7 @@ func SubscriptionRequestEpay(c *gin.Context) {
 		TradeNo:         tradeNo,
 		PaymentMethod:   req.PaymentMethod,
 		PaymentProvider: model.PaymentProviderEpay,
+		GatewayId:       gateway.Id,
 		CreateTime:      time.Now().Unix(),
 		Status:          common.TopUpStatusPending,
 	}
@@ -116,6 +120,12 @@ func SubscriptionRequestEpay(c *gin.Context) {
 }
 
 func SubscriptionEpayNotify(c *gin.Context) {
+	gateway, gatewayOk := epayCallbackGateway(c)
+	if !gatewayOk {
+		_, _ = c.Writer.Write([]byte("fail"))
+		return
+	}
+
 	var params map[string]string
 
 	if c.Request.Method == "POST" {
@@ -141,7 +151,7 @@ func SubscriptionEpayNotify(c *gin.Context) {
 		return
 	}
 
-	client := GetEpayClient()
+	client := GetEpayClient(gateway)
 	if client == nil {
 		_, _ = c.Writer.Write([]byte("fail"))
 		return
@@ -160,7 +170,7 @@ func SubscriptionEpayNotify(c *gin.Context) {
 	LockOrder(verifyInfo.ServiceTradeNo)
 	defer UnlockOrder(verifyInfo.ServiceTradeNo)
 
-	if err := model.CompleteSubscriptionOrder(verifyInfo.ServiceTradeNo, common.GetJsonString(verifyInfo), model.PaymentProviderEpay, verifyInfo.Type); err != nil {
+	if err := model.CompleteSubscriptionOrder(verifyInfo.ServiceTradeNo, common.GetJsonString(verifyInfo), model.PaymentProviderEpay, gateway.Id, verifyInfo.Type); err != nil {
 		_, _ = c.Writer.Write([]byte("fail"))
 		return
 	}
@@ -171,6 +181,12 @@ func SubscriptionEpayNotify(c *gin.Context) {
 // SubscriptionEpayReturn handles browser return after payment.
 // It verifies the payload and completes the order, then redirects to console.
 func SubscriptionEpayReturn(c *gin.Context) {
+	gateway, gatewayOk := epayCallbackGateway(c)
+	if !gatewayOk {
+		c.Redirect(http.StatusFound, paymentReturnPath("/wallet?pay=fail"))
+		return
+	}
+
 	var params map[string]string
 
 	if c.Request.Method == "POST" {
@@ -196,7 +212,7 @@ func SubscriptionEpayReturn(c *gin.Context) {
 		return
 	}
 
-	client := GetEpayClient()
+	client := GetEpayClient(gateway)
 	if client == nil {
 		c.Redirect(http.StatusFound, paymentReturnPath("/wallet?pay=fail"))
 		return
@@ -209,7 +225,7 @@ func SubscriptionEpayReturn(c *gin.Context) {
 	if verifyInfo.TradeStatus == epay.StatusTradeSuccess {
 		LockOrder(verifyInfo.ServiceTradeNo)
 		defer UnlockOrder(verifyInfo.ServiceTradeNo)
-		if err := model.CompleteSubscriptionOrder(verifyInfo.ServiceTradeNo, common.GetJsonString(verifyInfo), model.PaymentProviderEpay, verifyInfo.Type); err != nil {
+		if err := model.CompleteSubscriptionOrder(verifyInfo.ServiceTradeNo, common.GetJsonString(verifyInfo), model.PaymentProviderEpay, gateway.Id, verifyInfo.Type); err != nil {
 			c.Redirect(http.StatusFound, paymentReturnPath("/wallet?pay=fail"))
 			return
 		}

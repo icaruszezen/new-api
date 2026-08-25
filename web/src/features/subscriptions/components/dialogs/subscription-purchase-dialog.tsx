@@ -51,6 +51,14 @@ import type { PlanRecord } from '../../types'
 interface PaymentMethod {
   type: string
   name?: string
+  /** Epay gateway this method is charged through. Blank = default gateway. */
+  gateway_id?: string
+}
+
+// The same epay type can be offered through several gateways, so selection is
+// keyed by the type and gateway pair.
+function getEpayMethodKey(method: PaymentMethod) {
+  return `${method.type}:${method.gateway_id ?? ''}`
 }
 
 interface Props {
@@ -72,13 +80,13 @@ export function SubscriptionPurchaseDialog(props: Props) {
   const { t } = useTranslation()
   const { currency } = useSystemConfig()
   const [paying, setPaying] = useState(false)
-  const [selectedEpayMethod, setSelectedEpayMethod] = useState('')
+  const [selectedEpayMethodKey, setSelectedEpayMethodKey] = useState('')
 
   useEffect(() => {
     if (props.open && props.epayMethods && props.epayMethods.length > 0) {
-      setSelectedEpayMethod(props.epayMethods[0].type)
+      setSelectedEpayMethodKey(getEpayMethodKey(props.epayMethods[0]))
     } else if (!props.open) {
-      setSelectedEpayMethod('')
+      setSelectedEpayMethodKey('')
     }
   }, [props.open, props.epayMethods])
 
@@ -92,10 +100,12 @@ export function SubscriptionPurchaseDialog(props: Props) {
   const hasEpay =
     props.enableOnlineTopUp && (props.epayMethods || []).length > 0
   const hasAnyPayment = hasStripe || hasCreem || hasWaffoPancake || hasEpay
+  const selectedEpayMethod = (props.epayMethods || []).find(
+    (m) => getEpayMethodKey(m) === selectedEpayMethodKey
+  )
   const selectedEpayMethodLabel =
-    (props.epayMethods || []).find((m) => m.type === selectedEpayMethod)
-      ?.name ||
-    selectedEpayMethod ||
+    selectedEpayMethod?.name ||
+    selectedEpayMethod?.type ||
     t('Select payment method')
   const totalAmount = Number(plan.total_amount || 0)
   const price = Number(plan.price_amount || 0).toFixed(2)
@@ -194,7 +204,8 @@ export function SubscriptionPurchaseDialog(props: Props) {
     try {
       const res = await paySubscriptionEpay({
         plan_id: plan.id,
-        payment_method: selectedEpayMethod,
+        payment_method: selectedEpayMethod.type,
+        gateway_id: selectedEpayMethod.gateway_id,
       })
       if (res.message === 'success' && res.url) {
         const form = document.createElement('form')
@@ -405,14 +416,14 @@ export function SubscriptionPurchaseDialog(props: Props) {
             {hasEpay && (
               <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-2'>
                 <Select
-                  items={[
-                    ...(props.epayMethods || []).map((m) => ({
-                      value: m.type,
-                      label: m.name || m.type,
-                    })),
-                  ]}
-                  value={selectedEpayMethod}
-                  onValueChange={(v) => v !== null && setSelectedEpayMethod(v)}
+                  items={(props.epayMethods || []).map((m) => ({
+                    value: getEpayMethodKey(m),
+                    label: m.name || m.type,
+                  }))}
+                  value={selectedEpayMethodKey}
+                  onValueChange={(v) =>
+                    v !== null && setSelectedEpayMethodKey(v)
+                  }
                   disabled={limitReached}
                 >
                   <SelectTrigger className='flex-1'>
@@ -421,7 +432,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
                   <SelectContent alignItemWithTrigger={false}>
                     <SelectGroup>
                       {(props.epayMethods || []).map((m) => (
-                        <SelectItem key={m.type} value={m.type}>
+                        <SelectItem
+                          key={getEpayMethodKey(m)}
+                          value={getEpayMethodKey(m)}
+                        >
                           {m.name || m.type}
                         </SelectItem>
                       ))}

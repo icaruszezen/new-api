@@ -111,7 +111,11 @@ export function getPaymentErrorMessage(
 }
 
 export interface PaymentProcessors {
-  regular: (topupAmount: number, paymentType: string) => Promise<boolean>
+  regular: (
+    topupAmount: number,
+    paymentType: string,
+    gatewayId?: string
+  ) => Promise<boolean>
   waffo: (topupAmount: number, payMethodIndex: number) => Promise<boolean>
   waffoPancake: (topupAmount: number) => Promise<boolean>
 }
@@ -133,7 +137,20 @@ export async function dispatchSelectedPayment(
     return processors.waffoPancake(topupAmount)
   }
 
-  return processors.regular(topupAmount, paymentMethod.type)
+  return processors.regular(
+    topupAmount,
+    paymentMethod.type,
+    paymentMethod.gateway_id
+  )
+}
+
+/**
+ * Identity of a configured payment method. The same epay type can be offered
+ * through several gateways, so the gateway is part of the identity used for
+ * React keys, selection and per-button loading state.
+ */
+export function getPaymentMethodKey(paymentMethod: PaymentMethod): string {
+  return `${paymentMethod.type}:${paymentMethod.gateway_id ?? ''}`
 }
 
 /**

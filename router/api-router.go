@@ -77,6 +77,10 @@ func SetApiRouter(router *gin.Engine) {
 			//userRoute.POST("/tokenlog", middleware.CriticalRateLimit(), controller.TokenLog)
 			userRoute.POST("/epay/notify", anonymousRequestBodyLimit, controller.EpayNotify)
 			userRoute.GET("/epay/notify", controller.EpayNotify)
+			// Per-gateway callbacks. The suffix-free routes above stay for the
+			// default gateway so callbacks of older orders keep resolving.
+			userRoute.POST("/epay/notify/:gatewayId", anonymousRequestBodyLimit, controller.EpayNotify)
+			userRoute.GET("/epay/notify/:gatewayId", controller.EpayNotify)
 			userRoute.GET("/groups", controller.GetUserGroups)
 
 			selfRoute := userRoute.Group("/")
@@ -188,6 +192,10 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/subscription/epay/notify", controller.SubscriptionEpayNotify)
 		apiRouter.GET("/subscription/epay/return", controller.SubscriptionEpayReturn)
 		apiRouter.POST("/subscription/epay/return", anonymousRequestBodyLimit, controller.SubscriptionEpayReturn)
+		apiRouter.POST("/subscription/epay/notify/:gatewayId", anonymousRequestBodyLimit, controller.SubscriptionEpayNotify)
+		apiRouter.GET("/subscription/epay/notify/:gatewayId", controller.SubscriptionEpayNotify)
+		apiRouter.GET("/subscription/epay/return/:gatewayId", controller.SubscriptionEpayReturn)
+		apiRouter.POST("/subscription/epay/return/:gatewayId", anonymousRequestBodyLimit, controller.SubscriptionEpayReturn)
 		optionRoute := apiRouter.Group("/option")
 		optionRoute.Use(middleware.RootAuth())
 		{

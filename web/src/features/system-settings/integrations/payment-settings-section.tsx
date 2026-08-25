@@ -61,6 +61,8 @@ import { safeNumberFieldProps } from '../utils/numeric-field'
 import { AmountDiscountVisualEditor } from './amount-discount-visual-editor'
 import { AmountOptionsVisualEditor } from './amount-options-visual-editor'
 import { CreemProductsVisualEditor } from './creem-products-visual-editor'
+import type { EpayGatewayData } from './epay-gateway-dialog'
+import { EpayGatewaysVisualEditor } from './epay-gateways-visual-editor'
 import { PaymentMethodsVisualEditor } from './payment-methods-visual-editor'
 import {
   formatJsonForEditor,
@@ -102,6 +104,15 @@ const paymentSchema = z.object({
   }, 'Provide a valid callback URL starting with http:// or https://'),
   EpayId: z.string(),
   EpayKey: z.string(),
+  EpayGateways: z.string().superRefine((value, ctx) => {
+    const error = getJsonError(value, (parsed) => Array.isArray(parsed))
+    if (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: error,
+      })
+    }
+  }),
   Price: z.coerce.number().min(0),
   MinTopUp: z.coerce.number().min(0),
   CustomCallbackAddress: z
@@ -208,6 +219,40 @@ function parseWaffoPayMethods(value: string): PayMethod[] {
   try {
     const parsed = JSON.parse(value || '[]')
     return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+// The options API withholds gateway secret keys, so entries arrive with a blank
+// epay_key and a blank value keeps the stored secret on save.
+function parseEpayGateways(value: string): EpayGatewayData[] {
+  try {
+    const parsed: unknown = JSON.parse(value || '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter(
+        (item): item is Record<string, unknown> =>
+          !!item && typeof item === 'object'
+      )
+      .filter(
+        (item) =>
+          typeof item.id === 'string' &&
+          typeof item.name === 'string' &&
+          typeof item.pay_address === 'string' &&
+          typeof item.epay_id === 'string'
+      )
+      .map((item) => ({
+        id: item.id as string,
+        name: item.name as string,
+        pay_address: item.pay_address as string,
+        epay_id: item.epay_id as string,
+        epay_key: typeof item.epay_key === 'string' ? item.epay_key : '',
+        custom_callback_address:
+          typeof item.custom_callback_address === 'string'
+            ? item.custom_callback_address
+            : undefined,
+      }))
   } catch {
     return []
   }
@@ -353,6 +398,7 @@ export function PaymentSettingsSection({
     defaultValues: {
       ...initialFormValues,
       PayMethods: formatJsonForEditor(initialFormValues.PayMethods),
+      EpayGateways: formatJsonForEditor(initialFormValues.EpayGateways),
       AmountOptions: formatJsonForEditor(initialFormValues.AmountOptions),
       AmountDiscount: formatJsonForEditor(initialFormValues.AmountDiscount),
       CreemProducts: formatJsonForEditor(initialFormValues.CreemProducts),
@@ -360,6 +406,16 @@ export function PaymentSettingsSection({
   })
 
   const { isSubmitting } = form.formState
+
+  const epayGatewaysValue = form.watch('EpayGateways')
+  const epayGatewayOptions = React.useMemo(
+    () =>
+      parseEpayGateways(epayGatewaysValue).map((gateway) => ({
+        id: gateway.id,
+        name: gateway.name,
+      })),
+    [epayGatewaysValue]
+  )
 
   const setPaymentValue = React.useCallback(
     (
@@ -410,6 +466,7 @@ export function PaymentSettingsSection({
     form.reset({
       ...parsedDefaults,
       PayMethods: formatJsonForEditor(parsedDefaults.PayMethods),
+      EpayGateways: formatJsonForEditor(parsedDefaults.EpayGateways),
       AmountOptions: formatJsonForEditor(parsedDefaults.AmountOptions),
       AmountDiscount: formatJsonForEditor(parsedDefaults.AmountDiscount),
       CreemProducts: formatJsonForEditor(parsedDefaults.CreemProducts),
@@ -424,6 +481,7 @@ export function PaymentSettingsSection({
       Price: values.Price,
       MinTopUp: values.MinTopUp,
       CustomCallbackAddress: removeTrailingSlash(values.CustomCallbackAddress),
+      EpayGateways: values.EpayGateways.trim(),
       PayMethods: values.PayMethods.trim(),
       AmountOptions: values.AmountOptions.trim(),
       AmountDiscount: values.AmountDiscount.trim(),
@@ -468,6 +526,7 @@ export function PaymentSettingsSection({
       CustomCallbackAddress: removeTrailingSlash(
         initialRef.current.CustomCallbackAddress
       ),
+      EpayGateways: initialRef.current.EpayGateways.trim(),
       PayMethods: initialRef.current.PayMethods.trim(),
       AmountOptions: initialRef.current.AmountOptions.trim(),
       AmountDiscount: initialRef.current.AmountDiscount.trim(),
@@ -533,6 +592,13 @@ export function PaymentSettingsSection({
         key: 'CustomCallbackAddress',
         value: sanitized.CustomCallbackAddress,
       })
+    }
+
+    if (
+      normalizeJsonForComparison(sanitized.EpayGateways) !==
+      normalizeJsonForComparison(initial.EpayGateways)
+    ) {
+      updates.push({ key: 'EpayGateways', value: sanitized.EpayGateways })
     }
 
     if (
@@ -982,6 +1048,7 @@ export function PaymentSettingsSection({
                           <PaymentMethodsVisualEditor
                             value={field.value}
                             onChange={field.onChange}
+                            epayGateways={epayGatewayOptions}
                           />
                         ) : (
                           <JsonCodeEditor
@@ -1153,6 +1220,17 @@ export function PaymentSettingsSection({
                   </AlertDescription>
                 </Alert>
 
+                <div>
+                  <h4 className='text-base font-medium'>
+                    {t('Default gateway')}
+                  </h4>
+                  <p className='text-muted-foreground text-sm'>
+                    {t(
+                      'Used by every payment method that is not bound to a specific gateway.'
+                    )}
+                  </p>
+                </div>
+
                 <div className='grid gap-6 md:grid-cols-2'>
                   <FormField
                     control={form.control}
@@ -1250,6 +1328,37 @@ export function PaymentSettingsSection({
                     )}
                   />
                 </div>
+
+                <FormField
+                  control={form.control}
+                  name='EpayGateways'
+                  render={({ field }) => (
+                    <FormItem>
+                      <div className='mb-2'>
+                        <FormLabel className='text-base font-medium'>
+                          {t('Additional gateways')}
+                        </FormLabel>
+                        <p className='text-muted-foreground text-sm'>
+                          {t(
+                            'Add as many Epay gateways as you need. Each one keeps its own credentials and callback URL, and payment methods pick the gateway they are charged through.'
+                          )}
+                        </p>
+                      </div>
+                      <FormControl>
+                        <EpayGatewaysVisualEditor
+                          gateways={parseEpayGateways(field.value)}
+                          onGatewaysChange={(gateways) =>
+                            field.onChange(JSON.stringify(gateways, null, 2))
+                          }
+                          notifyUrlPreviewBase={
+                            currentFormValues.CustomCallbackAddress
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
             </TabsContent>
 

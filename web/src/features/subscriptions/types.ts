@@ -92,6 +92,8 @@ export interface PlanPayload {
 export interface SubscriptionPayRequest {
   plan_id: number
   payment_method?: string
+  /** Epay gateway to charge through. Omit or blank for the default gateway. */
+  gateway_id?: string
 }
 
 export interface SubscriptionPayResponse {

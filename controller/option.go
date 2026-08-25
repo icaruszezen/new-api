@@ -93,6 +93,9 @@ func GetOptions(c *gin.Context) {
 		if isSensitiveKey {
 			continue
 		}
+		if k == operation_setting.EpayGatewaysOptionKey {
+			value = operation_setting.EpayGatewaysRedactedJSON()
+		}
 		options = append(options, &model.Option{
 			Key:   k,
 			Value: value,
@@ -263,6 +266,16 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case operation_setting.EpayGatewaysOptionKey:
+		merged, mergeErr := operation_setting.MergeEpayGatewaySecrets(option.Value.(string))
+		if mergeErr != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": mergeErr.Error(),
+			})
+			return
+		}
+		option.Value = merged
 	case "ImageRatio":
 		err = ratio_setting.UpdateImageRatioByJSONString(option.Value.(string))
 		if err != nil {

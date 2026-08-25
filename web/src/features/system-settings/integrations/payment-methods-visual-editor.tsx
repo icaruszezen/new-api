@@ -35,16 +35,20 @@ import { safeJsonParseWithValidation } from '../utils/json-parser'
 import { isArray } from '../utils/json-validators'
 import {
   PaymentMethodDialog,
+  type EpayGatewayOption,
   type PaymentMethodData,
 } from './payment-method-dialog'
 
 type PaymentMethodsVisualEditorProps = {
   value: string
   onChange: (value: string) => void
+  epayGateways?: EpayGatewayOption[]
 }
 
 const PAYMENT_TYPE_ICON_NAMES: Record<string, string> = {
   alipay: 'SiAlipay',
+  bank: 'RiBankFill',
+  douyinpay: 'SiTiktok',
   stripe: 'SiStripe',
   waffo_pancake: 'LuCreditCard',
   wxpay: 'SiWechat',
@@ -58,9 +62,38 @@ function getEffectiveIconName(method: PaymentMethodData) {
   return method.icon || getDefaultIconName(method.type)
 }
 
+// A payment method is identified by its type plus the gateway it is bound to,
+// because the same epay type can be configured once per gateway.
+function isSameMethod(method: PaymentMethodData, other: PaymentMethodData) {
+  return (
+    method.name === other.name &&
+    method.type === other.type &&
+    (method.gateway_id ?? '') === (other.gateway_id ?? '')
+  )
+}
+
+const NON_EPAY_PAYMENT_TYPES = new Set([
+  'creem',
+  'stripe',
+  'waffo',
+  'waffo_pancake',
+])
+
+function getGatewayLabel(
+  method: PaymentMethodData,
+  gatewayNamesById: Map<string, string>,
+  t: (key: string) => string
+) {
+  if (NON_EPAY_PAYMENT_TYPES.has(method.type)) return '—'
+  const gatewayId = method.gateway_id ?? ''
+  if (!gatewayId) return t('Default gateway')
+  return gatewayNamesById.get(gatewayId) ?? gatewayId
+}
+
 export function PaymentMethodsVisualEditor({
   value,
   onChange,
+  epayGateways = [],
 }: PaymentMethodsVisualEditorProps) {
   const { t } = useTranslation()
   const paymentTemplates = [
@@ -78,6 +111,22 @@ export function PaymentMethodsVisualEditor({
         icon: getDefaultIconName('wxpay'),
         name: '微信',
         type: 'wxpay',
+      },
+    },
+    {
+      name: t('Epay Online Banking'),
+      template: {
+        icon: getDefaultIconName('bank'),
+        name: '网银支付',
+        type: 'bank',
+      },
+    },
+    {
+      name: t('Epay Douyin Pay'),
+      template: {
+        icon: getDefaultIconName('douyinpay'),
+        name: '抖音支付',
+        type: 'douyinpay',
       },
     },
     {
@@ -129,9 +178,15 @@ export function PaymentMethodsVisualEditor({
         typeof item.type === 'string' &&
         (!('icon' in item) || typeof item.icon === 'string') &&
         (!('min_topup' in item) || typeof item.min_topup === 'string') &&
-        (!('color' in item) || typeof item.color === 'string')
+        (!('color' in item) || typeof item.color === 'string') &&
+        (!('gateway_id' in item) || typeof item.gateway_id === 'string')
     )
   }, [value])
+
+  const gatewayNamesById = useMemo(
+    () => new Map(epayGateways.map((gateway) => [gateway.id, gateway.name])),
+    [epayGateways]
+  )
 
   const filteredMethods = useMemo(() => {
     if (!searchText) return paymentMethods
@@ -140,9 +195,13 @@ export function PaymentMethodsVisualEditor({
       (method) =>
         method.name.toLowerCase().includes(lowerSearch) ||
         method.type.toLowerCase().includes(lowerSearch) ||
+        (method.gateway_id ?? '').toLowerCase().includes(lowerSearch) ||
+        (gatewayNamesById.get(method.gateway_id ?? '') ?? '')
+          .toLowerCase()
+          .includes(lowerSearch) ||
         getEffectiveIconName(method).toLowerCase().includes(lowerSearch)
     )
-  }, [paymentMethods, searchText])
+  }, [paymentMethods, searchText, gatewayNamesById])
 
   const handleSave = (data: PaymentMethodData) => {
     const parsed = safeJsonParseWithValidation<unknown[]>(value, {
@@ -160,8 +219,7 @@ export function PaymentMethodsVisualEditor({
           item !== null &&
           'name' in item &&
           'type' in item &&
-          item.name === editData.name &&
-          item.type === editData.type
+          isSameMethod(item as PaymentMethodData, editData)
       )
       if (index !== -1) {
         updatedArray[index] = data
@@ -189,8 +247,7 @@ export function PaymentMethodsVisualEditor({
           item !== null &&
           'name' in item &&
           'type' in item &&
-          item.name === method.name &&
-          item.type === method.type
+          isSameMethod(item as PaymentMethodData, method)
         )
     )
 
@@ -221,8 +278,7 @@ export function PaymentMethodsVisualEditor({
         item !== null &&
         'type' in item &&
         'name' in item &&
-        item.type === template.type &&
-        item.name === template.name
+        isSameMethod(item as PaymentMethodData, template)
     )
 
     if (!exists) {
@@ -308,7 +364,9 @@ export function PaymentMethodsVisualEditor({
           <StaticDataTable
             className='hidden rounded-none border-0 md:block'
             data={filteredMethods}
-            getRowKey={(method, index) => `${method.type}-${index}`}
+            getRowKey={(method, index) =>
+              `${method.type}-${method.gateway_id ?? ''}-${index}`
+            }
             columns={[
               {
                 id: 'name',
@@ -323,6 +381,15 @@ export function PaymentMethodsVisualEditor({
                   <code className='bg-muted rounded px-1.5 py-0.5 text-sm'>
                     {method.type}
                   </code>
+                ),
+              },
+              {
+                id: 'gateway',
+                header: t('Epay gateway'),
+                cell: (method) => (
+                  <span className='text-muted-foreground text-sm'>
+                    {getGatewayLabel(method, gatewayNamesById, t)}
+                  </span>
                 ),
               },
               {
@@ -383,6 +450,7 @@ export function PaymentMethodsVisualEditor({
               const iconName = getEffectiveIconName(method)
               const methodKey = [
                 method.type,
+                method.gateway_id,
                 method.name,
                 method.icon,
                 method.min_topup,
@@ -430,6 +498,14 @@ export function PaymentMethodsVisualEditor({
                   <div className='space-y-2 text-sm'>
                     <div className='flex items-center gap-2'>
                       <span className='text-muted-foreground min-w-20'>
+                        {t('Epay gateway')}
+                      </span>
+                      <span className='text-muted-foreground truncate'>
+                        {getGatewayLabel(method, gatewayNamesById, t)}
+                      </span>
+                    </div>
+                    <div className='flex items-center gap-2'>
+                      <span className='text-muted-foreground min-w-20'>
                         {t('Icon')}
                       </span>
                       {iconName ? (
@@ -468,6 +544,7 @@ export function PaymentMethodsVisualEditor({
         onOpenChange={setDialogOpen}
         onSave={handleSave}
         editData={editData}
+        epayGateways={epayGateways}
       />
     </div>
   )

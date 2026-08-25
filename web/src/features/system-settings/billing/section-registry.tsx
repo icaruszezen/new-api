@@ -140,6 +140,7 @@ const BILLING_SECTIONS = [
           Price: settings.Price,
           MinTopUp: settings.MinTopUp,
           CustomCallbackAddress: settings.CustomCallbackAddress,
+          EpayGateways: settings.EpayGateways ?? '[]',
           PayMethods: settings.PayMethods,
           AmountOptions: settings['payment_setting.amount_options'],
           AmountDiscount: settings['payment_setting.amount_discount'],

@@ -100,6 +100,11 @@ export interface PaymentMethod {
   min_topup?: number
   /** Optional react-icons component name or safe icon URL */
   icon?: string
+  /**
+   * Epay gateway this method is charged through. Blank or absent means the
+   * default gateway, so the same type can appear once per gateway.
+   */
+  gateway_id?: string
 }
 
 /**
@@ -184,6 +189,8 @@ export interface PaymentRequest {
   amount: number
   /** Payment method identifier */
   payment_method: string
+  /** Epay gateway to charge through. Omit or blank for the default gateway. */
+  gateway_id?: string
 }
 
 /**

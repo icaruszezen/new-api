@@ -167,3 +167,72 @@ func TestEpayWebhookEnabledRequiresTopUpAndWebhookConfig(t *testing.T) {
 	operation_setting.PayMethods = nil
 	require.False(t, isEpayWebhookEnabled())
 }
+
+// An additional gateway keeps epay usable even when the legacy default gateway
+// was never filled in.
+func TestEpayWebhookEnabledWithOnlyAdditionalGateway(t *testing.T) {
+	confirmPaymentComplianceForTest(t)
+	originalPayAddress := operation_setting.PayAddress
+	originalEpayID := operation_setting.EpayId
+	originalEpayKey := operation_setting.EpayKey
+	originalPayMethods := operation_setting.PayMethods
+	originalGateways := operation_setting.EpayGateways
+	t.Cleanup(func() {
+		operation_setting.PayAddress = originalPayAddress
+		operation_setting.EpayId = originalEpayID
+		operation_setting.EpayKey = originalEpayKey
+		operation_setting.PayMethods = originalPayMethods
+		operation_setting.EpayGateways = originalGateways
+	})
+
+	operation_setting.PayAddress = ""
+	operation_setting.EpayId = ""
+	operation_setting.EpayKey = ""
+	operation_setting.PayMethods = []map[string]string{{"type": "alipay", "gateway_id": "gw_one"}}
+	operation_setting.EpayGateways = nil
+	require.False(t, isEpayWebhookEnabled())
+
+	operation_setting.EpayGateways = []operation_setting.EpayGateway{{
+		Id:         "gw_one",
+		Name:       "Gateway One",
+		PayAddress: "https://one.example.com",
+		EpayId:     "one_id",
+		EpayKey:    "one_key",
+	}}
+	require.True(t, isEpayWebhookEnabled())
+}
+
+func TestPayMethodsWithReachableGatewayHidesUnusableEpayMethods(t *testing.T) {
+	originalPayAddress := operation_setting.PayAddress
+	originalEpayID := operation_setting.EpayId
+	originalEpayKey := operation_setting.EpayKey
+	originalGateways := operation_setting.EpayGateways
+	t.Cleanup(func() {
+		operation_setting.PayAddress = originalPayAddress
+		operation_setting.EpayId = originalEpayID
+		operation_setting.EpayKey = originalEpayKey
+		operation_setting.EpayGateways = originalGateways
+	})
+
+	operation_setting.PayAddress = ""
+	operation_setting.EpayId = ""
+	operation_setting.EpayKey = ""
+	operation_setting.EpayGateways = []operation_setting.EpayGateway{{
+		Id:         "gw_one",
+		Name:       "Gateway One",
+		PayAddress: "https://one.example.com",
+		EpayId:     "one_id",
+		EpayKey:    "one_key",
+	}}
+
+	payMethods := payMethodsWithReachableGateway([]map[string]string{
+		{"type": "alipay"},
+		{"type": "alipay", "gateway_id": "gw_one"},
+		{"type": "wxpay", "gateway_id": "gw_missing"},
+		{"type": "stripe"},
+	})
+
+	require.Len(t, payMethods, 2)
+	require.Equal(t, "gw_one", payMethods[0]["gateway_id"])
+	require.Equal(t, "stripe", payMethods[1]["type"])
+}

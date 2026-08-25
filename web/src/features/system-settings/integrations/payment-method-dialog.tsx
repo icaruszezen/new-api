@@ -36,6 +36,13 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 const createPaymentMethodDialogSchema = (t: (key: string) => string) =>
   z.object({
@@ -43,6 +50,7 @@ const createPaymentMethodDialogSchema = (t: (key: string) => string) =>
     type: z.string().min(1, t('Payment type key is required')),
     icon: z.string().optional(),
     min_topup: z.string().optional(),
+    gateway_id: z.string().optional(),
   })
 
 type PaymentMethodDialogFormValues = z.infer<
@@ -57,6 +65,13 @@ export type PaymentMethodData = {
   icon?: string
   min_topup?: string
   color?: string
+  /** Epay gateway this method is charged through. Blank = default gateway. */
+  gateway_id?: string
+}
+
+export type EpayGatewayOption = {
+  id: string
+  name: string
 }
 
 type PaymentMethodDialogProps = {
@@ -64,14 +79,29 @@ type PaymentMethodDialogProps = {
   onOpenChange: (open: boolean) => void
   onSave: (data: PaymentMethodData) => void
   editData?: PaymentMethodData | null
+  epayGateways?: EpayGatewayOption[]
 }
 
 const PAYMENT_TYPE_ICON_NAMES: Record<string, string> = {
   alipay: 'SiAlipay',
+  bank: 'RiBankFill',
+  douyinpay: 'SiTiktok',
   stripe: 'SiStripe',
   waffo_pancake: 'LuCreditCard',
   wxpay: 'SiWechat',
 }
+
+// Types served by their own gateway, so they carry no epay gateway binding.
+const NON_EPAY_PAYMENT_TYPES = new Set([
+  'creem',
+  'stripe',
+  'waffo',
+  'waffo_pancake',
+])
+
+// Base UI Select treats an empty string as "no selection", so the default
+// gateway needs its own sentinel value in the dropdown.
+const DEFAULT_GATEWAY_SELECT_VALUE = '__default__'
 
 const getDefaultIconName = (type: string) => PAYMENT_TYPE_ICON_NAMES[type] ?? ''
 
@@ -80,6 +110,7 @@ export function PaymentMethodDialog({
   onOpenChange,
   onSave,
   editData,
+  epayGateways = [],
 }: PaymentMethodDialogProps) {
   const { t } = useTranslation()
   const isEditMode = !!editData
@@ -96,6 +127,18 @@ export function PaymentMethodDialog({
       label: `${t('WeChat Pay')} (Epay: wxpay)`,
       name: t('WeChat Pay'),
       value: 'wxpay',
+    },
+    {
+      iconName: 'RiBankFill',
+      label: `${t('Online Banking')} (Epay: bank)`,
+      name: t('Online Banking'),
+      value: 'bank',
+    },
+    {
+      iconName: 'SiTiktok',
+      label: `${t('Douyin Pay')} (Epay: douyinpay)`,
+      name: t('Douyin Pay'),
+      value: 'douyinpay',
     },
     {
       iconName: 'SiStripe',
@@ -120,10 +163,20 @@ export function PaymentMethodDialog({
       type: '',
       icon: '',
       min_topup: '',
+      gateway_id: '',
     },
   })
 
   const iconValue = form.watch('icon')
+  const typeValue = form.watch('type')
+  const isEpayType = !NON_EPAY_PAYMENT_TYPES.has(typeValue)
+  const gatewaySelectItems = [
+    { value: DEFAULT_GATEWAY_SELECT_VALUE, label: t('Default gateway') },
+    ...epayGateways.map((gateway) => ({
+      value: gateway.id,
+      label: `${gateway.name} (${gateway.id})`,
+    })),
+  ]
 
   useEffect(() => {
     if (editData) {
@@ -132,6 +185,7 @@ export function PaymentMethodDialog({
         type: editData.type,
         icon: editData.icon ?? getDefaultIconName(editData.type),
         min_topup: editData.min_topup ?? '',
+        gateway_id: editData.gateway_id ?? '',
       })
     } else {
       form.reset({
@@ -139,6 +193,7 @@ export function PaymentMethodDialog({
         type: '',
         icon: '',
         min_topup: '',
+        gateway_id: '',
       })
     }
   }, [editData, form, open])
@@ -153,6 +208,10 @@ export function PaymentMethodDialog({
     }
     if (values.min_topup && values.min_topup.trim() !== '') {
       data.min_topup = values.min_topup
+    }
+    const gatewayId = values.gateway_id?.trim() ?? ''
+    if (gatewayId && !NON_EPAY_PAYMENT_TYPES.has(values.type)) {
+      data.gateway_id = gatewayId
     }
     onSave(data)
     form.reset()
@@ -256,6 +315,48 @@ export function PaymentMethodDialog({
               </FormItem>
             )}
           />
+
+          {isEpayType ? (
+            <FormField
+              control={form.control}
+              name='gateway_id'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Epay gateway')}</FormLabel>
+                  <FormControl>
+                    <Select
+                      items={gatewaySelectItems}
+                      value={field.value || DEFAULT_GATEWAY_SELECT_VALUE}
+                      onValueChange={(value) =>
+                        field.onChange(
+                          value === DEFAULT_GATEWAY_SELECT_VALUE
+                            ? ''
+                            : (value ?? '')
+                        )
+                      }
+                    >
+                      <SelectTrigger className='w-full'>
+                        <SelectValue placeholder={t('Default gateway')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {gatewaySelectItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Which Epay gateway charges this method. Add gateways on the Epay tab.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          ) : null}
 
           <FormField
             control={form.control}

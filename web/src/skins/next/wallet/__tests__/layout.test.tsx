@@ -24,7 +24,10 @@ import type { PaymentMethod, TopupInfo } from '@/features/wallet/types'
 const topupInfo: TopupInfo = {
   enable_online_topup: true,
   enable_stripe_topup: false,
-  pay_methods: [{ name: 'Alipay', type: 'alipay' }],
+  pay_methods: [
+    { name: 'Alipay', type: 'alipay' },
+    { name: 'WeChat Pay', type: 'wxpay' },
+  ],
   min_topup: 1,
   stripe_min_topup: 1,
   amount_options: [50, 100],
@@ -171,6 +174,26 @@ describe('next wallet layout', () => {
     render(<NextWallet />)
 
     expect(screen.getByRole('button', { name: 'Pay Now' })).toBeEnabled()
+  })
+
+  test('lays out payment methods two per row', () => {
+    pageState.selectedPaymentMethod = undefined
+    pageState.canSubmitPayment = false
+    pageState.paymentAmount = 100
+
+    render(<NextWallet />)
+
+    const methods = document.querySelector(
+      '[data-slot="next-wallet-pay-methods"]'
+    )
+    expect(methods).toHaveClass('grid')
+    expect(methods).toHaveClass('grid-cols-2')
+    expect(screen.getByRole('button', { name: 'Alipay' }).parentElement).toBe(
+      methods
+    )
+    expect(
+      screen.getByRole('button', { name: 'WeChat Pay' }).parentElement
+    ).toBe(methods)
   })
 
   test('shows a local pay estimate when the server quote is zero', () => {

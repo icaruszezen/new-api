@@ -260,7 +260,10 @@ export function NextWalletAddFundsCard(props: NextWalletAddFundsCardProps) {
                     {t('Payment Method')}
                   </p>
                   {hasStandardPaymentMethods ? (
-                    <div className='space-y-2'>
+                    <div
+                      data-slot='next-wallet-pay-methods'
+                      className='grid grid-cols-2 gap-2'
+                    >
                       {payMethods.map((method) => {
                         const methodMin = Math.max(
                           method.min_topup || 0,
@@ -278,7 +281,7 @@ export function NextWalletAddFundsCard(props: NextWalletAddFundsCardProps) {
                         )
                         if (disabled) {
                           methodAccessory = (
-                            <span className='text-muted-foreground text-xs'>
+                            <span className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'>
                               {t('Minimum:')} {methodMin}
                             </span>
                           )
@@ -348,73 +351,78 @@ export function NextWalletAddFundsCard(props: NextWalletAddFundsCardProps) {
                       <p className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
                         {t('Waffo Payment')}
                       </p>
-                      {waffoPayMethods.map((method, index) => {
-                        const loadingKey = `waffo-${index}`
-                        const methodKey = `${method.payMethodType ?? 'unknown'}-${method.payMethodName ?? method.name}`
-                        const waffoMin = topupInfo.waffo_min_topup || 0
-                        const belowMin = waffoMin > props.topupAmount
-                        const selected =
-                          props.selectedWaffoMethodIndex === index
-                        let methodIcon = getPaymentIcon(
-                          PAYMENT_TYPES.WAFFO,
-                          'h-5 w-5',
-                          method.icon,
-                          method.name
-                        )
-                        if (props.paymentLoading === loadingKey) {
-                          methodIcon = (
-                            <Loader2 className='size-4 animate-spin' />
+                      <div
+                        data-slot='next-wallet-waffo-pay-methods'
+                        className='grid grid-cols-2 gap-2'
+                      >
+                        {waffoPayMethods.map((method, index) => {
+                          const loadingKey = `waffo-${index}`
+                          const methodKey = `${method.payMethodType ?? 'unknown'}-${method.payMethodName ?? method.name}`
+                          const waffoMin = topupInfo.waffo_min_topup || 0
+                          const belowMin = waffoMin > props.topupAmount
+                          const selected =
+                            props.selectedWaffoMethodIndex === index
+                          let methodIcon = getPaymentIcon(
+                            PAYMENT_TYPES.WAFFO,
+                            'h-5 w-5',
+                            method.icon,
+                            method.name
                           )
-                        }
+                          if (props.paymentLoading === loadingKey) {
+                            methodIcon = (
+                              <Loader2 className='size-4 animate-spin' />
+                            )
+                          }
 
-                        const button = (
-                          <button
-                            key={methodKey}
-                            type='button'
-                            disabled={belowMin || !!props.paymentLoading}
-                            onClick={() =>
-                              props.onWaffoMethodSelect(method, index)
-                            }
-                            className={cn(
-                              'flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors',
-                              selected
-                                ? 'border-foreground bg-foreground/5'
-                                : 'border-border hover:bg-muted/40',
-                              belowMin && 'opacity-50'
-                            )}
-                          >
-                            <span className='flex size-8 items-center justify-center'>
-                              {methodIcon}
-                            </span>
-                            <span className='min-w-0 flex-1 truncate text-sm font-medium'>
-                              {method.name}
-                            </span>
-                            {selected ? (
-                              <Check
-                                className='size-4 shrink-0'
-                                aria-hidden='true'
-                              />
-                            ) : (
-                              <span className='border-border size-4 shrink-0 rounded-full border' />
-                            )}
-                          </button>
-                        )
+                          const button = (
+                            <button
+                              key={methodKey}
+                              type='button'
+                              disabled={belowMin || !!props.paymentLoading}
+                              onClick={() =>
+                                props.onWaffoMethodSelect(method, index)
+                              }
+                              className={cn(
+                                'flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors',
+                                selected
+                                  ? 'border-foreground bg-foreground/5'
+                                  : 'border-border hover:bg-muted/40',
+                                belowMin && 'opacity-50'
+                              )}
+                            >
+                              <span className='flex size-8 items-center justify-center'>
+                                {methodIcon}
+                              </span>
+                              <span className='min-w-0 flex-1 truncate text-sm font-medium'>
+                                {method.name}
+                              </span>
+                              {selected ? (
+                                <Check
+                                  className='size-4 shrink-0'
+                                  aria-hidden='true'
+                                />
+                              ) : (
+                                <span className='border-border size-4 shrink-0 rounded-full border' />
+                              )}
+                            </button>
+                          )
 
-                        if (!belowMin) return button
+                          if (!belowMin) return button
 
-                        return (
-                          <TooltipProvider key={methodKey}>
-                            <Tooltip>
-                              <TooltipTrigger render={button} />
-                              <TooltipContent>
-                                {t('Minimum topup amount: {{amount}}', {
-                                  amount: waffoMin,
-                                })}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )
-                      })}
+                          return (
+                            <TooltipProvider key={methodKey}>
+                              <Tooltip>
+                                <TooltipTrigger render={button} />
+                                <TooltipContent>
+                                  {t('Minimum topup amount: {{amount}}', {
+                                    amount: waffoMin,
+                                  })}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )
+                        })}
+                      </div>
                     </div>
                   ) : null}
 

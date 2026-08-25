@@ -78,6 +78,11 @@ vi.mock('@/lib/api', () => ({
   getStatus: apiMocks.getStatus,
 }))
 
+vi.mock('@/lib/lobe-icon', () => ({
+  getLobeIcon: (iconName?: string | null) =>
+    iconName ? <span data-testid={`vendor-icon-${iconName}`} /> : null,
+}))
+
 vi.mock('@/features/dashboard/hooks/use-status-data', () => ({
   useApiInfo: () => ({ items: [], loading: false }),
 }))

@@ -30,6 +30,7 @@ const apiMocks = vi.hoisted(() => ({
   getApiKey: vi.fn(),
   updateApiKey: vi.fn(),
   getUserGroups: vi.fn(),
+  getPricing: vi.fn(),
 }))
 
 vi.mock('@/features/keys/api', () => ({
@@ -39,6 +40,15 @@ vi.mock('@/features/keys/api', () => ({
 
 vi.mock('@/lib/api', () => ({
   getUserGroups: apiMocks.getUserGroups,
+}))
+
+vi.mock('@/features/pricing/api', () => ({
+  getPricing: apiMocks.getPricing,
+}))
+
+vi.mock('@/lib/lobe-icon', () => ({
+  getLobeIcon: (iconName?: string | null) =>
+    iconName ? <span data-testid={`vendor-icon-${iconName}`} /> : null,
 }))
 
 const sampleKey: ApiKey = {
@@ -107,17 +117,27 @@ describe('next console key group cell', () => {
       success: true,
       data: { ...sampleKey, group: 'vip' },
     })
+    apiMocks.getPricing.mockResolvedValue({
+      success: true,
+      data: [],
+      vendors: [],
+      group_ratio: {},
+      usable_group: {},
+      supported_endpoint: {},
+      auto_groups: [],
+    })
   })
 
   afterEach(() => {
     vi.clearAllMocks()
   })
 
-  test('renders the group as a bordered combobox with chevrons', () => {
+  test('renders the group as a bordered dialog trigger with chevrons', () => {
     renderSampleCell()
 
-    const trigger = screen.getByRole('combobox', { name: 'Switch group' })
+    const trigger = screen.getByRole('button', { name: 'Switch group' })
     expect(trigger).toHaveAttribute('data-slot', 'console-key-group-cell')
+    expect(trigger).toHaveAttribute('aria-haspopup', 'dialog')
     expect(trigger).toHaveClass('border', 'rounded-lg', 'cursor-pointer')
     expect(
       trigger.querySelector('[data-slot="console-key-group-chevrons"]')
@@ -127,7 +147,7 @@ describe('next console key group cell', () => {
 
   test('keeps every group name in the same trigger style', () => {
     const { rerender } = renderSampleCell()
-    const special = screen.getByRole('combobox', { name: 'Switch group' })
+    const special = screen.getByRole('button', { name: 'Switch group' })
 
     rerender(
       <QueryClientProvider
@@ -143,7 +163,7 @@ describe('next console key group cell', () => {
       </QueryClientProvider>
     )
 
-    const vip = screen.getByRole('combobox', { name: 'Switch group' })
+    const vip = screen.getByRole('button', { name: 'Switch group' })
     expect(vip.className).toBe(special.className)
   })
 
@@ -174,15 +194,18 @@ describe('next console key group cell', () => {
     expect(screen.queryByText('Auto Ratio')).toBeNull()
   })
 
-  test('opens a compact picker under the trigger instead of a side drawer', async () => {
+  test('opens a centered group dialog instead of a side drawer', async () => {
     const user = userEvent.setup()
     renderSampleCell()
 
-    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(screen.getByRole('button', { name: 'Switch group' }))
 
+    expect(
+      await screen.findByRole('dialog', { name: 'Switch group' })
+    ).toBeVisible()
     expect(await screen.findByPlaceholderText('Search groups...')).toBeVisible()
     expect(
-      document.querySelector('[data-slot="console-key-group-picker"]')
+      document.querySelector('[data-slot="next-group-picker-dialog"]')
     ).not.toBeNull()
     expect(
       document.querySelector('[data-slot="console-key-group-drawer"]')
@@ -201,7 +224,7 @@ describe('next console key group cell', () => {
     const user = userEvent.setup()
     renderSampleCell()
 
-    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(screen.getByRole('button', { name: 'Switch group' }))
     await screen.findByRole('option', { name: /vip/ })
 
     expect(scrollIntoView).not.toHaveBeenCalled()
@@ -223,7 +246,7 @@ describe('next console key group cell', () => {
     })
     renderSampleCell()
 
-    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(screen.getByRole('button', { name: 'Switch group' }))
 
     expect(await screen.findByText('No groups available')).toBeVisible()
   })
@@ -236,7 +259,7 @@ describe('next console key group cell', () => {
     })
     const { onSwitched } = renderSampleCell()
 
-    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(screen.getByRole('button', { name: 'Switch group' }))
     await user.click(await screen.findByRole('option', { name: /vip/ }))
 
     await waitFor(() => {
@@ -257,7 +280,7 @@ describe('next console key group cell', () => {
     expect(onSwitched).toHaveBeenCalledTimes(1)
     await waitFor(() => {
       expect(
-        document.querySelector('[data-slot="console-key-group-picker"]')
+        document.querySelector('[data-slot="next-group-picker-dialog"]')
       ).toBeNull()
     })
   })
@@ -266,7 +289,7 @@ describe('next console key group cell', () => {
     const user = userEvent.setup()
     renderSampleCell()
 
-    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(screen.getByRole('button', { name: 'Switch group' }))
     await user.click(await screen.findByRole('option', { name: /Cross-group/ }))
 
     await waitFor(() => {

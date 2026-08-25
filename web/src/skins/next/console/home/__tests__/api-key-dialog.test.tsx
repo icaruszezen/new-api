@@ -36,6 +36,7 @@ const apiMocks = vi.hoisted(() => ({
   getUserGroups: vi.fn(),
   getUserModels: vi.fn(),
   getStatus: vi.fn(),
+  getPricing: vi.fn(),
 }))
 
 vi.mock('@/features/keys/api', () => ({
@@ -49,6 +50,15 @@ vi.mock('@/lib/api', () => ({
   getUserGroups: apiMocks.getUserGroups,
   getUserModels: apiMocks.getUserModels,
   getStatus: apiMocks.getStatus,
+}))
+
+vi.mock('@/features/pricing/api', () => ({
+  getPricing: apiMocks.getPricing,
+}))
+
+vi.mock('@/lib/lobe-icon', () => ({
+  getLobeIcon: (iconName?: string | null) =>
+    iconName ? <span data-testid={`vendor-icon-${iconName}`} /> : null,
 }))
 
 const { NextApiKeyDialog } = await import('../components/api-key-dialog')
@@ -96,6 +106,28 @@ function DialogHarness(props: { mode: DialogMode }) {
 
 function seedQueries(queryClient: QueryClient, mode: DialogMode): void {
   const freshAt = Date.now() + 60_000
+  apiMocks.getPricing.mockResolvedValue({
+    success: true,
+    data: [],
+    vendors: [],
+    group_ratio: {},
+    usable_group: {},
+    supported_endpoint: {},
+    auto_groups: [],
+  })
+  queryClient.setQueryData(
+    ['pricing'],
+    {
+      success: true,
+      data: [],
+      vendors: [],
+      group_ratio: {},
+      usable_group: {},
+      supported_endpoint: {},
+      auto_groups: [],
+    },
+    { updatedAt: freshAt }
+  )
   queryClient.setQueryData(
     ['status'],
     { default_use_auto_group: true },
@@ -163,7 +195,7 @@ function getControlByLabel(labelText: string): HTMLElement {
     label
       .closest('[data-slot="form-item"]')
       ?.querySelector<HTMLElement>(
-        '[data-slot="form-control"], input, textarea, button[role="combobox"]'
+        '[data-slot="form-control"], input, textarea, button[role="combobox"], button[aria-haspopup="dialog"]'
       )
   if (!control) {
     throw new Error(`Expected control for label "${labelText}"`)
@@ -260,5 +292,51 @@ describe('next API key dialog', () => {
     await user.click(screen.getByRole('tab', { name: 'Quota Settings' }))
     expect(getControlByLabel('Expiration Time')).toBeTruthy()
     expect(screen.queryByLabelText('Quantity')).toBeNull()
+  })
+
+  test('opens an extra group dialog from the create form without closing the key dialog', async () => {
+    const user = userEvent.setup()
+    renderDialog('create')
+
+    await waitFor(() => {
+      expect(findButton('Create key')).toBeEnabled()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Select a group' }))
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Select a group' })
+    ).toBeVisible()
+    expect(
+      document.querySelector('[data-slot="next-group-picker-dialog"]')
+    ).not.toBeNull()
+    expect(
+      document.querySelector('[data-slot="next-api-key-dialog"]')
+    ).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: 'Create API Key' })).toBeVisible()
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
+  })
+
+  test('keeps the auto-group editor after choosing auto in the extra dialog', async () => {
+    const user = userEvent.setup()
+    renderDialog('create')
+
+    await waitFor(() => {
+      expect(findButton('Create key')).toBeEnabled()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Select a group' }))
+    await user.click(await screen.findByRole('option', { name: /Cross-group/ }))
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-slot="next-group-picker-dialog"]')
+      ).toBeNull()
+    })
+    expect(screen.getByText('Auto group order')).toBeVisible()
+    expect(screen.getByText('Cross-group retry')).toBeVisible()
+    expect(
+      document.querySelector('[data-slot="next-api-key-dialog"]')
+    ).toBeTruthy()
   })
 })

@@ -44,11 +44,12 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { ApiKeyGroupCombobox } from '@/features/keys/components/api-key-group-combobox'
 import { useApiKeys } from '@/features/keys/components/api-keys-provider'
 import { AutoGroupOrderEditor } from '@/features/keys/components/auto-group-order-editor'
 import { useApiKeyMutateForm } from '@/features/keys/hooks/use-api-key-mutate-form'
 import type { ApiKeyFormValues } from '@/features/keys/lib'
+
+import { GroupPickerField } from './group-picker-field'
 
 const BASIC_TAB = 'basic'
 const QUOTA_TAB = 'quota'
@@ -183,7 +184,7 @@ export function NextApiKeyDialog() {
                         <FormItem>
                           <FormLabel>{t('Group')}</FormLabel>
                           <FormControl>
-                            <ApiKeyGroupCombobox
+                            <GroupPickerField
                               options={mutate.groups}
                               value={field.value}
                               onValueChange={(group) => {

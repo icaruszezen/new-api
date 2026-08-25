@@ -38,6 +38,7 @@ const apiMocks = vi.hoisted(() => ({
   getUserModels: vi.fn(),
   getStatus: vi.fn(),
   getTokenAutoGroups: vi.fn(),
+  getPricing: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -80,6 +81,15 @@ vi.mock('@/lib/api', () => ({
   getUserGroups: apiMocks.getUserGroups,
   getUserModels: apiMocks.getUserModels,
   getStatus: apiMocks.getStatus,
+}))
+
+vi.mock('@/features/pricing/api', () => ({
+  getPricing: apiMocks.getPricing,
+}))
+
+vi.mock('@/lib/lobe-icon', () => ({
+  getLobeIcon: (iconName?: string | null) =>
+    iconName ? <span data-testid={`vendor-icon-${iconName}`} /> : null,
 }))
 
 vi.mock('@/features/dashboard/hooks/use-status-data', () => ({
@@ -172,6 +182,15 @@ describe('next console key list', () => {
     })
     apiMocks.deleteApiKey.mockResolvedValue({ success: true })
     apiMocks.updateApiKey.mockResolvedValue({ success: true, data: sampleKey })
+    apiMocks.getPricing.mockResolvedValue({
+      success: true,
+      data: [],
+      vendors: [],
+      group_ratio: {},
+      usable_group: {},
+      supported_endpoint: {},
+      auto_groups: [],
+    })
   })
 
   afterEach(() => {
@@ -200,7 +219,7 @@ describe('next console key list', () => {
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Open menu' })).toBeNull()
-    const groupTrigger = screen.getByRole('combobox', { name: 'Switch group' })
+    const groupTrigger = screen.getByRole('button', { name: 'Switch group' })
     const ratio = screen.getByText('0.12x')
     expect(groupTrigger).toHaveClass('border', 'rounded-lg')
     expect(
@@ -239,7 +258,7 @@ describe('next console key list', () => {
     )
     expect(groupRow).toHaveClass('flex', 'items-center', 'justify-between')
     expect(groupRow).toContainElement(
-      screen.getByRole('combobox', { name: 'Switch group' })
+      screen.getByRole('button', { name: 'Switch group' })
     )
     const mobileRatio = screen.getByText('0.12x')
     expect(mobileRatio).toBeVisible()
@@ -276,7 +295,7 @@ describe('next console key list', () => {
       expect(screen.getByText('0.12x')).toBeVisible()
     })
 
-    const groupTrigger = screen.getByRole('combobox', { name: 'Switch group' })
+    const groupTrigger = screen.getByRole('button', { name: 'Switch group' })
     const groupName = screen.getByText(longGroupName)
     const ratio = screen.getByText('0.12x')
     expect(groupName).toBeVisible()
@@ -330,7 +349,7 @@ describe('next console key list', () => {
     expect(screen.getByText('0.08x')).toBeVisible()
     expect(screen.getByText('0.2x')).toBeVisible()
     expect(
-      screen.getAllByRole('combobox', { name: 'Switch group' })
+      screen.getAllByRole('button', { name: 'Switch group' })
     ).toHaveLength(2)
   })
 
@@ -456,7 +475,7 @@ describe('next console key list', () => {
     ).toHaveTextContent('plus')
   })
 
-  test('opens a compact group picker from the group cell and lists available groups', async () => {
+  test('opens a group dialog from the group cell and lists available groups', async () => {
     const user = userEvent.setup()
     apiMocks.getUserGroups.mockResolvedValue({
       success: true,
@@ -471,11 +490,11 @@ describe('next console key list', () => {
       expect(screen.getByText('plus')).toBeVisible()
     })
 
-    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(screen.getByRole('button', { name: 'Switch group' }))
 
     const picker = await waitFor(() => {
       const node = document.querySelector(
-        '[data-slot="console-key-group-picker"]'
+        '[data-slot="next-group-picker-dialog"]'
       )
       expect(node).not.toBeNull()
       return node as HTMLElement
@@ -511,7 +530,7 @@ describe('next console key list', () => {
       expect(screen.getByText('plus')).toBeVisible()
     })
 
-    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(screen.getByRole('button', { name: 'Switch group' }))
     const vipOption = await screen.findByRole('option', { name: /vip/ })
     apiMocks.getApiKeys.mockResolvedValue({
       success: true,
@@ -542,7 +561,7 @@ describe('next console key list', () => {
     })
     await waitFor(() => {
       expect(
-        document.querySelector('[data-slot="console-key-group-picker"]')
+        document.querySelector('[data-slot="next-group-picker-dialog"]')
       ).toBeNull()
     })
     expect(
@@ -558,12 +577,12 @@ describe('next console key list', () => {
       expect(screen.getByText('plus')).toBeVisible()
     })
 
-    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(screen.getByRole('button', { name: 'Switch group' }))
     await user.click(await screen.findByRole('option', { name: /special/ }))
 
     await waitFor(() => {
       expect(
-        document.querySelector('[data-slot="console-key-group-picker"]')
+        document.querySelector('[data-slot="next-group-picker-dialog"]')
       ).toBeNull()
     })
     expect(apiMocks.getApiKey).not.toHaveBeenCalled()
@@ -589,14 +608,14 @@ describe('next console key list', () => {
       expect(screen.getByText('plus')).toBeVisible()
     })
 
-    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(screen.getByRole('button', { name: 'Switch group' }))
     await user.click(await screen.findByRole('option', { name: /vip/ }))
 
     await waitFor(() => {
       expect(apiMocks.updateApiKey).toHaveBeenCalled()
     })
     expect(
-      document.querySelector('[data-slot="console-key-group-picker"]')
+      document.querySelector('[data-slot="next-group-picker-dialog"]')
     ).not.toBeNull()
     expect(
       document.querySelector('[data-slot="console-key-group-cell"]')
@@ -619,10 +638,10 @@ describe('next console key list', () => {
       expect(screen.getByText('plus')).toBeVisible()
     })
 
-    await user.click(screen.getByRole('combobox', { name: 'Switch group' }))
+    await user.click(screen.getByRole('button', { name: 'Switch group' }))
 
     expect(
-      document.querySelector('[data-slot="console-key-group-picker"]')
+      document.querySelector('[data-slot="next-group-picker-dialog"]')
     ).not.toBeNull()
     expect(await screen.findByRole('option', { name: /vip/ })).toBeVisible()
     expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()

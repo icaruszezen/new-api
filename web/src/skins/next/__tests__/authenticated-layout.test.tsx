@@ -19,13 +19,22 @@ For commercial licensing, please contact support@quantumnous.com
 import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
-const pathnameRef = { current: '/dashboard/overview' }
+const routerPathRef = {
+  location: '/dashboard/overview',
+  resolvedLocation: '/dashboard/overview',
+}
 
 vi.mock('@tanstack/react-router', () => ({
   useRouterState: (options?: {
-    select?: (state: { location: { pathname: string } }) => unknown
+    select?: (state: {
+      location: { pathname: string }
+      resolvedLocation?: { pathname: string }
+    }) => unknown
   }) => {
-    const state = { location: { pathname: pathnameRef.current } }
+    const state = {
+      location: { pathname: routerPathRef.location },
+      resolvedLocation: { pathname: routerPathRef.resolvedLocation },
+    }
     return options?.select ? options.select(state) : state
   },
   useNavigate: () => vi.fn(),
@@ -61,7 +70,8 @@ const { NextAuthenticatedLayout } = await import('../authenticated-layout')
 
 describe('next authenticated layout chrome', () => {
   afterEach(() => {
-    pathnameRef.current = '/dashboard/overview'
+    routerPathRef.location = '/dashboard/overview'
+    routerPathRef.resolvedLocation = '/dashboard/overview'
   })
 
   test('uses the standalone console shell on the user homepage', () => {
@@ -72,7 +82,8 @@ describe('next authenticated layout chrome', () => {
   })
 
   test('uses the standalone console shell on the personal center', () => {
-    pathnameRef.current = '/profile'
+    routerPathRef.location = '/profile'
+    routerPathRef.resolvedLocation = '/profile'
     render(<NextAuthenticatedLayout />)
 
     expect(screen.getByTestId('console-home-shell')).toBeInTheDocument()
@@ -80,7 +91,8 @@ describe('next authenticated layout chrome', () => {
   })
 
   test('uses the standalone console shell on the wallet', () => {
-    pathnameRef.current = '/wallet'
+    routerPathRef.location = '/wallet'
+    routerPathRef.resolvedLocation = '/wallet'
     render(<NextAuthenticatedLayout />)
 
     expect(screen.getByTestId('console-home-shell')).toBeInTheDocument()
@@ -90,7 +102,8 @@ describe('next authenticated layout chrome', () => {
   test.each(['/usage-logs/common', '/usage-logs/drawing', '/usage-logs/task'])(
     'uses the standalone console shell on %s',
     (pathname) => {
-      pathnameRef.current = pathname
+      routerPathRef.location = pathname
+      routerPathRef.resolvedLocation = pathname
       render(<NextAuthenticatedLayout />)
 
       expect(screen.getByTestId('console-home-shell')).toBeInTheDocument()
@@ -99,10 +112,41 @@ describe('next authenticated layout chrome', () => {
   )
 
   test('keeps the sidebar shell on other console routes', () => {
-    pathnameRef.current = '/dashboard/models'
+    routerPathRef.location = '/dashboard/models'
+    routerPathRef.resolvedLocation = '/dashboard/models'
     render(<NextAuthenticatedLayout />)
 
     expect(screen.getByTestId('sidebar-shell')).toBeInTheDocument()
     expect(screen.queryByTestId('console-home-shell')).toBeNull()
   })
+
+  test('keeps the standalone shell while the model square is still pending', () => {
+    routerPathRef.location = '/pricing'
+    routerPathRef.resolvedLocation = '/dashboard/overview'
+    render(<NextAuthenticatedLayout />)
+
+    expect(screen.getByTestId('console-home-shell')).toBeInTheDocument()
+    expect(screen.queryByTestId('sidebar-shell')).toBeNull()
+  })
+
+  test('keeps the standalone shell while entering the console from the model square', () => {
+    routerPathRef.location = '/dashboard/overview'
+    routerPathRef.resolvedLocation = '/pricing'
+    render(<NextAuthenticatedLayout />)
+
+    expect(screen.getByTestId('console-home-shell')).toBeInTheDocument()
+    expect(screen.queryByTestId('sidebar-shell')).toBeNull()
+  })
+
+  test.each(['/', '/rankings', '/about'])(
+    'keeps the standalone shell while entering the console from %s',
+    (publicPath) => {
+      routerPathRef.location = '/dashboard/overview'
+      routerPathRef.resolvedLocation = publicPath
+      render(<NextAuthenticatedLayout />)
+
+      expect(screen.getByTestId('console-home-shell')).toBeInTheDocument()
+      expect(screen.queryByTestId('sidebar-shell')).toBeNull()
+    }
+  )
 })

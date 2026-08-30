@@ -46,3 +46,48 @@ export function isNextStandaloneShellPath(pathname: string): boolean {
     isNextUsageLogsPath(pathname)
   )
 }
+
+/**
+ * URL prefixes that live under `_authenticated`. Public, auth and legal pages
+ * are intentionally absent so they cannot flip the Next console chrome.
+ */
+const NEXT_CONSOLE_PATH_PREFIXES = [
+  '/dashboard',
+  '/profile',
+  '/wallet',
+  '/usage-logs',
+  '/keys',
+  '/playground',
+  '/chat',
+  '/chat2link',
+  '/channels',
+  '/models',
+  '/users',
+  '/redemption-codes',
+  '/subscriptions',
+  '/system-info',
+  '/system-settings',
+  '/errors',
+] as const
+
+export function isNextConsolePath(pathname: string): boolean {
+  return NEXT_CONSOLE_PATH_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  )
+}
+
+/**
+ * Path used to choose standalone vs sidebar chrome while a navigation is
+ * still pending. Public paths never decide the shell: keep the console path
+ * that is still on screen, otherwise take the console destination, otherwise
+ * stay on the standalone homepage so the classic sidebar cannot flash.
+ */
+export function resolveNextConsoleShellPathname(
+  pendingPathname: string,
+  renderedPathname?: string
+): string {
+  const rendered = renderedPathname ?? pendingPathname
+  if (isNextConsolePath(rendered)) return rendered
+  if (isNextConsolePath(pendingPathname)) return pendingPathname
+  return '/dashboard/overview'
+}

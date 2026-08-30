@@ -20,8 +20,10 @@ import { describe, expect, test } from 'vitest'
 
 import {
   isNextConsoleHomePath,
+  isNextConsolePath,
   isNextStandaloneShellPath,
   isNextUsageLogsPath,
+  resolveNextConsoleShellPathname,
 } from '../console-home-path'
 
 describe('isNextConsoleHomePath', () => {
@@ -85,5 +87,115 @@ describe('isNextStandaloneShellPath', () => {
     '/',
   ])('leaves %s on the sidebar shell', (pathname) => {
     expect(isNextStandaloneShellPath(pathname)).toBe(false)
+  })
+})
+
+describe('isNextConsolePath', () => {
+  test.each([
+    '/dashboard',
+    '/dashboard/overview',
+    '/dashboard/models',
+    '/profile',
+    '/wallet',
+    '/usage-logs/common',
+    '/keys',
+    '/playground',
+    '/chat/abc',
+    '/chat2link',
+    '/channels',
+    '/models/deployments',
+    '/users',
+    '/redemption-codes',
+    '/subscriptions',
+    '/system-info',
+    '/system-settings/site',
+    '/errors/401',
+  ])('treats %s as a console path', (pathname) => {
+    expect(isNextConsolePath(pathname)).toBe(true)
+  })
+
+  test.each([
+    '/',
+    '/pricing',
+    '/pricing/gpt-4',
+    '/rankings',
+    '/about',
+    '/sign-in',
+    '/user-agreement',
+    '/privacy-policy',
+    '/404',
+  ])('does not treat %s as a console path', (pathname) => {
+    expect(isNextConsolePath(pathname)).toBe(false)
+  })
+})
+
+describe('resolveNextConsoleShellPathname', () => {
+  test.each([
+    {
+      pending: '/pricing',
+      rendered: '/dashboard/overview',
+      expected: '/dashboard/overview',
+    },
+    {
+      pending: '/dashboard/overview',
+      rendered: '/pricing',
+      expected: '/dashboard/overview',
+    },
+    {
+      pending: '/',
+      rendered: '/dashboard/overview',
+      expected: '/dashboard/overview',
+    },
+    {
+      pending: '/dashboard/overview',
+      rendered: '/',
+      expected: '/dashboard/overview',
+    },
+    {
+      pending: '/rankings',
+      rendered: '/dashboard/overview',
+      expected: '/dashboard/overview',
+    },
+    {
+      pending: '/dashboard/overview',
+      rendered: '/rankings',
+      expected: '/dashboard/overview',
+    },
+    {
+      pending: '/about',
+      rendered: '/dashboard/overview',
+      expected: '/dashboard/overview',
+    },
+    {
+      pending: '/pricing',
+      rendered: '/keys',
+      expected: '/keys',
+    },
+    {
+      pending: '/keys',
+      rendered: '/pricing',
+      expected: '/keys',
+    },
+    {
+      pending: '/keys',
+      rendered: '/dashboard/overview',
+      expected: '/dashboard/overview',
+    },
+    {
+      pending: '/pricing',
+      rendered: '/pricing',
+      expected: '/dashboard/overview',
+    },
+  ])(
+    'uses $expected when pending is $pending and rendered is $rendered',
+    ({ pending, rendered, expected }) => {
+      expect(resolveNextConsoleShellPathname(pending, rendered)).toBe(expected)
+    }
+  )
+
+  test('uses the pending console path when no rendered path is available', () => {
+    expect(resolveNextConsoleShellPathname('/dashboard/overview')).toBe(
+      '/dashboard/overview'
+    )
   })
 })

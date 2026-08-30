@@ -38,6 +38,7 @@ const apiMocks = vi.hoisted(() => ({
   getUserModels: vi.fn(),
   getStatus: vi.fn(),
   getTokenAutoGroups: vi.fn(),
+  fetchTokenKey: vi.fn(),
   getPricing: vi.fn(),
 }))
 
@@ -75,6 +76,7 @@ vi.mock('@/features/keys/api', () => ({
   deleteApiKey: apiMocks.deleteApiKey,
   updateApiKey: apiMocks.updateApiKey,
   getTokenAutoGroups: apiMocks.getTokenAutoGroups,
+  fetchTokenKey: apiMocks.fetchTokenKey,
 }))
 
 vi.mock('@/lib/api', () => ({
@@ -182,6 +184,10 @@ describe('next console key list', () => {
     })
     apiMocks.deleteApiKey.mockResolvedValue({ success: true })
     apiMocks.updateApiKey.mockResolvedValue({ success: true, data: sampleKey })
+    apiMocks.fetchTokenKey.mockResolvedValue({
+      success: true,
+      data: { key: sampleKey.key },
+    })
     apiMocks.getPricing.mockResolvedValue({
       success: true,
       data: [],
@@ -217,6 +223,7 @@ describe('next console key list', () => {
     ).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'Expires' })).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'CC Switch' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Open menu' })).toBeNull()
     const groupTrigger = screen.getByRole('button', { name: 'Switch group' })
@@ -263,6 +270,7 @@ describe('next console key list', () => {
     const mobileRatio = screen.getByText('0.12x')
     expect(mobileRatio).toBeVisible()
     expect(mobileRatio).toHaveClass('rounded-[4px]', 'backdrop-blur-md')
+    expect(screen.getByRole('button', { name: 'CC Switch' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Open menu' })).toBeNull()
     expect(screen.queryByRole('columnheader', { name: 'Models' })).toBeNull()
@@ -372,6 +380,28 @@ describe('next console key list', () => {
       document.querySelector('[data-slot="next-api-key-dialog"]')
     ).toBeTruthy()
     expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
+    expect(pushState).not.toHaveBeenCalled()
+    expect(window.location.pathname).toBe('/')
+    pushState.mockRestore()
+  })
+
+  test('opens the CC Switch dialog from the row export button without navigating', async () => {
+    const user = userEvent.setup()
+    const pushState = vi.spyOn(window.history, 'pushState')
+    renderHome()
+
+    await waitFor(() => {
+      expect(screen.getByText('plus')).toBeVisible()
+    })
+
+    expect(screen.queryByRole('button', { name: 'Open menu' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'CC Switch' }))
+
+    await waitFor(() => {
+      expect(apiMocks.fetchTokenKey).toHaveBeenCalledWith(1)
+      expect(screen.getByRole('dialog')).toBeVisible()
+    })
+    expect(screen.getByText('Import to CC Switch')).toBeVisible()
     expect(pushState).not.toHaveBeenCalled()
     expect(window.location.pathname).toBe('/')
     pushState.mockRestore()

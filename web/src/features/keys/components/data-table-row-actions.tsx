@@ -94,11 +94,14 @@ export function DataTableRowActions<TData>({
   const isEnabled = apiKey.status === API_KEY_STATUS.ENABLED
   const { chatPresets, serverAddress } = useChatPresets()
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
+  const [isOpeningCCSwitch, setIsOpeningCCSwitch] = useState(false)
   const resolvedRealKey = resolvedKeys[apiKey.id]
   const isRealKeyLoading = Boolean(loadingKeys[apiKey.id])
+  const isCCSwitchBusy = isOpeningCCSwitch || isRealKeyLoading
 
   const hasChatPresets = chatPresets.length > 0
   const toggleLabel = isEnabled ? t('Disable') : t('Enable')
+  const ccSwitchLabel = t('CC Switch')
 
   const handleMenuOpenChange = useCallback(
     (open: boolean) => {
@@ -156,6 +159,27 @@ export function DataTableRowActions<TData>({
     },
     [resolveRealKey, apiKey.id, serverAddress, t]
   )
+
+  const handleOpenCCSwitch = useCallback(async () => {
+    if (isCCSwitchBusy) return
+    setIsOpeningCCSwitch(true)
+    try {
+      const realKey = await resolveRealKey(apiKey.id)
+      if (!realKey) return
+      setResolvedKey(realKey)
+      setCurrentRow(apiKey)
+      setOpen('cc-switch')
+    } finally {
+      setIsOpeningCCSwitch(false)
+    }
+  }, [
+    apiKey,
+    isCCSwitchBusy,
+    resolveRealKey,
+    setCurrentRow,
+    setOpen,
+    setResolvedKey,
+  ])
 
   const handleToggleStatus = async (
     e?: React.MouseEvent<HTMLButtonElement>
@@ -235,26 +259,51 @@ export function DataTableRowActions<TData>({
       </Tooltip>
 
       {overflow === 'delete' ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant='ghost'
-                size='icon-sm'
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setCurrentRow(apiKey)
-                  setOpen('delete')
-                }}
-                aria-label={t('Delete')}
-                className='text-destructive hover:text-destructive'
-              />
-            }
-          >
-            <Trash2 />
-          </TooltipTrigger>
-          <TooltipContent>{t('Delete')}</TooltipContent>
-        </Tooltip>
+        <>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant='ghost'
+                  size='icon-sm'
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void handleOpenCCSwitch()
+                  }}
+                  disabled={isCCSwitchBusy}
+                  aria-label={ccSwitchLabel}
+                />
+              }
+            >
+              {isCCSwitchBusy ? (
+                <Loader2 className='size-4 animate-spin' />
+              ) : (
+                <ArrowRightLeft />
+              )}
+            </TooltipTrigger>
+            <TooltipContent>{ccSwitchLabel}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant='ghost'
+                  size='icon-sm'
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setCurrentRow(apiKey)
+                    setOpen('delete')
+                  }}
+                  aria-label={t('Delete')}
+                  className='text-destructive hover:text-destructive'
+                />
+              }
+            >
+              <Trash2 />
+            </TooltipTrigger>
+            <TooltipContent>{t('Delete')}</TooltipContent>
+          </Tooltip>
+        </>
       ) : (
         <DataTableRowActionMenu
           ariaLabel={t('Open menu')}
@@ -293,16 +342,8 @@ export function DataTableRowActions<TData>({
             </DropdownMenuShortcut>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={async () => {
-              const realKey = await resolveRealKey(apiKey.id)
-              if (!realKey) return
-              setResolvedKey(realKey)
-              setCurrentRow(apiKey)
-              setOpen('cc-switch')
-            }}
-          >
-            {t('CC Switch')}
+          <DropdownMenuItem onClick={() => void handleOpenCCSwitch()}>
+            {ccSwitchLabel}
             <DropdownMenuShortcut>
               <ArrowRightLeft size={16} />
             </DropdownMenuShortcut>

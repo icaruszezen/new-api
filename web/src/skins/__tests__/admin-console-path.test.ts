@@ -27,6 +27,7 @@ describe('isAdminConsolePath', () => {
   test.each([
     '/channels',
     '/channels/12',
+    '/channel-monitoring-settings',
     '/models',
     '/models/metadata',
     '/users',
@@ -51,6 +52,7 @@ describe('isAdminConsolePath', () => {
     '/profile',
     '/playground',
     '/pricing',
+    '/channel-monitoring',
     '/users-extra',
   ])('leaves shared or public path %s alone', (pathname) => {
     expect(isAdminConsolePath(pathname)).toBe(false)

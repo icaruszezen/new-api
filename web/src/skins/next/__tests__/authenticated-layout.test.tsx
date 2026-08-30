@@ -138,7 +138,7 @@ describe('next authenticated layout chrome', () => {
     expect(screen.queryByTestId('sidebar-shell')).toBeNull()
   })
 
-  test.each(['/', '/rankings', '/about'])(
+  test.each(['/', '/rankings', '/about', '/channel-monitoring'])(
     'keeps the standalone shell while entering the console from %s',
     (publicPath) => {
       routerPathRef.location = '/dashboard/overview'

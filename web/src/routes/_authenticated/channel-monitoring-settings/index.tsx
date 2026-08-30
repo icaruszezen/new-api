@@ -16,17 +16,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-/**
- * Public surface of the UI Skin module.
- */
-export { SkinnedAuthenticatedLayout } from './authenticated-layout'
-export { SkinnedChannelMonitoring } from './channel-monitoring'
-export { useUiSkin } from './context'
-export { SkinnedDashboard } from './dashboard'
-export { SkinnedHome } from './home'
-export { SkinnedPricing } from './pricing'
-export { SkinnedProfile } from './profile'
-export { SkinnedUsageLogs } from './usage-logs'
-export { SkinnedWallet } from './wallet'
-export { DEFAULT_UI_SKIN, parseUiSkin, resolveConsoleSkin } from './registry'
-export type { UiSkin } from './types'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+
+import { ChannelMonitoringSettings } from '@/features/channel-monitoring/settings'
+import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
+
+export const Route = createFileRoute(
+  '/_authenticated/channel-monitoring-settings/'
+)({
+  beforeLoad: () => {
+    const { auth } = useAuthStore.getState()
+
+    if (!auth.user || auth.user.role < ROLE.ADMIN) {
+      throw redirect({
+        to: '/403',
+      })
+    }
+  },
+  component: ChannelMonitoringSettings,
+})

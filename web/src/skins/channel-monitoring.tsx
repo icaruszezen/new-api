@@ -16,17 +16,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { ClassicChannelMonitoring } from './classic/channel-monitoring'
+import { UiSkinProvider, useUiSkin } from './context'
+import { NextChannelMonitoring } from './next/channel-monitoring'
+
+function ActiveSkinChannelMonitoring() {
+  const skin = useUiSkin()
+
+  if (skin === 'next') {
+    return <NextChannelMonitoring />
+  }
+  return <ClassicChannelMonitoring />
+}
+
 /**
- * Public surface of the UI Skin module.
+ * Public channel-monitoring page. Next keeps the landing chrome; classic
+ * reuses PublicLayout so a direct URL still renders without a top-bar entry.
  */
-export { SkinnedAuthenticatedLayout } from './authenticated-layout'
-export { SkinnedChannelMonitoring } from './channel-monitoring'
-export { useUiSkin } from './context'
-export { SkinnedDashboard } from './dashboard'
-export { SkinnedHome } from './home'
-export { SkinnedPricing } from './pricing'
-export { SkinnedProfile } from './profile'
-export { SkinnedUsageLogs } from './usage-logs'
-export { SkinnedWallet } from './wallet'
-export { DEFAULT_UI_SKIN, parseUiSkin, resolveConsoleSkin } from './registry'
-export type { UiSkin } from './types'
+export function SkinnedChannelMonitoring() {
+  return (
+    <UiSkinProvider>
+      <ActiveSkinChannelMonitoring />
+    </UiSkinProvider>
+  )
+}

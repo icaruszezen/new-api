@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 const ADMIN_CONSOLE_PATHS = [
   '/channels',
+  '/channel-monitoring-settings',
   '/models',
   '/users',
   '/redemption-codes',

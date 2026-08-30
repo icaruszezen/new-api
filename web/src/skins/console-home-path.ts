@@ -61,6 +61,7 @@ const NEXT_CONSOLE_PATH_PREFIXES = [
   '/chat',
   '/chat2link',
   '/channels',
+  '/channel-monitoring-settings',
   '/models',
   '/users',
   '/redemption-codes',

@@ -21,7 +21,9 @@ import { useTranslation } from 'react-i18next'
 
 import { useStatus } from '@/hooks/use-status'
 import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
+import { parseUiSkin } from '@/skins/registry'
 import { useAuthStore } from '@/stores/auth-store'
+import { useSystemConfigStore } from '@/stores/system-config-store'
 
 export type TopNavLink = {
   title: string
@@ -47,6 +49,9 @@ export function useTopNavLinks(): TopNavLink[] {
   const { t } = useTranslation()
   const { status } = useStatus()
   const { auth } = useAuthStore()
+  const uiSkin = useSystemConfigStore((state) =>
+    parseUiSkin(state.config.uiSkin)
+  )
 
   // Parse HeaderNavModules
   const modules = useMemo(() => {
@@ -84,6 +89,13 @@ export function useTopNavLinks(): TopNavLink[] {
   if (rankings && typeof rankings === 'object' && rankings.enabled) {
     const requiresAuth = rankings.requireAuth && !isAuthed
     links.push({ title: t('Rankings'), href: '/rankings', requiresAuth })
+  }
+
+  if (uiSkin === 'next') {
+    links.push({
+      title: t('Channel Monitoring'),
+      href: '/channel-monitoring',
+    })
   }
 
   // Docs (supports external links)

@@ -22,6 +22,7 @@ import {
   CreditCard,
   FileText,
   FlaskConical,
+  Gauge,
   Key,
   LayoutDashboard,
   ListTodo,
@@ -36,8 +37,10 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { type SidebarData } from '@/components/layout/types'
+import type { SidebarData } from '@/components/layout/types'
 import { ROLE } from '@/lib/roles'
+import { parseUiSkin } from '@/skins/registry'
+import { useSystemConfigStore } from '@/stores/system-config-store'
 
 /**
  * Root navigation groups for the application sidebar.
@@ -47,6 +50,9 @@ import { ROLE } from '@/lib/roles'
  */
 export function useSidebarData(): SidebarData {
   const { t } = useTranslation()
+  const uiSkin = useSystemConfigStore((state) =>
+    parseUiSkin(state.config.uiSkin)
+  )
 
   return {
     navGroups: [
@@ -124,6 +130,15 @@ export function useSidebarData(): SidebarData {
             url: '/channels',
             icon: Radio,
           },
+          ...(uiSkin === 'next'
+            ? [
+                {
+                  title: t('Channel Monitoring Settings'),
+                  url: '/channel-monitoring-settings',
+                  icon: Gauge,
+                },
+              ]
+            : []),
           {
             title: t('Models'),
             url: '/models/metadata',

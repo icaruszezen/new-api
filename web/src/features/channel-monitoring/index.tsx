@@ -16,17 +16,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-/**
- * Public surface of the UI Skin module.
- */
-export { SkinnedAuthenticatedLayout } from './authenticated-layout'
-export { SkinnedChannelMonitoring } from './channel-monitoring'
-export { useUiSkin } from './context'
-export { SkinnedDashboard } from './dashboard'
-export { SkinnedHome } from './home'
-export { SkinnedPricing } from './pricing'
-export { SkinnedProfile } from './profile'
-export { SkinnedUsageLogs } from './usage-logs'
-export { SkinnedWallet } from './wallet'
-export { DEFAULT_UI_SKIN, parseUiSkin, resolveConsoleSkin } from './registry'
-export type { UiSkin } from './types'
+import { useTranslation } from 'react-i18next'
+
+export function ChannelMonitoring() {
+  const { t } = useTranslation()
+
+  return (
+    <div className='flex min-h-[60vh] items-center justify-center p-8'>
+      <div className='max-w-lg space-y-3 text-center'>
+        <h1 className='text-2xl font-bold'>{t('Channel Monitoring')}</h1>
+        <p className='text-muted-foreground'>
+          {t('Channel monitoring is under development.')}
+        </p>
+      </div>
+    </div>
+  )
+}

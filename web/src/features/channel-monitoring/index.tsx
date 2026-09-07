@@ -52,7 +52,7 @@ function PageShell(props: { children: ReactNode; countdown?: number }) {
 
 export function ChannelMonitoring() {
   const { t } = useTranslation()
-  const { data, isLoading, isError, refetch, dataUpdatedAt } =
+  const { data, isLoading, isError, refetch, dataUpdatedAt, backoffSeconds } =
     useMonitoringStatus()
   const countdown = useRefreshCountdown(dataUpdatedAt)
 
@@ -68,16 +68,23 @@ export function ChannelMonitoring() {
     )
   }
 
-  if (isError) {
+  if (isError && !data) {
+    const retrying = backoffSeconds > 0
     return (
       <PageShell>
         <div className='mx-auto max-w-md space-y-4 text-center'>
           <p className='text-muted-foreground text-sm'>
             {t('Failed to load channel monitoring data.')}
           </p>
-          <Button variant='outline' onClick={() => void refetch()}>
+          <Button
+            variant='outline'
+            disabled={retrying}
+            onClick={() => void refetch()}
+          >
             <RefreshCw className='size-4' />
-            {t('Retry')}
+            {retrying
+              ? t('Retry in {{seconds}}s', { seconds: backoffSeconds })
+              : t('Retry')}
           </Button>
         </div>
       </PageShell>

@@ -1,6 +1,8 @@
 package model
 
 import (
+	"time"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -53,6 +55,7 @@ func (ChannelMonitorStat) TableName() string {
 
 // ChannelMonitorState 每个监控项一行，保存端点 ping 与最近一次 beat/探测时间。
 // 这些字段跨实例共享，使非 master 节点也能展示 ping，master 节点也能判断空闲。
+// ResetAt 是跨实例 tombstone：其它节点不得把该时间点之前的热桶再写回。
 type ChannelMonitorState struct {
 	MonitorId     string `json:"monitor_id" gorm:"primaryKey;size:64"`
 	PingMs        int    `json:"ping_ms" gorm:"default:0"`
@@ -60,6 +63,7 @@ type ChannelMonitorState struct {
 	LastBeatTs    int64  `json:"last_beat_ts" gorm:"bigint;default:0"`
 	LastProbeTs   int64  `json:"last_probe_ts" gorm:"bigint;default:0"`
 	ChannelId     int    `json:"channel_id" gorm:"default:0"`
+	ResetAt       int64  `json:"reset_at" gorm:"bigint;default:0"`
 }
 
 func (ChannelMonitorState) TableName() string {
@@ -104,10 +108,14 @@ func GetChannelMonitorRecentBeats(monitorId string, limit int) ([]ChannelMonitor
 
 // UpsertChannelMonitorStat 累加小时汇总，冲突时在数据库侧做加法，避免读改写竞争。
 func UpsertChannelMonitorStat(stat *ChannelMonitorStat) error {
-	if stat == nil || stat.Total == 0 {
+	return upsertChannelMonitorStatTx(DB, stat)
+}
+
+func upsertChannelMonitorStatTx(tx *gorm.DB, stat *ChannelMonitorStat) error {
+	if tx == nil || stat == nil || stat.Total == 0 {
 		return nil
 	}
-	return DB.Clauses(clause.OnConflict{
+	return tx.Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "monitor_id"},
 			{Name: "hour_ts"},
@@ -121,6 +129,54 @@ func UpsertChannelMonitorStat(stat *ChannelMonitorStat) error {
 			"ttft_count":  gorm.Expr("channel_monitor_stats.ttft_count + ?", stat.TtftCount),
 		}),
 	}).Create(stat).Error
+}
+
+// PersistChannelMonitorSample 把一个采样桶写入 beat 表，并只在该桶首次插入时累加小时汇总。
+// 不信任 OnConflict 的 RowsAffected：先锁 state 行，再 Count 判重。
+// 若 bucketTs <= ResetAt，样本被丢弃，避免其它实例把 reset 前的热桶写回。
+func PersistChannelMonitorSample(beat ChannelMonitorBeat, stat *ChannelMonitorStat) error {
+	if beat.MonitorId == "" {
+		return nil
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := ensureChannelMonitorStateTx(tx, beat.MonitorId); err != nil {
+			return err
+		}
+		var state ChannelMonitorState
+		if err := lockForUpdate(tx).Where("monitor_id = ?", beat.MonitorId).First(&state).Error; err != nil {
+			return err
+		}
+		if state.ResetAt > 0 && beat.BucketTs <= state.ResetAt {
+			return nil
+		}
+
+		var existing int64
+		if err := tx.Model(&ChannelMonitorBeat{}).
+			Where("monitor_id = ? AND bucket_ts = ?", beat.MonitorId, beat.BucketTs).
+			Count(&existing).Error; err != nil {
+			return err
+		}
+		if existing == 0 {
+			if err := tx.Create(&beat).Error; err != nil {
+				return err
+			}
+			if err := upsertChannelMonitorStatTx(tx, stat); err != nil {
+				return err
+			}
+		}
+		return touchChannelMonitorBeatTsTx(tx, beat.MonitorId, beat.BucketTs, beat.Source)
+	})
+}
+
+func ensureChannelMonitorStateTx(tx *gorm.DB, monitorId string) error {
+	if tx == nil || monitorId == "" {
+		return nil
+	}
+	state := ChannelMonitorState{MonitorId: monitorId}
+	return tx.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "monitor_id"}},
+		DoNothing: true,
+	}).Create(&state).Error
 }
 
 // ChannelMonitorUptime 是某个监控在统计窗口内的可用性汇总结果。
@@ -179,7 +235,11 @@ func UpsertChannelMonitorPing(monitorId string, pingMs int, channelId int, now i
 
 // TouchChannelMonitorBeatTs 记录该监控最近一次产生 beat 的时间，供空闲判定使用。
 func TouchChannelMonitorBeatTs(monitorId string, beatTs int64, source int) error {
-	if monitorId == "" {
+	return touchChannelMonitorBeatTsTx(DB, monitorId, beatTs, source)
+}
+
+func touchChannelMonitorBeatTsTx(tx *gorm.DB, monitorId string, beatTs int64, source int) error {
+	if tx == nil || monitorId == "" {
 		return nil
 	}
 	state := ChannelMonitorState{
@@ -191,18 +251,24 @@ func TouchChannelMonitorBeatTs(monitorId string, beatTs int64, source int) error
 		state.LastProbeTs = beatTs
 		updates["last_probe_ts"] = beatTs
 	}
-	return DB.Clauses(clause.OnConflict{
+	return tx.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "monitor_id"}},
 		DoUpdates: clause.Assignments(updates),
 	}).Create(&state).Error
 }
 
 // DeleteChannelMonitorStatesExcept 清理已被管理员删除的监控项残留状态。
+// 空列表视为解析失败或未提供白名单，禁止全表删除。
 func DeleteChannelMonitorStatesExcept(monitorIds []string) error {
 	if len(monitorIds) == 0 {
-		return DB.Where("1 = 1").Delete(&ChannelMonitorState{}).Error
+		return nil
 	}
 	return DB.Where("monitor_id NOT IN ?", monitorIds).Delete(&ChannelMonitorState{}).Error
+}
+
+// DeleteAllChannelMonitorStates 仅在监控配置被成功解析为空时清理残留 state。
+func DeleteAllChannelMonitorStates() error {
+	return DB.Where("1 = 1").Delete(&ChannelMonitorState{}).Error
 }
 
 // DeleteChannelMonitorBeatsBefore 按保留期清理原始 beat。
@@ -219,4 +285,36 @@ func DeleteChannelMonitorStatsBefore(cutoffTs int64) error {
 		return nil
 	}
 	return DB.Where("hour_ts < ?", cutoffTs).Delete(&ChannelMonitorStat{}).Error
+}
+
+// DeleteChannelMonitorData 清空单个监控项的历史采样和小时汇总，并留下 ResetAt tombstone。
+// 配置本身不受影响；空 id 视为无操作，避免误清整表。
+func DeleteChannelMonitorData(monitorId string) error {
+	if monitorId == "" {
+		return nil
+	}
+	now := time.Now().Unix()
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := ensureChannelMonitorStateTx(tx, monitorId); err != nil {
+			return err
+		}
+		var state ChannelMonitorState
+		if err := lockForUpdate(tx).Where("monitor_id = ?", monitorId).First(&state).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("monitor_id = ?", monitorId).Delete(&ChannelMonitorBeat{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("monitor_id = ?", monitorId).Delete(&ChannelMonitorStat{}).Error; err != nil {
+			return err
+		}
+		return tx.Model(&ChannelMonitorState{}).Where("monitor_id = ?", monitorId).Updates(map[string]interface{}{
+			"reset_at":        now,
+			"ping_ms":         0,
+			"ping_updated_at": 0,
+			"last_beat_ts":    0,
+			"last_probe_ts":   0,
+			"channel_id":      0,
+		}).Error
+	})
 }

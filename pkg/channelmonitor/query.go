@@ -83,6 +83,11 @@ func buildStatusView(setting channel_monitoring_setting.ChannelMonitoringSetting
 
 	hot := collectHotBeats(setting.SampleWindowSeconds)
 
+	historyById, err := loadHistoryUptimes(monitors, setting.StatRetentionDays)
+	if err != nil {
+		return StatusView{}, err
+	}
+
 	for _, monitor := range monitors {
 		beats, err := loadBeats(monitor.Id, setting.BeatLimit, hot[monitor.Id])
 		if err != nil {
@@ -99,12 +104,42 @@ func buildStatusView(setting channel_monitoring_setting.ChannelMonitoringSetting
 			Status:    latestStatus(beats),
 			AvgTtftMs: averageTtft(beats),
 			PingMs:    stateById[monitor.Id].PingMs,
-			Uptime:    uptimeFromBeats(beats),
-			Beats:     beats,
+			Uptime: resolveMonitorUptime(
+				monitor,
+				beats,
+				historyById[monitor.Id],
+				hot[monitor.Id],
+			),
+			Beats: beats,
 		})
 	}
 
 	return view, nil
+}
+
+func loadHistoryUptimes(monitors []Monitor, statRetentionDays int) (map[string]model.ChannelMonitorUptime, error) {
+	historyIds := make([]string, 0, len(monitors))
+	for _, monitor := range monitors {
+		if uptimeScopeOf(monitor) == UptimeScopeAll {
+			historyIds = append(historyIds, monitor.Id)
+		}
+	}
+	if len(historyIds) == 0 {
+		return nil, nil
+	}
+	if statRetentionDays < channel_monitoring_setting.MinStatRetentionDays {
+		statRetentionDays = channel_monitoring_setting.DefaultStatRetentionDays
+	}
+	sinceHourTs := time.Now().Add(-time.Duration(statRetentionDays) * 24 * time.Hour).Unix()
+	rows, err := model.GetChannelMonitorUptimes(historyIds, sinceHourTs)
+	if err != nil {
+		return nil, err
+	}
+	historyById := make(map[string]model.ChannelMonitorUptime, len(rows))
+	for _, row := range rows {
+		historyById[row.MonitorId] = row
+	}
+	return historyById, nil
 }
 
 // loadBeats 合并已落库的 beat 与内存中尚未刷盘的桶，按时间升序返回最多 limit 条。
@@ -213,11 +248,35 @@ func averageTtft(beats []BeatView) int {
 	return sum / count
 }
 
+// resolveMonitorUptime 按监控项口径选择成功率样本：recent 用状态条同一批 beat，
+// all 用小时汇总加上尚未刷盘的热桶。
+func resolveMonitorUptime(monitor Monitor, recentBeats []BeatView, history model.ChannelMonitorUptime, hot []BeatView) *float64 {
+	if uptimeScopeOf(monitor) == UptimeScopeAll {
+		return uptimeFromHistory(history, hot)
+	}
+	return uptimeFromBeats(recentBeats)
+}
+
+func uptimeFromHistory(history model.ChannelMonitorUptime, hot []BeatView) *float64 {
+	available := history.UpCount + history.SlowCount
+	total := history.Total
+	for _, beat := range hot {
+		switch beat.Status {
+		case model.ChannelMonitorStatusUp, model.ChannelMonitorStatusSlow:
+			available++
+			total++
+		case model.ChannelMonitorStatusDown:
+			total++
+		}
+	}
+	return uptimePercent(available, total)
+}
+
 // uptimeFromBeats 用状态条上的同一批样本算可用性，保证百分比与条形图口径一致。
 // 慢响应仍算作可用，只有失败计入不可用。
-func uptimeFromBeats(beats []BeatView) float64 {
-	total := 0
-	available := 0
+func uptimeFromBeats(beats []BeatView) *float64 {
+	total := int64(0)
+	available := int64(0)
 	for _, beat := range beats {
 		switch beat.Status {
 		case model.ChannelMonitorStatusUp, model.ChannelMonitorStatusSlow:
@@ -227,8 +286,13 @@ func uptimeFromBeats(beats []BeatView) float64 {
 			total++
 		}
 	}
+	return uptimePercent(available, total)
+}
+
+func uptimePercent(available int64, total int64) *float64 {
 	if total == 0 {
-		return 0
+		return nil
 	}
-	return float64(available) / float64(total) * 100
+	value := float64(available) / float64(total) * 100
+	return &value
 }

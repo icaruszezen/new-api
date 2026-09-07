@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -67,7 +68,9 @@ func runChannelMonitorProbeTask(ctx context.Context, report func(processed, tota
 		}
 
 		// 用户流量优先：只有该监控在一个探测周期内没有任何 beat 时才补发合成请求。
-		isIdle := lastBeatById[monitor.Id] < idleCutoff
+		// 未刷盘的热桶也算活跃，避免长采样窗口下对正在使用的模型重复打上游。
+		isIdle := lastBeatById[monitor.Id] < idleCutoff &&
+			!channelmonitor.HasActivitySince(monitor.Id, idleCutoff)
 
 		channel, selectErr := selectChannelForMonitor(ctx, monitor)
 		if selectErr != nil {
@@ -101,7 +104,7 @@ func runChannelMonitorProbeTask(ctx context.Context, report func(processed, tota
 			common.SysError("failed to persist channel monitor ping: " + err.Error())
 		}
 
-		if !isIdle {
+		if !isIdle || shouldSkipChannelMonitorSyntheticProbe(channel, monitor.Model) {
 			if report != nil {
 				report(index+1, len(monitors))
 			}
@@ -136,6 +139,7 @@ func probeChannelMonitor(ctx context.Context, monitor channelmonitor.Monitor, ch
 	result := testChannel(ctx, channel, probeUserID, monitor.Model, "", true, channelTestOptions{
 		group:          monitor.Group,
 		skipConsumeLog: true,
+		maxTokens:      common.GetPointer(uint(16)),
 	})
 	if result.localErr != nil || result.newAPIError != nil {
 		return channelMonitorProbeResult{}
@@ -166,4 +170,39 @@ func selectChannelForMonitor(ctx context.Context, monitor channelmonitor.Monitor
 		return nil, fmt.Errorf("no channel available for group %s model %s", monitor.Group, monitor.Model)
 	}
 	return channel, nil
+}
+
+// shouldSkipChannelMonitorSyntheticProbe 跳过 embedding / 出图 / rerank / 视频类合成请求。
+// 这些路径复用渠道测试时会打出高价上游调用；状态条仍靠用户流量和 ping。
+func shouldSkipChannelMonitorSyntheticProbe(channel *model.Channel, modelName string) bool {
+	modelName = strings.TrimSpace(modelName)
+	lower := strings.ToLower(modelName)
+	if strings.Contains(lower, "rerank") {
+		return true
+	}
+	if strings.Contains(lower, "embedding") ||
+		strings.HasPrefix(modelName, "m3e") ||
+		strings.Contains(modelName, "bge-") ||
+		strings.Contains(lower, "embed") ||
+		(channel != nil && channel.Type == constant.ChannelTypeMokaAI) {
+		return true
+	}
+	if channel != nil && channel.Type == constant.ChannelTypeVolcEngine && strings.Contains(modelName, "seedream") {
+		return true
+	}
+	if channel == nil {
+		return false
+	}
+	switch channel.Type {
+	case constant.ChannelTypeMidjourney,
+		constant.ChannelTypeMidjourneyPlus,
+		constant.ChannelTypeSunoAPI,
+		constant.ChannelTypeKling,
+		constant.ChannelTypeJimeng,
+		constant.ChannelTypeDoubaoVideo,
+		constant.ChannelTypeVidu:
+		return true
+	default:
+		return false
+	}
 }

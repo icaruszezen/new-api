@@ -4212,40 +4212,176 @@ export function ChannelMutateDrawer({
                               />
 
                               {form.watch('cache_billing_ratio_enabled') && (
-                                <FormField
-                                  control={form.control}
-                                  name='cache_billing_ratio'
-                                  render={({ field }) => (
-                                    <FormItem className='px-4 py-3'>
-                                      <FormLabel>
-                                        {t('Cache Read Billing Ratio Value')}
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          type='number'
-                                          min={0.01}
-                                          max={10}
-                                          step={0.01}
-                                          value={field.value ?? 1}
-                                          onChange={(event) => {
-                                            const next = event.target.value
-                                            field.onChange(
-                                              next === ''
-                                                ? undefined
-                                                : Number(next)
-                                            )
-                                          }}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        {t(
-                                          'Multiplier for cache read tokens only (e.g. 0.8 bills 80% of upstream cached tokens)'
+                                <>
+                                  <FormField
+                                    control={form.control}
+                                    name='cache_billing_ratio_range'
+                                    render={({ field }) => (
+                                      <FormItem className='px-4 py-3'>
+                                        <FormLabel>
+                                          {t('Cache Read Billing Ratio Mode')}
+                                        </FormLabel>
+                                        <Select
+                                          items={[
+                                            {
+                                              value: 'fixed',
+                                              label: t('Fixed ratio'),
+                                            },
+                                            {
+                                              value: 'range',
+                                              label: t('Random range'),
+                                            },
+                                          ]}
+                                          onValueChange={(value) =>
+                                            field.onChange(value === 'range')
+                                          }
+                                          value={
+                                            field.value ? 'range' : 'fixed'
+                                          }
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger>
+                                              <SelectValue
+                                                placeholder={t(
+                                                  'Cache Read Billing Ratio Mode'
+                                                )}
+                                              />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent
+                                            alignItemWithTrigger={false}
+                                          >
+                                            <SelectGroup>
+                                              <SelectItem value='fixed'>
+                                                {t('Fixed ratio')}
+                                              </SelectItem>
+                                              <SelectItem value='range'>
+                                                {t('Random range')}
+                                              </SelectItem>
+                                            </SelectGroup>
+                                          </SelectContent>
+                                        </Select>
+                                        <FormDescription>
+                                          {t(
+                                            'Fixed uses one ratio. Range randomly picks one value per request in 0.01 steps'
+                                          )}
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  {form.watch('cache_billing_ratio_range') ? (
+                                    <div className='grid grid-cols-2 gap-4 px-4 py-3'>
+                                      <FormField
+                                        control={form.control}
+                                        name='cache_billing_ratio_min'
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel>
+                                              {t(
+                                                'Cache Read Billing Ratio Min'
+                                              )}
+                                            </FormLabel>
+                                            <FormControl>
+                                              <Input
+                                                type='number'
+                                                min={0.01}
+                                                max={10}
+                                                step={0.01}
+                                                value={field.value ?? 0.95}
+                                                onChange={(event) => {
+                                                  const next =
+                                                    event.target.value
+                                                  field.onChange(
+                                                    next === ''
+                                                      ? undefined
+                                                      : Number(next)
+                                                  )
+                                                }}
+                                              />
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
                                         )}
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
+                                      />
+                                      <FormField
+                                        control={form.control}
+                                        name='cache_billing_ratio_max'
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel>
+                                              {t(
+                                                'Cache Read Billing Ratio Max'
+                                              )}
+                                            </FormLabel>
+                                            <FormControl>
+                                              <Input
+                                                type='number'
+                                                min={0.01}
+                                                max={10}
+                                                step={0.01}
+                                                value={field.value ?? 0.99}
+                                                onChange={(event) => {
+                                                  const next =
+                                                    event.target.value
+                                                  field.onChange(
+                                                    next === ''
+                                                      ? undefined
+                                                      : Number(next)
+                                                  )
+                                                }}
+                                              />
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+                                      <p className='text-muted-foreground col-span-2 text-sm'>
+                                        {t(
+                                          'Each request randomly picks a cache read ratio from this range in 0.01 steps'
+                                        )}
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <FormField
+                                      control={form.control}
+                                      name='cache_billing_ratio'
+                                      render={({ field }) => (
+                                        <FormItem className='px-4 py-3'>
+                                          <FormLabel>
+                                            {t(
+                                              'Cache Read Billing Ratio Value'
+                                            )}
+                                          </FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              type='number'
+                                              min={0.01}
+                                              max={10}
+                                              step={0.01}
+                                              value={field.value ?? 1}
+                                              onChange={(event) => {
+                                                const next = event.target.value
+                                                field.onChange(
+                                                  next === ''
+                                                    ? undefined
+                                                    : Number(next)
+                                                )
+                                              }}
+                                            />
+                                          </FormControl>
+                                          <FormDescription>
+                                            {t(
+                                              'Multiplier for cache read tokens only (e.g. 0.8 bills 80% of upstream cached tokens)'
+                                            )}
+                                          </FormDescription>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
                                   )}
-                                />
+                                </>
                               )}
 
                               <FormField

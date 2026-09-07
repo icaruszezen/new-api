@@ -520,6 +520,9 @@ export const STATIC_I18N_KEYS = [
   'No enabled tokens available',
   'Redirecting to chat page...',
 
+  // Channel monitoring audit
+  'Reset channel monitor history {{monitor_id}}',
+
   // Channel upstream updates
   'No processable upstream model updates for this channel',
   'Upstream model updates applied: {{added}} added, {{removed}} removed, {{ignored}} ignored this time, {{totalIgnored}} total ignored models',

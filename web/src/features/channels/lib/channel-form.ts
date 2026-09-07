@@ -267,6 +267,9 @@ export const channelFormSchema = z
     system_prompt_override: z.boolean().optional(),
     cache_billing_ratio_enabled: z.boolean().optional(),
     cache_billing_ratio: z.number().optional(),
+    cache_billing_ratio_range: z.boolean().optional(),
+    cache_billing_ratio_min: z.number().optional(),
+    cache_billing_ratio_max: z.number().optional(),
     image_nonstream_via_upstream_stream_enabled: z.boolean().optional(),
     stream_prelude_enabled: z.boolean().optional(),
     stream_prelude_delay_min_seconds: z.number().optional(),
@@ -385,7 +388,48 @@ export const channelFormSchema = z
     }
 
     if (data.cache_billing_ratio_enabled) {
-      if (
+      if (data.cache_billing_ratio_range) {
+        const minRatio = data.cache_billing_ratio_min
+        const maxRatio = data.cache_billing_ratio_max
+        if (minRatio == null || !Number.isFinite(minRatio) || minRatio <= 0) {
+          addRequiredIssue(
+            ctx,
+            'cache_billing_ratio_min',
+            'Cache billing ratio min must be greater than 0 when range is enabled'
+          )
+        } else if (minRatio > 10) {
+          addRequiredIssue(
+            ctx,
+            'cache_billing_ratio_min',
+            'Cache billing ratio min must not exceed 10'
+          )
+        }
+        if (maxRatio == null || !Number.isFinite(maxRatio) || maxRatio <= 0) {
+          addRequiredIssue(
+            ctx,
+            'cache_billing_ratio_max',
+            'Cache billing ratio max must be greater than 0 when range is enabled'
+          )
+        } else if (maxRatio > 10) {
+          addRequiredIssue(
+            ctx,
+            'cache_billing_ratio_max',
+            'Cache billing ratio max must not exceed 10'
+          )
+        } else if (
+          minRatio != null &&
+          Number.isFinite(minRatio) &&
+          minRatio > 0 &&
+          minRatio <= 10 &&
+          minRatio > maxRatio
+        ) {
+          addRequiredIssue(
+            ctx,
+            'cache_billing_ratio_min',
+            'Cache billing ratio min must not exceed max'
+          )
+        }
+      } else if (
         data.cache_billing_ratio == null ||
         !Number.isFinite(data.cache_billing_ratio) ||
         data.cache_billing_ratio <= 0
@@ -505,6 +549,9 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   system_prompt_override: false,
   cache_billing_ratio_enabled: false,
   cache_billing_ratio: 1,
+  cache_billing_ratio_range: false,
+  cache_billing_ratio_min: 0.95,
+  cache_billing_ratio_max: 0.99,
   image_nonstream_via_upstream_stream_enabled: false,
   stream_prelude_enabled: false,
   stream_prelude_delay_min_seconds: 0,
@@ -552,6 +599,9 @@ export function transformChannelToFormDefaults(
     system_prompt_override: false,
     cache_billing_ratio_enabled: false,
     cache_billing_ratio: 1,
+    cache_billing_ratio_range: false,
+    cache_billing_ratio_min: 0.95,
+    cache_billing_ratio_max: 0.99,
     image_nonstream_via_upstream_stream_enabled: false,
     stream_prelude_enabled: false,
     stream_prelude_delay_min_seconds: 0,
@@ -583,6 +633,17 @@ export function transformChannelToFormDefaults(
           parsed.cache_billing_ratio > 0
             ? parsed.cache_billing_ratio
             : 1,
+        cache_billing_ratio_range: parsed.cache_billing_ratio_range === true,
+        cache_billing_ratio_min:
+          typeof parsed.cache_billing_ratio_min === 'number' &&
+          parsed.cache_billing_ratio_min > 0
+            ? parsed.cache_billing_ratio_min
+            : 0.95,
+        cache_billing_ratio_max:
+          typeof parsed.cache_billing_ratio_max === 'number' &&
+          parsed.cache_billing_ratio_max > 0
+            ? parsed.cache_billing_ratio_max
+            : 0.99,
         image_nonstream_via_upstream_stream_enabled:
           parsed.image_nonstream_via_upstream_stream_enabled === true,
         stream_prelude_enabled: parsed.stream_prelude_enabled === true,
@@ -716,9 +777,22 @@ export function buildSettingJSON(formData: ChannelFormValues): string {
     system_prompt: formData.system_prompt || '',
     system_prompt_override: formData.system_prompt_override || false,
     cache_billing_ratio_enabled: formData.cache_billing_ratio_enabled || false,
-    cache_billing_ratio: formData.cache_billing_ratio_enabled
-      ? formData.cache_billing_ratio || 1
-      : undefined,
+    cache_billing_ratio:
+      formData.cache_billing_ratio_enabled && !formData.cache_billing_ratio_range
+        ? formData.cache_billing_ratio || 1
+        : undefined,
+    cache_billing_ratio_range:
+      formData.cache_billing_ratio_enabled && formData.cache_billing_ratio_range
+        ? true
+        : undefined,
+    cache_billing_ratio_min:
+      formData.cache_billing_ratio_enabled && formData.cache_billing_ratio_range
+        ? formData.cache_billing_ratio_min
+        : undefined,
+    cache_billing_ratio_max:
+      formData.cache_billing_ratio_enabled && formData.cache_billing_ratio_range
+        ? formData.cache_billing_ratio_max
+        : undefined,
     image_nonstream_via_upstream_stream_enabled:
       formData.image_nonstream_via_upstream_stream_enabled === true,
     stream_prelude_enabled: formData.stream_prelude_enabled || false,

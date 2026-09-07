@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -32,11 +32,16 @@ export function useSaveMonitors() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [isSaving, setIsSaving] = useState(false)
+  const savingRef = useRef(false)
 
   const save = async (update: {
     enabled?: boolean
     monitors?: ChannelMonitor[]
   }) => {
+    if (savingRef.current) {
+      return false
+    }
+    savingRef.current = true
     setIsSaving(true)
     try {
       const response = await updateChannelMonitoringConfig(update)
@@ -55,6 +60,7 @@ export function useSaveMonitors() {
       )
       return false
     } finally {
+      savingRef.current = false
       setIsSaving(false)
     }
   }
@@ -70,6 +76,7 @@ export function useSaveMonitors() {
         model: monitor.model,
         icon: monitor.icon,
         enabled: monitor.enabled,
+        uptime_scope: monitor.uptime_scope,
         sort: index,
       })),
     })

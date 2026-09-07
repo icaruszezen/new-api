@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/setting/config"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,6 +56,30 @@ func TestValidateMonitorsNormalizesAndAssignsIdentity(t *testing.T) {
 
 	assert.Equal(t, "keep-me", normalized[1].Id, "an existing id must survive so historical beats stay linked")
 	assert.Equal(t, 1, normalized[1].Sort)
+	assert.Equal(t, UptimeScopeRecent, normalized[0].UptimeScope)
+	assert.Equal(t, UptimeScopeRecent, normalized[1].UptimeScope)
+}
+
+func TestParseMonitorsReadsUptimeScopeAndDefaultsMissingToEmpty(t *testing.T) {
+	monitors, err := ParseMonitors(`[
+		{"id":"a","name":"Recent","group":"default","model":"gpt-5","enabled":true,"sort":1},
+		{"id":"b","name":"All","group":"vip","model":"gpt-5","enabled":true,"sort":2,"uptime_scope":"all"}
+	]`)
+	require.NoError(t, err)
+	require.Len(t, monitors, 2)
+	assert.Empty(t, monitors[0].UptimeScope)
+	assert.Equal(t, UptimeScopeRecent, uptimeScopeOf(monitors[0]))
+	assert.Equal(t, UptimeScopeAll, monitors[1].UptimeScope)
+}
+
+func TestValidateMonitorsNormalizesUptimeScope(t *testing.T) {
+	normalized, err := ValidateMonitors([]Monitor{
+		{Name: "Recent", Group: "default", Model: "gpt-5", UptimeScope: "  "},
+		{Name: "All", Group: "vip", Model: "gpt-5", UptimeScope: UptimeScopeAll},
+	}, allowAll, allowAllPairs)
+	require.NoError(t, err)
+	assert.Equal(t, UptimeScopeRecent, normalized[0].UptimeScope)
+	assert.Equal(t, UptimeScopeAll, normalized[1].UptimeScope)
 }
 
 func TestValidateMonitorsRejectsInvalidInput(t *testing.T) {
@@ -126,6 +152,13 @@ func TestValidateMonitorsRejectsInvalidInput(t *testing.T) {
 			modelInGroup: allowAllPairs,
 			wantMessage:  "duplicated monitor id",
 		},
+		{
+			name:         "invalid uptime scope",
+			monitors:     []Monitor{{Name: "Pro", Group: "default", Model: "gpt-5", UptimeScope: "week"}},
+			groupExists:  allowAll,
+			modelInGroup: allowAllPairs,
+			wantMessage:  "uptime scope must be",
+		},
 	}
 
 	for _, testCase := range cases {
@@ -150,6 +183,38 @@ func TestValidateMonitorsEnforcesMaxCount(t *testing.T) {
 	_, err := ValidateMonitors(monitors, allowAll, allowAllPairs)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "at most")
+}
+
+func TestRegistryKeepsLastGoodSnapshotWhenParseFails(t *testing.T) {
+	resetMonitorRegistry()
+	t.Cleanup(resetMonitorRegistry)
+
+	saved := config.GlobalConfig.ExportAllConfigs()
+	t.Cleanup(func() {
+		_ = config.GlobalConfig.LoadFromDB(saved)
+	})
+
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"channel_monitoring_setting.monitors": `[{"id":"keep","name":"Pro","group":"default","model":"gpt-5","enabled":true}]`,
+	}))
+	got := Monitors()
+	require.Len(t, got, 1)
+	assert.Equal(t, "keep", got[0].Id)
+
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"channel_monitoring_setting.monitors": `[{"name":`,
+	}))
+	got = Monitors()
+	require.Len(t, got, 1)
+	assert.Equal(t, "keep", got[0].Id, "a malformed option must not wipe the last valid monitor list")
+}
+
+func resetMonitorRegistry() {
+	monitorRegistry.mu.Lock()
+	monitorRegistry.raw = ""
+	monitorRegistry.monitors = nil
+	monitorRegistry.byPair = nil
+	monitorRegistry.mu.Unlock()
 }
 
 func TestValidateMonitorsAllowsSameModelAcrossGroups(t *testing.T) {

@@ -89,6 +89,9 @@ export interface ChannelSettings {
   system_prompt_override?: boolean
   cache_billing_ratio_enabled?: boolean
   cache_billing_ratio?: number
+  cache_billing_ratio_range?: boolean
+  cache_billing_ratio_min?: number
+  cache_billing_ratio_max?: number
   image_nonstream_via_upstream_stream_enabled?: boolean
   stream_prelude_enabled?: boolean
   stream_prelude_delay_min_seconds?: number

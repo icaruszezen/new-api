@@ -2,12 +2,17 @@ package channelmonitor
 
 import (
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/channel_monitoring_setting"
 )
+
+// persistMu 让重置与刷盘互斥：避免 flush 已取出样本、reset 已删库、flush 再落库。
+var persistMu sync.RWMutex
 
 const (
 	flushInterval   = 10 * time.Second
@@ -25,10 +30,10 @@ func flushLoop() {
 	for {
 		time.Sleep(flushInterval)
 		setting := channel_monitoring_setting.GetSetting()
-		if !setting.Enabled {
-			continue
-		}
 		flushCompletedBuckets(setting.SampleWindowSeconds)
+		if !setting.Enabled {
+			discardHotBeats()
+		}
 		if time.Since(lastCleanup) >= cleanupInterval {
 			cleanupExpiredData(setting.BeatRetentionHours, setting.StatRetentionDays)
 			lastCleanup = time.Now()
@@ -39,6 +44,9 @@ func flushLoop() {
 // flushCompletedBuckets 把已结束的采样桶写入 beat 表并累加小时汇总。
 // 仍在进行中的桶保留在内存里，等窗口结束后再落库。
 func flushCompletedBuckets(sampleWindowSeconds int) {
+	persistMu.RLock()
+	defer persistMu.RUnlock()
+
 	currentBucket := bucketStart(time.Now().Unix(), int64(sampleWindowSeconds))
 	staleBefore := time.Now().Add(-time.Hour).Unix()
 
@@ -70,18 +78,6 @@ func flushCompletedBuckets(sampleWindowSeconds int) {
 }
 
 func persistBeat(key beatKey, sample Sample) error {
-	err := model.InsertChannelMonitorBeats([]model.ChannelMonitorBeat{{
-		MonitorId: key.monitorId,
-		BucketTs:  key.bucketTs,
-		Status:    sample.Status,
-		TtftMs:    sample.TtftMs,
-		ChannelId: sample.ChannelId,
-		Source:    sample.Source,
-	}})
-	if err != nil {
-		return err
-	}
-
 	stat := &model.ChannelMonitorStat{
 		MonitorId: key.monitorId,
 		HourTs:    key.bucketTs - (key.bucketTs % hourSeconds),
@@ -99,11 +95,14 @@ func persistBeat(key beatKey, sample Sample) error {
 		stat.TtftSumMs = int64(sample.TtftMs)
 		stat.TtftCount = 1
 	}
-	if err := model.UpsertChannelMonitorStat(stat); err != nil {
-		return err
-	}
-
-	return model.TouchChannelMonitorBeatTs(key.monitorId, key.bucketTs, sample.Source)
+	return model.PersistChannelMonitorSample(model.ChannelMonitorBeat{
+		MonitorId: key.monitorId,
+		BucketTs:  key.bucketTs,
+		Status:    sample.Status,
+		TtftMs:    sample.TtftMs,
+		ChannelId: sample.ChannelId,
+		Source:    sample.Source,
+	}, stat)
 }
 
 func cleanupExpiredData(beatRetentionHours int, statRetentionDays int) {
@@ -121,7 +120,28 @@ func cleanupExpiredData(beatRetentionHours int, statRetentionDays int) {
 	for _, monitor := range Monitors() {
 		monitorIds = append(monitorIds, monitor.Id)
 	}
+	if len(monitorIds) == 0 {
+		if !isExplicitlyEmptyMonitorsConfig() {
+			return
+		}
+		if err := model.DeleteAllChannelMonitorStates(); err != nil {
+			common.SysError("failed to cleanup stale channel monitor states: " + err.Error())
+		}
+		return
+	}
 	if err := model.DeleteChannelMonitorStatesExcept(monitorIds); err != nil {
 		common.SysError("failed to cleanup stale channel monitor states: " + err.Error())
 	}
+}
+
+func isExplicitlyEmptyMonitorsConfig() bool {
+	raw := strings.TrimSpace(channel_monitoring_setting.RawMonitors())
+	return raw == "" || raw == "[]" || raw == "null"
+}
+
+func discardHotBeats() {
+	hotBeats.Range(func(key, _ any) bool {
+		hotBeats.Delete(key)
+		return true
+	})
 }

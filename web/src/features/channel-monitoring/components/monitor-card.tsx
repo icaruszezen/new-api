@@ -164,12 +164,14 @@ export function MonitorCard(props: MonitorCardProps) {
           <span
             className={cn(
               'text-2xl font-semibold tabular-nums',
-              uptimeToneClass(props.monitor.uptime)
+              props.monitor.uptime == null
+                ? undefined
+                : uptimeToneClass(props.monitor.uptime)
             )}
           >
-            {props.monitor.uptime > 0
-              ? `${props.monitor.uptime.toFixed(2)}%`
-              : '--'}
+            {props.monitor.uptime == null
+              ? '--'
+              : `${props.monitor.uptime.toFixed(2)}%`}
           </span>
         </div>
 

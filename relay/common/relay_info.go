@@ -187,6 +187,11 @@ type RelayInfo struct {
 	// 由 Post*ConsumeQuota 在上游未返回计费信息时设置，供错误捕获判定使用。
 	DebugBillingIssue string
 
+	// cacheReadBillingRatio 是本渠道尝试抽中的缓存读取计费倍率。
+	// 流式路径可能多次 Apply，必须复用同一次抽样；InitChannelMeta 会在换渠道重试时清空。
+	cacheReadBillingRatio    float64
+	cacheReadBillingRatioSet bool
+
 	// streamWriteMu 是流式响应写客户端的共享互斥锁，供上游转发与 Ping 保活共用，
 	// 避免并发写 SSE 冲突。在 genBaseRelayInfo 中预初始化。
 	streamWriteMu *sync.Mutex
@@ -248,6 +253,8 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	}
 
 	info.ChannelMeta = channelMeta
+	info.cacheReadBillingRatio = 0
+	info.cacheReadBillingRatioSet = false
 
 	// Channel identity feeds the converter options snapshot (e.g.
 	// OpenRouterDialect); drop the cache so a cross-channel retry rebuilds it.
@@ -908,6 +915,25 @@ func (info *RelayInfo) randomStreamPreludeDelay() time.Duration {
 		delayMs += rand.Intn(maxMs - minMs + 1)
 	}
 	return time.Duration(delayMs) * time.Millisecond
+}
+
+// ResolvedCacheReadBillingRatio returns the cache-read billing ratio pinned for
+// this channel attempt, if one has already been resolved.
+func (info *RelayInfo) ResolvedCacheReadBillingRatio() (float64, bool) {
+	if info == nil || !info.cacheReadBillingRatioSet {
+		return 0, false
+	}
+	return info.cacheReadBillingRatio, true
+}
+
+// SetResolvedCacheReadBillingRatio pins the cache-read billing ratio for this
+// channel attempt so later stream/settlement applies reuse the same value.
+func (info *RelayInfo) SetResolvedCacheReadBillingRatio(ratio float64) {
+	if info == nil {
+		return
+	}
+	info.cacheReadBillingRatio = ratio
+	info.cacheReadBillingRatioSet = true
 }
 
 type TaskRelayInfo struct {

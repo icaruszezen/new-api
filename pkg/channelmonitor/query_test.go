@@ -6,6 +6,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLatestStatusReflectsNewestBeat(t *testing.T) {
@@ -103,9 +104,61 @@ func TestUptimeFromBeatsCountsSlowSamplesAsAvailable(t *testing.T) {
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			assert.InDelta(t, testCase.expect, uptimeFromBeats(testCase.beats), 0.0001)
+			got := uptimeFromBeats(testCase.beats)
+			if testCase.beats == nil {
+				assert.Nil(t, got)
+				return
+			}
+			if testCase.name == "no samples" {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.InDelta(t, testCase.expect, *got, 0.0001)
 		})
 	}
+}
+
+func TestResolveMonitorUptimeUsesConfiguredSampleWindow(t *testing.T) {
+	recentBeats := []BeatView{
+		{Ts: 1, Status: model.ChannelMonitorStatusUp},
+		{Ts: 2, Status: model.ChannelMonitorStatusUp},
+	}
+	history := model.ChannelMonitorUptime{
+		Total:     4,
+		UpCount:   1,
+		SlowCount: 1,
+		DownCount: 2,
+	}
+	hot := []BeatView{{Ts: 9, Status: model.ChannelMonitorStatusDown}}
+
+	recent := resolveMonitorUptime(Monitor{UptimeScope: UptimeScopeRecent}, recentBeats, history, hot)
+	legacy := resolveMonitorUptime(Monitor{}, recentBeats, history, hot)
+	all := resolveMonitorUptime(Monitor{UptimeScope: UptimeScopeAll}, recentBeats, history, hot)
+
+	// Recent (and missing scope) stay on the status-bar window, so older hourly
+	// failures and the unflushed hot miss must not pull the percentage down.
+	require.NotNil(t, recent)
+	require.NotNil(t, legacy)
+	require.NotNil(t, all)
+	assert.InDelta(t, 100, *recent, 0.0001)
+	assert.InDelta(t, 100, *legacy, 0.0001)
+	// History is 2 available / 4, plus one hot failure → 2 / 5 = 40%.
+	assert.InDelta(t, 40, *all, 0.0001)
+}
+
+func TestUptimeFromHistoryMergesUnflushedHotBeats(t *testing.T) {
+	history := model.ChannelMonitorUptime{Total: 3, UpCount: 2, DownCount: 1}
+
+	got := uptimeFromHistory(history, nil)
+	require.NotNil(t, got)
+	assert.InDelta(t, 100.0/3.0*2, *got, 0.0001)
+	got = uptimeFromHistory(history, []BeatView{
+		{Status: model.ChannelMonitorStatusSlow},
+	})
+	require.NotNil(t, got)
+	assert.InDelta(t, 75, *got, 0.0001)
+	assert.Nil(t, uptimeFromHistory(model.ChannelMonitorUptime{}, nil))
 }
 
 func TestDedupeByTsDropsOverlappingBuckets(t *testing.T) {

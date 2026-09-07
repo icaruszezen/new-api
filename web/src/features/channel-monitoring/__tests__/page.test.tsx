@@ -107,4 +107,60 @@ describe('ChannelMonitoring page', () => {
       screen.getByText('No monitors have been configured yet.')
     ).toBeInTheDocument()
   })
+
+  test('keeps the last successful cards when a later refetch fails', () => {
+    statusMocks.useRefreshCountdown.mockReturnValue(12)
+    statusMocks.useMonitoringStatus.mockReturnValue({
+      data: {
+        enabled: true,
+        sample_window_seconds: 20,
+        beat_limit: 60,
+        monitors: [
+          {
+            id: 'm1',
+            name: 'ChatGPT-Pro',
+            model: 'gpt-5-sol',
+            icon: 'OpenAI',
+            status: 'up',
+            avg_ttft_ms: 3201,
+            ping_ms: 196,
+            uptime: 100,
+            beats: [
+              { ts: 1_700_000_000, status: BEAT_STATUS_UP, ttft_ms: 3201 },
+            ],
+          },
+        ],
+      },
+      isLoading: false,
+      isError: true,
+      refetch: vi.fn(),
+      dataUpdatedAt: Date.now(),
+      backoffSeconds: 12,
+    })
+
+    render(<ChannelMonitoring />)
+
+    expect(screen.getByText('ChatGPT-Pro')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Failed to load channel monitoring data.')
+    ).not.toBeInTheDocument()
+  })
+
+  test('disables retry while a Retry-After backoff is active', () => {
+    statusMocks.useRefreshCountdown.mockReturnValue(0)
+    statusMocks.useMonitoringStatus.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: vi.fn(),
+      dataUpdatedAt: 0,
+      backoffSeconds: 12,
+    })
+
+    render(<ChannelMonitoring />)
+
+    expect(
+      screen.getByRole('button', { name: 'Retry in 12s' })
+    ).toBeDisabled()
+  })
 })

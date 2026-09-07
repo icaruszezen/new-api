@@ -17,11 +17,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import {
+  ArrowDown,
+  ArrowUp,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { SectionPageLayout } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,7 +43,13 @@ import {
   MonitorDialog,
   type MonitorFormValues,
 } from './components/monitor-dialog'
-import { MAX_MONITORS, monitorPairKey } from './constants'
+import {
+  MAX_MONITORS,
+  UPTIME_SCOPE_ALL,
+  monitorPairKey,
+  normalizeUptimeScope,
+} from './constants'
+import { useResetMonitor } from './hooks/use-reset-monitor'
 import { useSaveMonitors } from './hooks/use-save-monitors'
 import type { AdminMonitor } from './types'
 
@@ -46,6 +60,8 @@ function MonitorRow(props: {
   onEdit: () => void
   onRemove: () => void
   onMove: (direction: -1 | 1) => void
+  onReset?: () => void
+  disabled?: boolean
 }) {
   const { t } = useTranslation()
 
@@ -65,7 +81,10 @@ function MonitorRow(props: {
           )}
         </div>
         <div className='text-muted-foreground truncate text-xs'>
-          {props.monitor.group} · {props.monitor.model}
+          {props.monitor.group} · {props.monitor.model} ·{' '}
+          {normalizeUptimeScope(props.monitor.uptime_scope) === UPTIME_SCOPE_ALL
+            ? t('All historical samples')
+            : t('Recent records')}
         </div>
       </div>
 
@@ -75,7 +94,7 @@ function MonitorRow(props: {
           variant='ghost'
           size='icon'
           aria-label={t('Move up')}
-          disabled={props.isFirst}
+          disabled={props.disabled || props.isFirst}
           onClick={() => props.onMove(-1)}
         >
           <ArrowUp className='size-4' />
@@ -85,16 +104,29 @@ function MonitorRow(props: {
           variant='ghost'
           size='icon'
           aria-label={t('Move down')}
-          disabled={props.isLast}
+          disabled={props.disabled || props.isLast}
           onClick={() => props.onMove(1)}
         >
           <ArrowDown className='size-4' />
         </Button>
+        {props.onReset && (
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon'
+            aria-label={t('Reset history')}
+            disabled={props.disabled}
+            onClick={props.onReset}
+          >
+            <RotateCcw className='size-4' />
+          </Button>
+        )}
         <Button
           type='button'
           variant='ghost'
           size='icon'
           aria-label={t('Edit')}
+          disabled={props.disabled}
           onClick={props.onEdit}
         >
           <Pencil className='size-4' />
@@ -104,6 +136,7 @@ function MonitorRow(props: {
           variant='ghost'
           size='icon'
           aria-label={t('Delete')}
+          disabled={props.disabled}
           onClick={props.onRemove}
         >
           <Trash2 className='text-destructive size-4' />
@@ -125,11 +158,13 @@ export function ChannelMonitoringSettings() {
     queryFn: getGroups,
   })
   const { saveMonitors, setEnabled, isSaving } = useSaveMonitors()
+  const { resetMonitor, isResetting } = useResetMonitor()
 
   const [monitors, setMonitors] = useState<AdminMonitor[]>([])
   const [enabled, setEnabledState] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editIndex, setEditIndex] = useState<number | null>(null)
+  const [resetTarget, setResetTarget] = useState<AdminMonitor | null>(null)
 
   useEffect(() => {
     if (!configQuery.data) return
@@ -143,13 +178,20 @@ export function ChannelMonitoringSettings() {
     if (!ok) setEnabledState(!checked)
   }
 
+  const persistInFlight = useRef(false)
   const persist = async (next: AdminMonitor[]) => {
+    if (persistInFlight.current) return
+    persistInFlight.current = true
     const previous = monitors
     setMonitors(next)
     // A rejected save must not leave the optimistic list on screen, otherwise
     // the admin sees a monitor that the server never accepted.
-    if (!(await saveMonitors(next))) {
-      setMonitors(previous)
+    try {
+      if (!(await saveMonitors(next))) {
+        setMonitors(previous)
+      }
+    } finally {
+      persistInFlight.current = false
     }
   }
 
@@ -161,6 +203,7 @@ export function ChannelMonitoringSettings() {
       model: values.model,
       icon: values.icon,
       enabled: values.enabled,
+      uptime_scope: values.uptime_scope,
       sort: editIndex === null ? monitors.length : monitors[editIndex].sort,
       resolved_icon: values.icon,
     }
@@ -183,9 +226,11 @@ export function ChannelMonitoringSettings() {
 
   const openAddDialog = () => {
     if (monitors.length >= MAX_MONITORS) {
-      toast.error(t('At most {{count}} monitors can be configured.', {
-        count: MAX_MONITORS,
-      }))
+      toast.error(
+        t('At most {{count}} monitors can be configured.', {
+          count: MAX_MONITORS,
+        })
+      )
       return
     }
     setEditIndex(null)
@@ -203,6 +248,22 @@ export function ChannelMonitoringSettings() {
         <div className='space-y-2'>
           <Skeleton className='h-14 rounded-lg' />
           <Skeleton className='h-14 rounded-lg' />
+        </div>
+      )
+    }
+    if (configQuery.isError) {
+      return (
+        <div className='space-y-3 text-center'>
+          <p className='text-muted-foreground text-sm'>
+            {t('Failed to load channel monitoring settings.')}
+          </p>
+          <Button
+            type='button'
+            variant='outline'
+            onClick={() => void configQuery.refetch()}
+          >
+            {t('Retry')}
+          </Button>
         </div>
       )
     }
@@ -229,6 +290,8 @@ export function ChannelMonitoringSettings() {
               void persist(monitors.filter((_, i) => i !== index))
             }
             onMove={(direction) => handleMove(index, direction)}
+            onReset={monitor.id ? () => setResetTarget(monitor) : undefined}
+            disabled={isSaving}
           />
         ))}
       </ul>
@@ -291,6 +354,29 @@ export function ChannelMonitoringSettings() {
           groups={groupsQuery.data?.data ?? []}
           takenPairs={takenPairs}
           onSave={handleSave}
+        />
+
+        <ConfirmDialog
+          open={resetTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setResetTarget(null)
+          }}
+          title={t('Reset history')}
+          desc={t(
+            'This will delete all recorded samples, uptime stats, and ping data for {{name}}. Monitoring will start over.',
+            { name: resetTarget?.name ?? '' }
+          )}
+          confirmText={t('Reset history')}
+          destructive
+          isLoading={isResetting}
+          handleConfirm={() => {
+            if (!resetTarget?.id) return
+            void (async () => {
+              if (await resetMonitor(resetTarget.id)) {
+                setResetTarget(null)
+              }
+            })()
+          }}
         />
       </SectionPageLayout.Content>
     </SectionPageLayout>

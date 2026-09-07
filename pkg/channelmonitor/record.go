@@ -97,6 +97,34 @@ func Record(sample Sample) {
 	actual.(*hotBeat).offer(sample)
 }
 
+// HasActivitySince 报告该监控是否还有未刷盘的热桶。
+// 采样窗口可以长于探测间隔，所以只要内存里有当选样本，就视为仍有流量，
+// 不能只拿已落库的 LastBeatTs 判断空闲。
+func HasActivitySince(monitorId string, sinceTs int64) bool {
+	if monitorId == "" {
+		return false
+	}
+	found := false
+	hotBeats.Range(func(key, value any) bool {
+		k := key.(beatKey)
+		if k.monitorId != monitorId {
+			return true
+		}
+		beat := value.(*hotBeat)
+		beat.mu.Lock()
+		filled := beat.filled
+		beat.mu.Unlock()
+		if !filled {
+			return true
+		}
+		// 窗口起点可能早于 sinceTs（采样窗口长于探测间隔），只要热桶里还有样本就算活跃。
+		_ = sinceTs
+		found = true
+		return false
+	})
+	return found
+}
+
 func (b *hotBeat) offer(sample Sample) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

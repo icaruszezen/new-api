@@ -113,10 +113,17 @@ describe('MonitorCard', () => {
   })
 
   test('falls back to a dash for metrics that have no measurement yet', () => {
-    renderCard({ avg_ttft_ms: 0, ping_ms: 0, uptime: 0 })
+    renderCard({ avg_ttft_ms: 0, ping_ms: 0, uptime: null })
 
     // Three placeholders: chat latency, endpoint ping and uptime.
     expect(screen.getAllByText('--')).toHaveLength(3)
+  })
+
+  test('shows 0.00% when every recorded sample failed', () => {
+    renderCard({ uptime: 0, status: 'down' })
+
+    expect(screen.getByText('0.00%')).toBeInTheDocument()
+    expect(screen.queryByText('--')).not.toBeInTheDocument()
   })
 
   test.each([

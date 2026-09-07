@@ -19,6 +19,7 @@ import (
 func TestChannelMonitoringConfigRoutesUseChannelPermissions(t *testing.T) {
 	assertChannelMonitoringRoutePermission(t, http.MethodGet, "/config", authz.ChannelRead, controller.GetChannelMonitoringConfig)
 	assertChannelMonitoringRoutePermission(t, http.MethodPut, "/config", authz.ChannelWrite, controller.UpdateChannelMonitoringConfig)
+	assertChannelMonitoringRoutePermission(t, http.MethodPost, "/:id/reset", authz.ChannelWrite, controller.ResetChannelMonitor)
 }
 
 func TestChannelMonitoringRoutesRegisterWithoutConflict(t *testing.T) {

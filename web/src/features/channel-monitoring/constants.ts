@@ -27,3 +27,13 @@ export const MAX_MONITORS = 50
 export function monitorPairKey(group: string, model: string): string {
   return `${group}\u0000${model}`
 }
+
+/** Mirrors pkg/channelmonitor.UptimeScopeRecent / UptimeScopeAll. */
+export const UPTIME_SCOPE_RECENT = 'recent'
+export const UPTIME_SCOPE_ALL = 'all'
+
+export type UptimeScope = typeof UPTIME_SCOPE_RECENT | typeof UPTIME_SCOPE_ALL
+
+export function normalizeUptimeScope(scope?: string): UptimeScope {
+  return scope === UPTIME_SCOPE_ALL ? UPTIME_SCOPE_ALL : UPTIME_SCOPE_RECENT
+}

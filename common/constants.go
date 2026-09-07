@@ -219,6 +219,12 @@ var (
 	SearchRateLimitEnable         = true
 	SearchRateLimitNum            = 10
 	SearchRateLimitDuration int64 = 60
+
+	// Public channel-monitoring status page. Separate from CriticalRateLimit
+	// so login/refresh cannot starve the 60s dashboard poll.
+	ChannelMonitoringStatusRateLimitEnable         = true
+	ChannelMonitoringStatusRateLimitNum            = 30
+	ChannelMonitoringStatusRateLimitDuration int64 = 60
 )
 
 var RateLimitKeyExpirationDuration = 20 * time.Minute

@@ -20,6 +20,9 @@ type ChannelSettings struct {
 	SystemPromptOverride                   bool    `json:"system_prompt_override,omitempty"`
 	CacheBillingRatioEnabled               bool    `json:"cache_billing_ratio_enabled,omitempty"`
 	CacheBillingRatio                      float64 `json:"cache_billing_ratio,omitempty"`
+	CacheBillingRatioRange                 bool    `json:"cache_billing_ratio_range,omitempty"`
+	CacheBillingRatioMin                   float64 `json:"cache_billing_ratio_min,omitempty"`
+	CacheBillingRatioMax                   float64 `json:"cache_billing_ratio_max,omitempty"`
 	ImageNonStreamViaUpstreamStreamEnabled bool    `json:"image_nonstream_via_upstream_stream_enabled,omitempty"`
 	// StreamPreludeEnabled 开启「流式假首字」：流式请求在 [Min,Max] 秒内随机延迟，
 	// 到期时若上游仍无内容则向客户端按下游协议发一个合规空首字/注释行，改善首字体感。

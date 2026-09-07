@@ -17,21 +17,113 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { getChannelMonitoringStatus } from '../api'
+import {
+  isRateLimitedError,
+  parseRetryAfterMs,
+} from '../lib/retry-after'
 
 /** How often the status page pulls fresh beats. */
 export const MONITORING_REFRESH_MS = 60_000
 
+const BACKOFF_ERROR_NAME = 'MonitoringBackoffError'
+
+function isMonitoringBackoffError(error: unknown): boolean {
+  return error instanceof Error && error.name === BACKOFF_ERROR_NAME
+}
+
+function throwBackoffError(): never {
+  const error = new Error('Channel monitoring status is backing off')
+  error.name = BACKOFF_ERROR_NAME
+  throw error
+}
+
+function useSecondsUntil(deadlineMs: number | undefined) {
+  const [secondsLeft, setSecondsLeft] = useState(0)
+
+  useEffect(() => {
+    if (!deadlineMs) {
+      setSecondsLeft(0)
+      return
+    }
+
+    const tick = () => {
+      setSecondsLeft(Math.max(0, Math.ceil((deadlineMs - Date.now()) / 1000)))
+    }
+
+    tick()
+    const timer = window.setInterval(tick, 1000)
+    return () => window.clearInterval(timer)
+  }, [deadlineMs])
+
+  return secondsLeft
+}
+
 export function useMonitoringStatus() {
-  return useQuery({
+  const backoffUntilRef = useRef(0)
+  const [backoffUntil, setBackoffUntil] = useState(0)
+  const backoffSeconds = useSecondsUntil(backoffUntil || undefined)
+
+  const query = useQuery({
     queryKey: ['channel-monitoring-status'],
-    queryFn: getChannelMonitoringStatus,
-    refetchInterval: MONITORING_REFRESH_MS,
-    refetchOnWindowFocus: true,
+    queryFn: async () => {
+      if (Date.now() < backoffUntilRef.current) {
+        throwBackoffError()
+      }
+      try {
+        const data = await getChannelMonitoringStatus()
+        if (backoffUntilRef.current !== 0) {
+          backoffUntilRef.current = 0
+          setBackoffUntil(0)
+        }
+        return data
+      } catch (error) {
+        if (isRateLimitedError(error)) {
+          const until = Date.now() + parseRetryAfterMs(error)
+          backoffUntilRef.current = until
+          setBackoffUntil(until)
+        }
+        throw error
+      }
+    },
+    retry: (failureCount, error) => {
+      if (isRateLimitedError(error) || isMonitoringBackoffError(error)) {
+        return false
+      }
+      return failureCount < 3
+    },
+    refetchInterval: (current) => {
+      const remaining = backoffUntilRef.current - Date.now()
+      if (remaining > 0) return remaining
+      if (
+        current.state.status === 'error' &&
+        !isRateLimitedError(current.state.error)
+      ) {
+        return false
+      }
+      return MONITORING_REFRESH_MS
+    },
+    refetchOnWindowFocus: () => Date.now() >= backoffUntilRef.current,
     staleTime: 0,
   })
+
+  const refetch = useCallback(async () => {
+    if (Date.now() < backoffUntilRef.current) {
+      return query
+    }
+    return query.refetch()
+  }, [query])
+
+  return {
+    data: query.data,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    dataUpdatedAt: query.dataUpdatedAt,
+    backoffSeconds,
+    refetch,
+  }
 }
 
 /**
@@ -39,23 +131,7 @@ export function useMonitoringStatus() {
  * successful fetch so the countdown stays in sync with actual polling.
  */
 export function useRefreshCountdown(dataUpdatedAt: number | undefined) {
-  const [secondsLeft, setSecondsLeft] = useState(
-    MONITORING_REFRESH_MS / 1000
+  return useSecondsUntil(
+    dataUpdatedAt ? dataUpdatedAt + MONITORING_REFRESH_MS : undefined
   )
-
-  useEffect(() => {
-    if (!dataUpdatedAt) return
-
-    const tick = () => {
-      const elapsed = Date.now() - dataUpdatedAt
-      const remaining = Math.ceil((MONITORING_REFRESH_MS - elapsed) / 1000)
-      setSecondsLeft(Math.max(0, Math.min(MONITORING_REFRESH_MS / 1000, remaining)))
-    }
-
-    tick()
-    const timer = window.setInterval(tick, 1000)
-    return () => window.clearInterval(timer)
-  }, [dataUpdatedAt])
-
-  return secondsLeft
 }

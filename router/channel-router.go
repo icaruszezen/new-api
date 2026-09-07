@@ -61,6 +61,7 @@ func registerChannelMonitoringRoutes(apiRouter *gin.RouterGroup) {
 var channelMonitoringPermissionRoutes = []permissionRoute{
 	{method: http.MethodGet, path: "/config", permission: authz.ChannelRead, handler: controller.GetChannelMonitoringConfig},
 	{method: http.MethodPut, path: "/config", permission: authz.ChannelWrite, handler: controller.UpdateChannelMonitoringConfig},
+	{method: http.MethodPost, path: "/:id/reset", permission: authz.ChannelWrite, handler: controller.ResetChannelMonitor},
 }
 
 var channelPermissionRoutes = []permissionRoute{

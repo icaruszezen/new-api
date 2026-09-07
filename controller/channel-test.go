@@ -49,6 +49,7 @@ type testResult struct {
 type channelTestOptions struct {
 	group          string
 	skipConsumeLog bool
+	maxTokens      *uint
 }
 
 func normalizeChannelTestEndpoint(channel *model.Channel, endpointType string) string {
@@ -242,7 +243,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 
-	request := buildTestRequest(testModel, endpointType, channel, isStream)
+	request := buildTestRequest(testModel, endpointType, channel, isStream, opts.maxTokens)
 
 	info, err := relaycommon.GenRelayInfo(c, relayFormat, request, nil)
 
@@ -720,7 +721,7 @@ func detectErrorMessageFromJSONBytes(jsonBytes []byte) string {
 	return message
 }
 
-func buildTestRequest(model string, endpointType string, channel *model.Channel, isStream bool) dto.Request {
+func buildTestRequest(model string, endpointType string, channel *model.Channel, isStream bool, maxTokens *uint) dto.Request {
 	testResponsesInput := json.RawMessage(`[{"role":"user","content":"hi"}]`)
 
 	// 根据端点类型构建不同的测试请求
@@ -765,7 +766,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 			return &dto.ClaudeRequest{
 				Model:     model,
 				Stream:    lo.ToPtr(isStream),
-				MaxTokens: lo.ToPtr(uint(16)),
+				MaxTokens: channelTestMaxTokens(16, maxTokens),
 				Messages: []dto.ClaudeMessage{
 					{
 						Role:    "user",
@@ -782,7 +783,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 					},
 				},
 				GenerationConfig: dto.GeminiChatGenerationConfig{
-					MaxOutputTokens: lo.ToPtr(uint(3000)),
+					MaxOutputTokens: channelTestMaxTokens(3000, maxTokens),
 				},
 			}
 		case constant.EndpointTypeOpenAI:
@@ -795,7 +796,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 						Content: "hi",
 					},
 				},
-				MaxTokens: lo.ToPtr(uint(16)),
+				MaxTokens: channelTestMaxTokens(16, maxTokens),
 			}
 			if isStream {
 				req.StreamOptions = &dto.StreamOptions{IncludeUsage: true}
@@ -850,18 +851,25 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 	}
 
 	if dto.IsOpenAIReasoningOModel(model) {
-		testRequest.MaxCompletionTokens = lo.ToPtr(uint(16))
+		testRequest.MaxCompletionTokens = channelTestMaxTokens(16, maxTokens)
 	} else if strings.Contains(model, "thinking") {
 		if !strings.Contains(model, "claude") {
-			testRequest.MaxTokens = lo.ToPtr(uint(50))
+			testRequest.MaxTokens = channelTestMaxTokens(50, maxTokens)
 		}
 	} else if strings.Contains(model, "gemini") {
-		testRequest.MaxTokens = lo.ToPtr(uint(3000))
+		testRequest.MaxTokens = channelTestMaxTokens(3000, maxTokens)
 	} else {
-		testRequest.MaxTokens = lo.ToPtr(uint(16))
+		testRequest.MaxTokens = channelTestMaxTokens(16, maxTokens)
 	}
 
 	return testRequest
+}
+
+func channelTestMaxTokens(fallback uint, override *uint) *uint {
+	if override != nil {
+		return override
+	}
+	return lo.ToPtr(fallback)
 }
 
 func TestChannel(c *gin.Context) {

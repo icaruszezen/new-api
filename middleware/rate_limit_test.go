@@ -195,6 +195,55 @@ func TestRedisFixedWindowRepairsCounterWithoutTTL(t *testing.T) {
 	assert.False(t, redisServer.Exists(key), "a recovered counter must not remain permanently rate-limited")
 }
 
+func TestChannelMonitoringStatusRateLimitUsesIsolatedBucket(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	redisServer, _ := useRateLimitMiniRedis(t)
+
+	previousCriticalEnable := common.CriticalRateLimitEnable
+	previousCriticalNum := common.CriticalRateLimitNum
+	previousCriticalDuration := common.CriticalRateLimitDuration
+	previousMonitorEnable := common.ChannelMonitoringStatusRateLimitEnable
+	previousMonitorNum := common.ChannelMonitoringStatusRateLimitNum
+	previousMonitorDuration := common.ChannelMonitoringStatusRateLimitDuration
+	common.CriticalRateLimitEnable = true
+	common.CriticalRateLimitNum = 1
+	common.CriticalRateLimitDuration = 45
+	common.ChannelMonitoringStatusRateLimitEnable = true
+	common.ChannelMonitoringStatusRateLimitNum = 1
+	common.ChannelMonitoringStatusRateLimitDuration = 29
+	t.Cleanup(func() {
+		common.CriticalRateLimitEnable = previousCriticalEnable
+		common.CriticalRateLimitNum = previousCriticalNum
+		common.CriticalRateLimitDuration = previousCriticalDuration
+		common.ChannelMonitoringStatusRateLimitEnable = previousMonitorEnable
+		common.ChannelMonitoringStatusRateLimitNum = previousMonitorNum
+		common.ChannelMonitoringStatusRateLimitDuration = previousMonitorDuration
+	})
+
+	router := gin.New()
+	require.NoError(t, router.SetTrustedProxies(nil))
+	router.GET("/critical", CriticalRateLimit(), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+	router.GET("/monitor", ChannelMonitoringStatusRateLimit(), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
+	remoteAddr := "192.0.2.70:12345"
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/critical", remoteAddr).Code)
+	assert.Equal(t, http.StatusTooManyRequests, performRateLimitRequest(router, "/critical", remoteAddr).Code)
+
+	monitorOK := performRateLimitRequest(router, "/monitor", remoteAddr)
+	assert.Equal(t, http.StatusNoContent, monitorOK.Code, "exhausting CT must not starve the CM status poll")
+
+	monitorLimited := performRateLimitRequest(router, "/monitor", remoteAddr)
+	assert.Equal(t, http.StatusTooManyRequests, monitorLimited.Code)
+	assert.Equal(t, "29", monitorLimited.Header().Get("Retry-After"))
+
+	assert.True(t, redisServer.Exists(redisIPRateLimitKey("CT", "192.0.2.70")))
+	assert.True(t, redisServer.Exists(redisIPRateLimitKey(channelMonitoringStatusRateLimitMark, "192.0.2.70")))
+}
+
 func TestRedisFailurePolicies(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	_, redisClient := useRateLimitMiniRedis(t)

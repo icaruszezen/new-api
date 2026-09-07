@@ -252,3 +252,21 @@ func SearchRateLimit() func(c *gin.Context) {
 	}
 	return userRateLimitFactory(common.SearchRateLimitNum, common.SearchRateLimitDuration, "SR")
 }
+
+const channelMonitoringStatusRateLimitMark = "CM"
+
+// ChannelMonitoringStatusRateLimit is an IP limiter for the public
+// /api/channel-monitoring/status poll. It uses mark CM so login and
+// session refresh (CT) cannot exhaust this dashboard.
+// Configurable via CHANNEL_MONITORING_STATUS_RATE_LIMIT_ENABLE /
+// CHANNEL_MONITORING_STATUS_RATE_LIMIT / CHANNEL_MONITORING_STATUS_RATE_LIMIT_DURATION.
+func ChannelMonitoringStatusRateLimit() func(c *gin.Context) {
+	if !common.ChannelMonitoringStatusRateLimitEnable {
+		return defNext
+	}
+	return rateLimitFactory(
+		common.ChannelMonitoringStatusRateLimitNum,
+		common.ChannelMonitoringStatusRateLimitDuration,
+		channelMonitoringStatusRateLimitMark,
+	)
+}

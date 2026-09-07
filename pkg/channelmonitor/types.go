@@ -10,6 +10,8 @@ type Monitor struct {
 	Icon    string `json:"icon,omitempty"`
 	Enabled bool   `json:"enabled"`
 	Sort    int    `json:"sort"`
+	// UptimeScope 决定公开卡片成功率的样本范围。空值按 recent 处理。
+	UptimeScope string `json:"uptime_scope,omitempty"`
 }
 
 // Sample 是一次被纳入监控的请求结果。TtftMs 只在流式首字已产生时有效。
@@ -32,19 +34,20 @@ type BeatView struct {
 // MonitorView 是公开状态页的单卡片数据。
 // 刻意不含 group 与 channel 信息，避免向未登录访客暴露内部路由拓扑。
 type MonitorView struct {
-	Id        string     `json:"id"`
-	Name      string     `json:"name"`
-	Model     string     `json:"model"`
-	Icon      string     `json:"icon"`
-	Status    string     `json:"status"`
-	AvgTtftMs int        `json:"avg_ttft_ms"`
-	PingMs    int        `json:"ping_ms"`
-	Uptime    float64    `json:"uptime"`
-	Beats     []BeatView `json:"beats"`
+	Id        string `json:"id"`
+	Name      string `json:"name"`
+	Model     string `json:"model"`
+	Icon      string `json:"icon"`
+	Status    string `json:"status"`
+	AvgTtftMs int    `json:"avg_ttft_ms"`
+	PingMs    int    `json:"ping_ms"`
+	// Uptime 无样本时为 nil，前端显示 "--"；全失败时为 0。
+	Uptime *float64   `json:"uptime"`
+	Beats  []BeatView `json:"beats"`
 }
 
 // StatusView 是 GET /api/channel-monitoring/status 的响应体。
-// BeatLimit 同时决定状态条格数与「可用性」的统计样本数。
+// BeatLimit 决定状态条格数；成功率口径由每条监控的 UptimeScope 单独决定。
 type StatusView struct {
 	Enabled             bool          `json:"enabled"`
 	SampleWindowSeconds int           `json:"sample_window_seconds"`
@@ -58,4 +61,10 @@ const (
 	MonitorStatusUp       = "up"
 	MonitorStatusDegraded = "degraded"
 	MonitorStatusDown     = "down"
+)
+
+// 成功率统计口径：recent 与状态条同一批最近采样，all 用保留期内的小时汇总。
+const (
+	UptimeScopeRecent = "recent"
+	UptimeScopeAll    = "all"
 )

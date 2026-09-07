@@ -41,6 +41,81 @@ func TestChannelValidateSettingsRejectsInvalidHTTPTransport(t *testing.T) {
 	}
 }
 
+func TestChannelValidateSettingsCacheBillingRatio(t *testing.T) {
+	tests := []struct {
+		name    string
+		setting dto.ChannelSettings
+		wantErr string
+	}{
+		{
+			name: "legacy fixed ratio remains valid",
+			setting: dto.ChannelSettings{
+				CacheBillingRatioEnabled: true,
+				CacheBillingRatio:        0.8,
+			},
+		},
+		{
+			name: "range min max valid",
+			setting: dto.ChannelSettings{
+				CacheBillingRatioEnabled: true,
+				CacheBillingRatioRange:   true,
+				CacheBillingRatioMin:     0.95,
+				CacheBillingRatioMax:     0.99,
+			},
+		},
+		{
+			name: "range min greater than max rejected",
+			setting: dto.ChannelSettings{
+				CacheBillingRatioEnabled: true,
+				CacheBillingRatioRange:   true,
+				CacheBillingRatioMin:     0.99,
+				CacheBillingRatioMax:     0.95,
+			},
+			wantErr: "cache_billing_ratio_min must not exceed cache_billing_ratio_max",
+		},
+		{
+			name: "range min missing rejected",
+			setting: dto.ChannelSettings{
+				CacheBillingRatioEnabled: true,
+				CacheBillingRatioRange:   true,
+				CacheBillingRatioMax:     0.99,
+			},
+			wantErr: "cache_billing_ratio_min must be greater than 0",
+		},
+		{
+			name: "range max exceeds limit rejected",
+			setting: dto.ChannelSettings{
+				CacheBillingRatioEnabled: true,
+				CacheBillingRatioRange:   true,
+				CacheBillingRatioMin:     0.5,
+				CacheBillingRatioMax:     11,
+			},
+			wantErr: "cache_billing_ratio_max must not exceed 10",
+		},
+		{
+			name: "fixed ratio still required when range is off",
+			setting: dto.ChannelSettings{
+				CacheBillingRatioEnabled: true,
+			},
+			wantErr: "cache_billing_ratio must be greater than 0 when enabled",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			channel := &Channel{}
+			channel.SetSetting(tt.setting)
+			err := channel.ValidateSettings()
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
 func TestAdvancedCustomChannelRequiresModelListRouteOnlyWhenUpdateChecksEnabled(t *testing.T) {
 	inferenceRoute := dto.AdvancedCustomRoute{
 		IncomingPath: "/v1/chat/completions",

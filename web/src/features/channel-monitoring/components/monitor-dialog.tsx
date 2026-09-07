@@ -40,7 +40,13 @@ import { Switch } from '@/components/ui/switch'
 import { getLobeIcon } from '@/lib/lobe-icon'
 
 import { getGroupModels } from '../api'
-import { MAX_MONITOR_NAME_LENGTH, monitorPairKey } from '../constants'
+import {
+  MAX_MONITOR_NAME_LENGTH,
+  UPTIME_SCOPE_ALL,
+  UPTIME_SCOPE_RECENT,
+  monitorPairKey,
+  normalizeUptimeScope,
+} from '../constants'
 import type { ChannelMonitor } from '../types'
 
 const MONITOR_FORM_ID = 'channel-monitor-form'
@@ -51,6 +57,7 @@ const monitorFormSchema = z.object({
   model: z.string().trim().min(1),
   icon: z.string().trim().max(128),
   enabled: z.boolean(),
+  uptime_scope: z.enum([UPTIME_SCOPE_RECENT, UPTIME_SCOPE_ALL]),
 })
 
 export type MonitorFormValues = z.infer<typeof monitorFormSchema>
@@ -72,6 +79,7 @@ const EMPTY_VALUES: MonitorFormValues = {
   model: '',
   icon: '',
   enabled: true,
+  uptime_scope: UPTIME_SCOPE_RECENT,
 }
 
 export function MonitorDialog(props: MonitorDialogProps) {
@@ -94,6 +102,7 @@ export function MonitorDialog(props: MonitorDialogProps) {
         model: props.editData.model,
         icon: props.editData.icon ?? '',
         enabled: props.editData.enabled,
+        uptime_scope: normalizeUptimeScope(props.editData.uptime_scope),
       })
       return
     }
@@ -119,6 +128,14 @@ export function MonitorDialog(props: MonitorDialogProps) {
         label: modelName,
       })),
     [groupModelsQuery.data]
+  )
+
+  const uptimeScopeOptions = useMemo(
+    () => [
+      { value: UPTIME_SCOPE_RECENT, label: t('Recent records') },
+      { value: UPTIME_SCOPE_ALL, label: t('All historical samples') },
+    ],
+    [t]
   )
 
   const handleSubmit = (values: MonitorFormValues) => {
@@ -266,6 +283,34 @@ export function MonitorDialog(props: MonitorDialogProps) {
                 <FormDescription>
                   {t(
                     'Leave empty to derive the provider icon from the model name.'
+                  )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='uptime_scope'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Success rate window')}</FormLabel>
+                <FormControl>
+                  <Combobox
+                    options={uptimeScopeOptions}
+                    value={field.value}
+                    onValueChange={(value) => {
+                      if (value === null) return
+                      field.onChange(value)
+                    }}
+                    placeholder={t('Select a success rate window')}
+                    searchPlaceholder={t('Search...')}
+                  />
+                </FormControl>
+                <FormDescription>
+                  {t(
+                    'Recent records match the status bar. All historical samples use the retained hourly totals.'
                   )}
                 </FormDescription>
                 <FormMessage />

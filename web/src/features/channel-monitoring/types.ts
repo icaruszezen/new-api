@@ -42,14 +42,15 @@ export type MonitorView = {
   status: MonitorStatus
   avg_ttft_ms: number
   ping_ms: number
-  uptime: number
+  /** Null means no samples yet; 0 means every sample failed. */
+  uptime: number | null
   beats: Beat[]
 }
 
 export type ChannelMonitoringStatus = {
   enabled: boolean
   sample_window_seconds: number
-  /** Sample count behind both the status bar and the availability percentage. */
+  /** Sample count behind the status bar. */
   beat_limit: number
   monitors: MonitorView[]
 }
@@ -63,6 +64,8 @@ export type ChannelMonitor = {
   icon?: string
   enabled: boolean
   sort: number
+  /** recent = status-bar window; all = retained hourly totals. */
+  uptime_scope?: string
 }
 
 export type AdminMonitor = ChannelMonitor & {

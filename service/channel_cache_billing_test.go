@@ -24,6 +24,53 @@ func TestEffectiveCacheReadBillingRatio(t *testing.T) {
 	}))
 }
 
+func TestCacheReadBillingRatioStepsInclusiveHundredths(t *testing.T) {
+	require.Equal(t, []float64{0.95, 0.96, 0.97, 0.98, 0.99}, cacheReadBillingRatioSteps(0.95, 0.99))
+}
+
+func TestEffectiveCacheReadBillingRatioLegacyFixedWithoutRangeField(t *testing.T) {
+	require.Equal(t, 0.8, EffectiveCacheReadBillingRatio(dto.ChannelSettings{
+		CacheBillingRatioEnabled: true,
+		CacheBillingRatio:        0.8,
+	}))
+}
+
+func TestEffectiveCacheReadBillingRatioIgnoresMinMaxWhenRangeOff(t *testing.T) {
+	require.Equal(t, 0.8, EffectiveCacheReadBillingRatio(dto.ChannelSettings{
+		CacheBillingRatioEnabled: true,
+		CacheBillingRatio:        0.8,
+		CacheBillingRatioMin:     0.95,
+		CacheBillingRatioMax:     0.99,
+	}))
+}
+
+func TestEffectiveCacheReadBillingRatioRange(t *testing.T) {
+	require.Equal(t, 0.97, EffectiveCacheReadBillingRatio(dto.ChannelSettings{
+		CacheBillingRatioEnabled: true,
+		CacheBillingRatioRange:   true,
+		CacheBillingRatioMin:     0.97,
+		CacheBillingRatioMax:     0.97,
+	}))
+	require.Equal(t, 1.0, EffectiveCacheReadBillingRatio(dto.ChannelSettings{
+		CacheBillingRatioEnabled: true,
+		CacheBillingRatioRange:   true,
+		CacheBillingRatioMin:     0.99,
+		CacheBillingRatioMax:     0.95,
+	}))
+	require.Equal(t, 1.0, EffectiveCacheReadBillingRatio(dto.ChannelSettings{
+		CacheBillingRatioEnabled: true,
+		CacheBillingRatioRange:   true,
+		CacheBillingRatioMin:     0,
+		CacheBillingRatioMax:     1,
+	}))
+	require.Equal(t, 1.0, EffectiveCacheReadBillingRatio(dto.ChannelSettings{
+		CacheBillingRatioEnabled: true,
+		CacheBillingRatioRange:   true,
+		CacheBillingRatioMin:     0.5,
+		CacheBillingRatioMax:     11,
+	}))
+}
+
 func TestApplyCacheReadBillingRatioToUsage(t *testing.T) {
 	inputDetails := &dto.InputTokenDetails{
 		CachedTokens:         1000,
@@ -111,6 +158,38 @@ func TestApplyChannelCacheReadBillingRatio(t *testing.T) {
 
 	require.Equal(t, 5000, usage.PromptTokensDetails.CachedTokens)
 	require.Contains(t, string(body), `"cached_tokens":5000`)
+}
+
+func TestApplyChannelCacheReadBillingRatioPinsRangeSample(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelSetting: dto.ChannelSettings{
+				CacheBillingRatioEnabled: true,
+				CacheBillingRatioRange:   true,
+				CacheBillingRatioMin:     0.95,
+				CacheBillingRatioMax:     0.99,
+			},
+		},
+	}
+	usage := &dto.Usage{
+		PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 10000},
+	}
+
+	ApplyChannelCacheReadBillingRatio(info, usage, nil)
+
+	ratio, ok := info.ResolvedCacheReadBillingRatio()
+	require.True(t, ok)
+	require.Contains(t, cacheReadBillingRatioSteps(0.95, 0.99), ratio)
+	first := usage.PromptTokensDetails.CachedTokens
+	require.Equal(t, int(ratio*10000+0.5), first)
+
+	usage.PromptTokensDetails.CachedTokens = 10000
+	ApplyChannelCacheReadBillingRatio(info, usage, nil)
+
+	second, ok := info.ResolvedCacheReadBillingRatio()
+	require.True(t, ok)
+	require.Equal(t, ratio, second)
+	require.Equal(t, first, usage.PromptTokensDetails.CachedTokens)
 }
 
 func TestSnapshotRestoreCacheReadUsage(t *testing.T) {

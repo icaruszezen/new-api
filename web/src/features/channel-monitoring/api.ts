@@ -31,10 +31,10 @@ type ApiResponse<T> = {
 }
 
 export async function getChannelMonitoringStatus(): Promise<ChannelMonitoringStatus> {
-  const res =
-    await api.get<ApiResponse<ChannelMonitoringStatus>>(
-      '/api/channel-monitoring/status'
-    )
+  const res = await api.get<ApiResponse<ChannelMonitoringStatus>>(
+    '/api/channel-monitoring/status',
+    { skipErrorHandler: true }
+  )
   return res.data.data
 }
 
@@ -56,6 +56,13 @@ export async function updateChannelMonitoringConfig(update: {
   const res = await api.put<ApiResponse<ChannelMonitorsConfig>>(
     '/api/channel-monitoring/config',
     update
+  )
+  return res.data
+}
+
+export async function resetChannelMonitor(id: string) {
+  const res = await api.post<ApiResponse<null>>(
+    `/api/channel-monitoring/${encodeURIComponent(id)}/reset`
   )
   return res.data
 }

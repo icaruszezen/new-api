@@ -158,6 +158,170 @@ func TestDeleteChannelMonitorStatesExceptDropsRemovedMonitors(t *testing.T) {
 	assert.Equal(t, "keep", states[0].MonitorId)
 }
 
+func TestDeleteChannelMonitorDataRemovesOnlyTheRequestedMonitor(t *testing.T) {
+	truncateTables(t)
+
+	require.NoError(t, InsertChannelMonitorBeats([]ChannelMonitorBeat{
+		{MonitorId: "m1", BucketTs: 100, Status: ChannelMonitorStatusUp},
+		{MonitorId: "m2", BucketTs: 100, Status: ChannelMonitorStatusDown},
+	}))
+	require.NoError(t, UpsertChannelMonitorStat(&ChannelMonitorStat{
+		MonitorId: "m1", HourTs: 100, Total: 1, UpCount: 1,
+	}))
+	require.NoError(t, UpsertChannelMonitorStat(&ChannelMonitorStat{
+		MonitorId: "m2", HourTs: 100, Total: 1, DownCount: 1,
+	}))
+	require.NoError(t, TouchChannelMonitorBeatTs("m1", 100, ChannelMonitorSourceUser))
+	require.NoError(t, TouchChannelMonitorBeatTs("m2", 100, ChannelMonitorSourceUser))
+
+	require.NoError(t, DeleteChannelMonitorData("m1"))
+	require.NoError(t, DeleteChannelMonitorData(""))
+
+	beats, err := GetChannelMonitorRecentBeats("m1", 10)
+	require.NoError(t, err)
+	assert.Empty(t, beats)
+
+	beats, err = GetChannelMonitorRecentBeats("m2", 10)
+	require.NoError(t, err)
+	require.Len(t, beats, 1)
+	assert.Equal(t, ChannelMonitorStatusDown, beats[0].Status)
+
+	uptimes, err := GetChannelMonitorUptimes([]string{"m1", "m2"}, 0)
+	require.NoError(t, err)
+	require.Len(t, uptimes, 1)
+	assert.Equal(t, "m2", uptimes[0].MonitorId)
+
+	states, err := GetChannelMonitorStates([]string{"m1", "m2"})
+	require.NoError(t, err)
+	require.Len(t, states, 2)
+	stateById := make(map[string]ChannelMonitorState, 2)
+	for _, state := range states {
+		stateById[state.MonitorId] = state
+	}
+	assert.Greater(t, stateById["m1"].ResetAt, int64(0), "reset must leave a tombstone so other instances cannot flush old hot beats")
+	assert.Equal(t, int64(0), stateById["m1"].LastBeatTs)
+	assert.Equal(t, 0, stateById["m1"].PingMs)
+	assert.Equal(t, int64(100), stateById["m2"].LastBeatTs)
+	assert.Equal(t, int64(0), stateById["m2"].ResetAt)
+}
+
+func TestDeleteChannelMonitorStatesExceptEmptyListDoesNotWipe(t *testing.T) {
+	truncateTables(t)
+
+	require.NoError(t, TouchChannelMonitorBeatTs("keep", 1, ChannelMonitorSourceUser))
+	require.NoError(t, DeleteChannelMonitorStatesExcept(nil))
+	require.NoError(t, DeleteChannelMonitorStatesExcept([]string{}))
+
+	states, err := GetChannelMonitorStates([]string{"keep"})
+	require.NoError(t, err)
+	require.Len(t, states, 1)
+	assert.Equal(t, "keep", states[0].MonitorId)
+}
+
+func TestPersistChannelMonitorSampleDoesNotDoubleCountTheSameBucket(t *testing.T) {
+	truncateTables(t)
+
+	beat := ChannelMonitorBeat{
+		MonitorId: "m1",
+		BucketTs:  1_700_000_000,
+		Status:    ChannelMonitorStatusUp,
+		TtftMs:    120,
+		Source:    ChannelMonitorSourceUser,
+	}
+	stat := &ChannelMonitorStat{
+		MonitorId: "m1",
+		HourTs:    1_700_000_000 - (1_700_000_000 % 3600),
+		Total:     1,
+		UpCount:   1,
+		TtftSumMs: 120,
+		TtftCount: 1,
+	}
+
+	require.NoError(t, PersistChannelMonitorSample(beat, stat))
+	require.NoError(t, PersistChannelMonitorSample(beat, stat))
+
+	uptimes, err := GetChannelMonitorUptimes([]string{"m1"}, 0)
+	require.NoError(t, err)
+	require.Len(t, uptimes, 1)
+	assert.Equal(t, int64(1), uptimes[0].Total)
+	assert.Equal(t, int64(1), uptimes[0].UpCount)
+
+	beats, err := GetChannelMonitorRecentBeats("m1", 10)
+	require.NoError(t, err)
+	require.Len(t, beats, 1)
+}
+
+func TestPersistChannelMonitorSampleSkipsStatWhenBeatAlreadyExists(t *testing.T) {
+	truncateTables(t)
+
+	require.NoError(t, InsertChannelMonitorBeats([]ChannelMonitorBeat{{
+		MonitorId: "m1",
+		BucketTs:  1_700_000_000,
+		Status:    ChannelMonitorStatusUp,
+		TtftMs:    80,
+		Source:    ChannelMonitorSourceUser,
+	}}))
+
+	require.NoError(t, PersistChannelMonitorSample(ChannelMonitorBeat{
+		MonitorId: "m1",
+		BucketTs:  1_700_000_000,
+		Status:    ChannelMonitorStatusDown,
+		Source:    ChannelMonitorSourceUser,
+	}, &ChannelMonitorStat{
+		MonitorId: "m1",
+		HourTs:    1_700_000_000 - (1_700_000_000 % 3600),
+		Total:     1,
+		DownCount: 1,
+	}))
+
+	uptimes, err := GetChannelMonitorUptimes([]string{"m1"}, 0)
+	require.NoError(t, err)
+	assert.Empty(t, uptimes, "a retry after the beat row already exists must not invent a stat increment")
+
+	beats, err := GetChannelMonitorRecentBeats("m1", 10)
+	require.NoError(t, err)
+	require.Len(t, beats, 1)
+	assert.Equal(t, ChannelMonitorStatusUp, beats[0].Status)
+}
+
+func TestPersistChannelMonitorSampleDropsBucketsAtOrBeforeReset(t *testing.T) {
+	truncateTables(t)
+
+	beat := ChannelMonitorBeat{
+		MonitorId: "m1",
+		BucketTs:  1_700_000_000,
+		Status:    ChannelMonitorStatusUp,
+		TtftMs:    90,
+		Source:    ChannelMonitorSourceUser,
+	}
+	stat := &ChannelMonitorStat{
+		MonitorId: "m1",
+		HourTs:    1_700_000_000 - (1_700_000_000 % 3600),
+		Total:     1,
+		UpCount:   1,
+		TtftSumMs: 90,
+		TtftCount: 1,
+	}
+	require.NoError(t, PersistChannelMonitorSample(beat, stat))
+	require.NoError(t, DeleteChannelMonitorData("m1"))
+
+	require.NoError(t, PersistChannelMonitorSample(beat, stat))
+
+	beats, err := GetChannelMonitorRecentBeats("m1", 10)
+	require.NoError(t, err)
+	assert.Empty(t, beats)
+
+	uptimes, err := GetChannelMonitorUptimes([]string{"m1"}, 0)
+	require.NoError(t, err)
+	assert.Empty(t, uptimes)
+
+	states, err := GetChannelMonitorStates([]string{"m1"})
+	require.NoError(t, err)
+	require.Len(t, states, 1)
+	assert.Greater(t, states[0].ResetAt, int64(0))
+	assert.Equal(t, int64(0), states[0].LastBeatTs)
+}
+
 func TestDeleteChannelMonitorBeatsBeforeRespectsRetentionCutoff(t *testing.T) {
 	truncateTables(t)
 

@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"math"
+	"math/rand"
 
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -11,7 +12,10 @@ import (
 	"github.com/tidwall/sjson"
 )
 
-const maxCacheBillingRatio = 10
+const (
+	maxCacheBillingRatio       = 10
+	cacheBillingRatioStepCenti = 100
+)
 
 // Cache read billing scales only cache-read token fields in the final usage object used for
 // settlement. Stream handlers may forward intermediate SSE chunks with upstream cache-read
@@ -19,14 +23,66 @@ const maxCacheBillingRatio = 10
 // Claude message_start/message_delta, Gemini final usage chunk).
 
 // EffectiveCacheReadBillingRatio returns the multiplier for cache read tokens (1 = no change).
+// Fixed mode (default, including legacy settings without a range flag) uses CacheBillingRatio.
+// Range mode samples once per call from [min, max] in 0.01 steps; callers that apply the
+// ratio more than once on the same request must pin the result themselves.
 func EffectiveCacheReadBillingRatio(setting dto.ChannelSettings) float64 {
 	if !setting.CacheBillingRatioEnabled {
 		return 1
+	}
+	if setting.CacheBillingRatioRange {
+		return sampleCacheReadBillingRatio(setting.CacheBillingRatioMin, setting.CacheBillingRatioMax)
 	}
 	if setting.CacheBillingRatio <= 0 || setting.CacheBillingRatio > maxCacheBillingRatio {
 		return 1
 	}
 	return setting.CacheBillingRatio
+}
+
+func cacheReadBillingRatioCents(min, max float64) (minCents int, maxCents int, ok bool) {
+	if min <= 0 || max <= 0 || min > maxCacheBillingRatio || max > maxCacheBillingRatio {
+		return 0, 0, false
+	}
+	minCents = int(math.Round(min * float64(cacheBillingRatioStepCenti)))
+	maxCents = int(math.Round(max * float64(cacheBillingRatioStepCenti)))
+	if minCents <= 0 || maxCents <= 0 {
+		return 0, 0, false
+	}
+	if minCents > maxCacheBillingRatio*cacheBillingRatioStepCenti || maxCents > maxCacheBillingRatio*cacheBillingRatioStepCenti {
+		return 0, 0, false
+	}
+	if minCents > maxCents {
+		return 0, 0, false
+	}
+	return minCents, maxCents, true
+}
+
+func cacheReadBillingRatioFromCents(cents int) float64 {
+	return float64(cents) / float64(cacheBillingRatioStepCenti)
+}
+
+func cacheReadBillingRatioSteps(min, max float64) []float64 {
+	minCents, maxCents, ok := cacheReadBillingRatioCents(min, max)
+	if !ok {
+		return nil
+	}
+	steps := make([]float64, 0, maxCents-minCents+1)
+	for cents := minCents; cents <= maxCents; cents++ {
+		steps = append(steps, cacheReadBillingRatioFromCents(cents))
+	}
+	return steps
+}
+
+func sampleCacheReadBillingRatio(min, max float64) float64 {
+	minCents, maxCents, ok := cacheReadBillingRatioCents(min, max)
+	if !ok {
+		return 1
+	}
+	if minCents == maxCents {
+		return cacheReadBillingRatioFromCents(minCents)
+	}
+	picked := minCents + rand.Intn(maxCents-minCents+1)
+	return cacheReadBillingRatioFromCents(picked)
 }
 
 func scaleCacheReadTokenCount(tokens int, ratio float64) int {
@@ -149,10 +205,13 @@ func patchChoicesUsageCachedTokens(body []byte, ratio float64) ([]byte, error) {
 
 // ApplyCacheReadBillingRatioWithSetting scales usage and patches body using channel settings directly.
 func ApplyCacheReadBillingRatioWithSetting(setting dto.ChannelSettings, usage *dto.Usage, body *[]byte) {
+	applyCacheReadBillingRatio(EffectiveCacheReadBillingRatio(setting), usage, body)
+}
+
+func applyCacheReadBillingRatio(ratio float64, usage *dto.Usage, body *[]byte) {
 	if usage == nil {
 		return
 	}
-	ratio := EffectiveCacheReadBillingRatio(setting)
 	if ratio == 1 {
 		return
 	}
@@ -177,5 +236,10 @@ func ApplyChannelCacheReadBillingRatio(info *relaycommon.RelayInfo, usage *dto.U
 	if info == nil || info.ChannelMeta == nil {
 		return
 	}
-	ApplyCacheReadBillingRatioWithSetting(info.ChannelSetting, usage, body)
+	ratio, ok := info.ResolvedCacheReadBillingRatio()
+	if !ok {
+		ratio = EffectiveCacheReadBillingRatio(info.ChannelSetting)
+		info.SetResolvedCacheReadBillingRatio(ratio)
+	}
+	applyCacheReadBillingRatio(ratio, usage, body)
 }

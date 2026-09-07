@@ -151,6 +151,42 @@ describe('MonitorDialog', () => {
         model: 'gpt-5',
         icon: 'OpenAI',
         enabled: true,
+        uptime_scope: 'recent',
+      })
+    })
+  })
+
+  test('submits the chosen success rate window for the monitor', async () => {
+    apiMocks.getGroupModels.mockResolvedValue(['gpt-5'])
+    const user = userEvent.setup()
+
+    const { onSave } = renderDialog({
+      editData: {
+        id: 'm1',
+        name: 'Pro',
+        group: 'vip',
+        model: 'gpt-5',
+        icon: 'OpenAI',
+        enabled: true,
+        sort: 0,
+        uptime_scope: 'recent',
+      },
+    })
+
+    await user.click(screen.getByDisplayValue('Recent records'))
+    await user.click(
+      await screen.findByRole('option', { name: 'All historical samples' })
+    )
+    await user.click(screen.getByRole('button', { name: 'Update' }))
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith({
+        name: 'Pro',
+        group: 'vip',
+        model: 'gpt-5',
+        icon: 'OpenAI',
+        enabled: true,
+        uptime_scope: 'all',
       })
     })
   })

@@ -78,7 +78,10 @@ func (r *registry) load() registrySnapshot {
 	monitors, err := ParseMonitors(raw)
 	if err != nil {
 		common.SysError("failed to parse channel monitoring monitors: " + err.Error())
-		monitors = nil
+		r.mu.RLock()
+		snapshot := registrySnapshot{monitors: r.monitors, byPair: r.byPair}
+		r.mu.RUnlock()
+		return snapshot
 	}
 	byPair := make(map[string]Monitor, len(monitors))
 	for _, monitor := range monitors {
@@ -172,11 +175,35 @@ func ValidateMonitors(monitors []Monitor, groupExists func(string) bool, modelIn
 		}
 		seenIds[monitor.Id] = struct{}{}
 
+		scope, err := normalizeUptimeScope(monitor.UptimeScope)
+		if err != nil {
+			return nil, fmt.Errorf("monitor %q: %w", monitor.Name, err)
+		}
+		monitor.UptimeScope = scope
+
 		monitor.Sort = index
 		normalized = append(normalized, monitor)
 	}
 
 	return normalized, nil
+}
+
+func normalizeUptimeScope(scope string) (string, error) {
+	switch strings.TrimSpace(scope) {
+	case "", UptimeScopeRecent:
+		return UptimeScopeRecent, nil
+	case UptimeScopeAll:
+		return UptimeScopeAll, nil
+	default:
+		return "", fmt.Errorf("uptime scope must be %q or %q", UptimeScopeRecent, UptimeScopeAll)
+	}
+}
+
+func uptimeScopeOf(monitor Monitor) string {
+	if strings.TrimSpace(monitor.UptimeScope) == UptimeScopeAll {
+		return UptimeScopeAll
+	}
+	return UptimeScopeRecent
 }
 
 func sortMonitors(monitors []Monitor) {

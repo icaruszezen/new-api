@@ -76,6 +76,20 @@ func TestHotBeatOfferKeepsWinningSample(t *testing.T) {
 	assert.False(t, ok, "a drained bucket must not emit the same beat twice")
 }
 
+func TestHasActivitySinceSeesUnflushedHotBeats(t *testing.T) {
+	t.Cleanup(clearHotBeats)
+	clearHotBeats()
+
+	assert.False(t, HasActivitySince("m1", 0))
+
+	beat := &hotBeat{}
+	beat.offer(Sample{MonitorId: "m1", Status: model.ChannelMonitorStatusUp, TtftMs: 100, HasTtft: true})
+	hotBeats.Store(beatKey{monitorId: "m1", bucketTs: 100}, beat)
+
+	assert.True(t, HasActivitySince("m1", 1_000))
+	assert.False(t, HasActivitySince("m2", 0))
+}
+
 func TestHotBeatRestorePutsSampleBackForRetry(t *testing.T) {
 	beat := &hotBeat{}
 	beat.offer(Sample{MonitorId: "m1", Status: model.ChannelMonitorStatusUp, TtftMs: 120, HasTtft: true})

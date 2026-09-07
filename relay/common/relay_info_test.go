@@ -176,3 +176,16 @@ func TestInitChannelMetaRestoresRequestReasoningEffortForRetry(t *testing.T) {
 	info.InitChannelMeta(ctx)
 	assert.Equal(t, "max", info.ReasoningEffort)
 }
+
+func TestInitChannelMetaClearsResolvedCacheReadBillingRatio(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	info := &RelayInfo{}
+	info.SetResolvedCacheReadBillingRatio(0.97)
+
+	info.InitChannelMeta(ctx)
+
+	_, ok := info.ResolvedCacheReadBillingRatio()
+	assert.False(t, ok)
+}

@@ -17,7 +17,7 @@ import (
 func GetChannelMonitoringStatus(c *gin.Context) {
 	status, err := channelmonitor.Status()
 	if err != nil {
-		common.ApiError(c, err)
+		common.ApiErrorMsg(c, "failed to load channel monitoring status")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -108,6 +108,45 @@ func UpdateChannelMonitoringConfig(c *gin.Context) {
 	recordManageAudit(c, "channel_monitoring.update", auditParams)
 
 	GetChannelMonitoringConfig(c)
+}
+
+// ResetChannelMonitor 清空单个监控项的历史数据，配置本身保留。
+func ResetChannelMonitor(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "monitor id is required",
+		})
+		return
+	}
+
+	found := false
+	for _, monitor := range channelmonitor.Monitors() {
+		if monitor.Id == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "monitor not found",
+		})
+		return
+	}
+
+	if err := channelmonitor.ResetMonitorData(id); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "channel_monitoring.reset", map[string]interface{}{
+		"monitor_id": id,
+	})
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
 }
 
 // normalizeSubmittedMonitors 校验监控项并补全自动解析出的图标。

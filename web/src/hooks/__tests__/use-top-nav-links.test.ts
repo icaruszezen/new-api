@@ -23,8 +23,10 @@ import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { useTopNavLinks } from '../use-top-nav-links'
 
+let mockStatus: Record<string, unknown> | null = null
+
 vi.mock('@/hooks/use-status', () => ({
-  useStatus: () => ({ status: null, loading: false, error: null }),
+  useStatus: () => ({ status: mockStatus, loading: false, error: null }),
 }))
 
 function setUiSkin(uiSkin: unknown) {
@@ -37,10 +39,17 @@ function setUiSkin(uiSkin: unknown) {
 describe('useTopNavLinks channel monitoring', () => {
   afterEach(() => {
     setUiSkin('classic')
+    mockStatus = null
   })
 
-  test('adds Channel Monitoring after Rankings when the site skin is next', () => {
+  test('adds Channel Monitoring between Rankings and Docs when next skin has it enabled', () => {
     setUiSkin('next')
+    mockStatus = {
+      channel_monitoring_enabled: true,
+      HeaderNavModules: JSON.stringify({
+        rankings: { enabled: true, requireAuth: false },
+      }),
+    }
 
     const { result } = renderHook(() => useTopNavLinks())
     const hrefs = result.current.map((link) => link.href)
@@ -57,6 +66,17 @@ describe('useTopNavLinks channel monitoring', () => {
 
   test('omits Channel Monitoring when the site skin is classic', () => {
     setUiSkin('classic')
+    mockStatus = { channel_monitoring_enabled: true }
+
+    const { result } = renderHook(() => useTopNavLinks())
+    const hrefs = result.current.map((link) => link.href)
+
+    expect(hrefs).not.toContain('/channel-monitoring')
+  })
+
+  test('omits Channel Monitoring on next skin while the status page stays disabled', () => {
+    setUiSkin('next')
+    mockStatus = { channel_monitoring_enabled: false }
 
     const { result } = renderHook(() => useTopNavLinks())
     const hrefs = result.current.map((link) => link.href)

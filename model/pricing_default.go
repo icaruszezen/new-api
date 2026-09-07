@@ -1,7 +1,9 @@
 package model
 
 import (
+	"sort"
 	"strings"
+	"sync"
 )
 
 // 简化的供应商映射规则
@@ -127,3 +129,57 @@ func getDefaultVendorIcon(vendorName string) string {
 	}
 	return ""
 }
+
+// ResolveModelIconKey 推导模型对应的 @lobehub/icons 图标名。
+// 优先级：模型自定义图标 > 模型关联供应商图标 > 按模型名匹配的默认供应商图标。
+// 未能识别时返回空字符串，由前端回退到首字母头像。
+func ResolveModelIconKey(modelName string) string {
+	trimmed := strings.TrimSpace(modelName)
+	if trimmed == "" {
+		return ""
+	}
+
+	var meta Model
+	if err := DB.Where("model_name = ?", trimmed).First(&meta).Error; err == nil {
+		if meta.Icon != "" {
+			return meta.Icon
+		}
+		if meta.VendorID > 0 {
+			var vendor Vendor
+			if err := DB.First(&vendor, meta.VendorID).Error; err == nil && vendor.Icon != "" {
+				return vendor.Icon
+			}
+		}
+	}
+
+	modelLower := strings.ToLower(trimmed)
+	for _, pattern := range sortedVendorRulePatterns() {
+		if strings.Contains(modelLower, pattern) {
+			return getDefaultVendorIcon(defaultVendorRules[pattern])
+		}
+	}
+	return ""
+}
+
+// sortedVendorRulePatterns 让匹配顺序稳定且偏向更具体的规则：
+// 先按模式长度倒序，长度相同时按字典序，避免 map 遍历顺序导致图标随机跳变。
+func sortedVendorRulePatterns() []string {
+	vendorRulePatternsOnce.Do(func() {
+		vendorRulePatterns = make([]string, 0, len(defaultVendorRules))
+		for pattern := range defaultVendorRules {
+			vendorRulePatterns = append(vendorRulePatterns, pattern)
+		}
+		sort.Slice(vendorRulePatterns, func(i, j int) bool {
+			if len(vendorRulePatterns[i]) != len(vendorRulePatterns[j]) {
+				return len(vendorRulePatterns[i]) > len(vendorRulePatterns[j])
+			}
+			return vendorRulePatterns[i] < vendorRulePatterns[j]
+		})
+	})
+	return vendorRulePatterns
+}
+
+var (
+	vendorRulePatterns     []string
+	vendorRulePatternsOnce sync.Once
+)

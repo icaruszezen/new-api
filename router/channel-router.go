@@ -33,7 +33,34 @@ func registerChannelRoutes(apiRouter *gin.RouterGroup) {
 			middleware.RequirePermission(route.permission),
 			route.handler,
 		)
+		// /api/channel-monitoring 与 /api/channel 共享 radix 前缀，再加上
+		// relay 的 /:mode/mj，httprouter 不再把 /api/channel 重定向到 /api/channel/。
+		if route.path == "/" {
+			channelRoute.Handle(route.method, "",
+				middleware.RequirePermission(route.permission),
+				route.handler,
+			)
+		}
 	}
+}
+
+// registerChannelMonitoringRoutes 挂载渠道监控的管理端配置接口。
+// 监控项本质上是渠道路由的对外呈现，因此复用渠道权限而非新增资源。
+func registerChannelMonitoringRoutes(apiRouter *gin.RouterGroup) {
+	monitoringRoute := apiRouter.Group("/channel-monitoring")
+	monitoringRoute.Use(middleware.AdminAuth())
+
+	for _, route := range channelMonitoringPermissionRoutes {
+		monitoringRoute.Handle(route.method, route.path,
+			middleware.RequirePermission(route.permission),
+			route.handler,
+		)
+	}
+}
+
+var channelMonitoringPermissionRoutes = []permissionRoute{
+	{method: http.MethodGet, path: "/config", permission: authz.ChannelRead, handler: controller.GetChannelMonitoringConfig},
+	{method: http.MethodPut, path: "/config", permission: authz.ChannelWrite, handler: controller.UpdateChannelMonitoringConfig},
 }
 
 var channelPermissionRoutes = []permissionRoute{

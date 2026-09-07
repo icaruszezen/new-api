@@ -91,7 +91,9 @@ export function useTopNavLinks(): TopNavLink[] {
     links.push({ title: t('Rankings'), href: '/rankings', requiresAuth })
   }
 
-  if (uiSkin === 'next') {
+  // Channel monitoring is a next-skin surface and only appears once an admin
+  // has turned the public status page on.
+  if (uiSkin === 'next' && status?.channel_monitoring_enabled === true) {
     links.push({
       title: t('Channel Monitoring'),
       href: '/channel-monitoring',

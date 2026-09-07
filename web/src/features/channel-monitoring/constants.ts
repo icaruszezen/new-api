@@ -16,19 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { PublicLayout } from '@/components/layout'
-import { ChannelMonitoring } from '@/features/channel-monitoring'
 
-export function ClassicChannelMonitoring() {
-  return (
-    <PublicLayout showMainContainer={false}>
-      {/*
-        The feature component only owns vertical rhythm; the next skin gets its
-        horizontal measure from NextPublicShell, so classic supplies its own.
-      */}
-      <div className='mx-auto w-full max-w-7xl px-4 sm:px-6'>
-        <ChannelMonitoring />
-      </div>
-    </PublicLayout>
-  )
+/** Mirrors pkg/channelmonitor.MaxMonitorNameLength. */
+export const MAX_MONITOR_NAME_LENGTH = 64
+
+/** Mirrors pkg/channelmonitor.MaxMonitors. */
+export const MAX_MONITORS = 50
+
+/** Composite key used to reject duplicated group + model pairs. */
+export function monitorPairKey(group: string, model: string): string {
+  return `${group}\u0000${model}`
 }

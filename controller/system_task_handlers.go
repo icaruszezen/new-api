@@ -8,7 +8,9 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/channelmonitor"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/channel_monitoring_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
 
@@ -22,6 +24,7 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(modelUpdateHandler{})
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
+	service.RegisterSystemTaskHandler(channelMonitorProbeHandler{})
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and
@@ -149,6 +152,31 @@ func (asyncTaskPollHandler) NewPayload() any { return nil }
 
 func (asyncTaskPollHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
 	summary := service.RunTaskPollingOnce(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+}
+
+// channelMonitorProbeHandler 刷新渠道监控的端点 ping，并为无用户流量的监控补发合成探测。
+// Enabled() 把「是否配置了启用中的监控」折进开关，没有监控时调度器不会建任务行。
+type channelMonitorProbeHandler struct{}
+
+func (channelMonitorProbeHandler) Type() string { return model.SystemTaskTypeChannelMonitorProbe }
+
+func (channelMonitorProbeHandler) Enabled() bool {
+	return channel_monitoring_setting.IsEnabled() && len(channelmonitor.EnabledMonitors()) > 0
+}
+
+func (channelMonitorProbeHandler) Interval() time.Duration {
+	return time.Duration(channel_monitoring_setting.GetSetting().ProbeIntervalSeconds) * time.Second
+}
+
+func (channelMonitorProbeHandler) NewPayload() any { return nil }
+
+func (channelMonitorProbeHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	summary, err := runChannelMonitorProbeTask(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
+	if err != nil {
+		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, nil, err)
+		return
+	}
 	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
 }
 

@@ -38,7 +38,7 @@ func SetApiRouter(router *gin.Engine) {
 			perfMetricsRoute.GET("/summary", controller.GetPerfMetricsSummary)
 			perfMetricsRoute.GET("", controller.GetPerfMetrics)
 		}
-		// 渠道监控状态页对未登录访客公开，用独立 CM 桶抵御高频轮询，
+		// 渠道监控状态页对未登录访客公开。游客走 CM（IP）桶，登录用户走 CMU（user）桶，
 		// 避免和登录 / 刷新会话共用 CriticalRateLimit。
 		apiRouter.GET("/channel-monitoring/status", middleware.ChannelMonitoringStatusRateLimit(), controller.GetChannelMonitoringStatus)
 		apiRouter.GET("/rankings", middleware.HeaderNavModuleAuth("rankings"), controller.GetRankings)

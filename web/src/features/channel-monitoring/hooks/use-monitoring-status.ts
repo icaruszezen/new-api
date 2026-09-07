@@ -105,7 +105,7 @@ export function useMonitoringStatus() {
       }
       return MONITORING_REFRESH_MS
     },
-    refetchOnWindowFocus: () => Date.now() >= backoffUntilRef.current,
+    refetchOnWindowFocus: false,
     staleTime: 0,
   })
 

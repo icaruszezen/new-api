@@ -84,6 +84,63 @@ func createMiddlewarePATUser(t *testing.T, username, token string) *model.User {
 	return user
 }
 
+func createMiddlewareSessionUser(t *testing.T, username string, role int, status int) (*model.User, service.AuthIdentity, string) {
+	t.Helper()
+	user := &model.User{
+		Username: username, Password: "password-placeholder", Role: role,
+		Status: status, Group: "default", AuthVersion: 1,
+		AffCode: "middleware-aff-" + username,
+	}
+	require.NoError(t, model.DB.Create(user).Error)
+	now := time.Now().Unix()
+	session := &model.UserSession{
+		SID:             "session-" + username,
+		UserID:          user.Id,
+		Version:         1,
+		UserAuthVersion: user.AuthVersion,
+		Status:          model.UserSessionStatusActive,
+		RefreshHash:     "refresh-hash",
+		LoginMethod:     "password",
+		LastActiveAt:    now,
+		ExpiresAt:       now + 3600,
+	}
+	require.NoError(t, model.CreateUserSession(session))
+	identity := service.AuthIdentity{
+		UserID:          user.Id,
+		SessionID:       session.SID,
+		UserAuthVersion: session.UserAuthVersion,
+		SessionVersion:  session.Version,
+	}
+	accessToken, _, err := service.IssueAccessToken(identity)
+	require.NoError(t, err)
+	return user, identity, accessToken
+}
+
+func peekUserIDFromAuthorization(authorization string) int {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodGet, "/channel-monitoring/status", nil)
+	if authorization != "" {
+		context.Request.Header.Set("Authorization", authorization)
+	}
+	return peekEnabledDashboardUserID(context)
+}
+
+func TestPeekEnabledDashboardUserIDTreatsInvalidCredentialsAsGuest(t *testing.T) {
+	setupDashboardAuthMiddlewareTest(t)
+	enabledUser, identity, accessToken := createMiddlewareSessionUser(t, "peek-session-user", common.RoleCommonUser, common.UserStatusEnabled)
+	_, _, disabledToken := createMiddlewareSessionUser(t, "peek-disabled-user", common.RoleAdminUser, common.UserStatusDisabled)
+	patUser := createMiddlewarePATUser(t, "peek-pat-user", "peek.pat.with-dots")
+
+	assert.Equal(t, 0, peekUserIDFromAuthorization(""))
+	assert.Equal(t, 0, peekUserIDFromAuthorization("Bearer opaque-relay-key"))
+	assert.Equal(t, 0, peekUserIDFromAuthorization("Bearer "+issueExpiredDashboardAccessToken(t, identity)))
+	assert.Equal(t, 0, peekUserIDFromAuthorization("Bearer "+tamperDashboardToken(accessToken)))
+	assert.Equal(t, 0, peekUserIDFromAuthorization("Bearer "+disabledToken))
+	assert.Equal(t, enabledUser.Id, peekUserIDFromAuthorization("Bearer "+accessToken))
+	assert.Equal(t, patUser.Id, peekUserIDFromAuthorization("Bearer peek.pat.with-dots"))
+}
+
 func TestUserAuthAllowsOpaqueDottedPAT(t *testing.T) {
 	setupDashboardAuthMiddlewareTest(t)
 	user := createMiddlewarePATUser(t, "dotted-pat-user", "opaque.key.with-dots")

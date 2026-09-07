@@ -254,19 +254,44 @@ func SearchRateLimit() func(c *gin.Context) {
 }
 
 const channelMonitoringStatusRateLimitMark = "CM"
+const channelMonitoringStatusUserRateLimitMark = "CMU"
 
-// ChannelMonitoringStatusRateLimit is an IP limiter for the public
-// /api/channel-monitoring/status poll. It uses mark CM so login and
-// session refresh (CT) cannot exhaust this dashboard.
+// ChannelMonitoringStatusRateLimit limits the public
+// /api/channel-monitoring/status poll.
+// Guests use mark CM keyed by IP; signed-in users use mark CMU keyed by
+// user ID so a shared NAT cannot exhaust a logged-in quota.
+// Invalid credentials are treated as guests and never return 401.
 // Configurable via CHANNEL_MONITORING_STATUS_RATE_LIMIT_ENABLE /
-// CHANNEL_MONITORING_STATUS_RATE_LIMIT / CHANNEL_MONITORING_STATUS_RATE_LIMIT_DURATION.
+// CHANNEL_MONITORING_STATUS_RATE_LIMIT / CHANNEL_MONITORING_STATUS_USER_RATE_LIMIT /
+// CHANNEL_MONITORING_STATUS_RATE_LIMIT_DURATION.
 func ChannelMonitoringStatusRateLimit() func(c *gin.Context) {
 	if !common.ChannelMonitoringStatusRateLimitEnable {
 		return defNext
 	}
-	return rateLimitFactory(
-		common.ChannelMonitoringStatusRateLimitNum,
-		common.ChannelMonitoringStatusRateLimitDuration,
-		channelMonitoringStatusRateLimitMark,
-	)
+	guestNum := common.ChannelMonitoringStatusRateLimitNum
+	userNum := common.ChannelMonitoringStatusUserRateLimitNum
+	duration := common.ChannelMonitoringStatusRateLimitDuration
+	guestLimit := rateLimitFactory(guestNum, duration, channelMonitoringStatusRateLimitMark)
+	if !common.RedisEnabled {
+		inMemoryRateLimiter.Init(common.RateLimitKeyExpirationDuration)
+	}
+	return func(c *gin.Context) {
+		if userID := peekEnabledDashboardUserID(c); userID > 0 {
+			if common.RedisEnabled {
+				userRedisRateLimiter(
+					c,
+					userNum,
+					duration,
+					redisUserRateLimitKey(channelMonitoringStatusUserRateLimitMark, userID),
+				)
+				return
+			}
+			key := fmt.Sprintf("%s:user:%d", channelMonitoringStatusUserRateLimitMark, userID)
+			if !inMemoryRateLimiter.Request(key, userNum, duration) {
+				writeRateLimited(c, duration)
+			}
+			return
+		}
+		guestLimit(c)
+	}
 }

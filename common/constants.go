@@ -222,8 +222,11 @@ var (
 
 	// Public channel-monitoring status page. Separate from CriticalRateLimit
 	// so login/refresh cannot starve the 60s dashboard poll.
+	// Guest traffic uses ChannelMonitoringStatusRateLimitNum (IP).
+	// Signed-in users use ChannelMonitoringStatusUserRateLimitNum (user ID).
 	ChannelMonitoringStatusRateLimitEnable         = true
-	ChannelMonitoringStatusRateLimitNum            = 30
+	ChannelMonitoringStatusRateLimitNum            = 10
+	ChannelMonitoringStatusUserRateLimitNum        = 30
 	ChannelMonitoringStatusRateLimitDuration int64 = 60
 )
 

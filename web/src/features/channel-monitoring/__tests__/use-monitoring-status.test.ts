@@ -63,6 +63,27 @@ describe('useMonitoringStatus Retry-After backoff', () => {
     vi.restoreAllMocks()
   })
 
+  test('does not refetch when the window is focused after a successful load', async () => {
+    apiMocks.getChannelMonitoringStatus.mockResolvedValue({
+      enabled: true,
+      sample_window_seconds: 20,
+      beat_limit: 60,
+      monitors: [],
+    })
+
+    const { result } = renderStatusHook()
+
+    await waitFor(() => {
+      expect(result.current.isError).toBe(false)
+      expect(result.current.data?.enabled).toBe(true)
+    })
+    expect(apiMocks.getChannelMonitoringStatus).toHaveBeenCalledTimes(1)
+
+    window.dispatchEvent(new Event('focus'))
+    await Promise.resolve()
+    expect(apiMocks.getChannelMonitoringStatus).toHaveBeenCalledTimes(1)
+  })
+
   test('does not request again until Retry-After elapses, including on window focus', async () => {
     apiMocks.getChannelMonitoringStatus
       .mockRejectedValueOnce(rateLimitedError('5'))

@@ -38,11 +38,32 @@ func useRateLimitMiniRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 }
 
 func performRateLimitRequest(router http.Handler, path string, remoteAddr string) *httptest.ResponseRecorder {
+	return performRateLimitRequestWithAuth(router, path, remoteAddr, "")
+}
+
+func performRateLimitRequestWithAuth(router http.Handler, path string, remoteAddr string, token string) *httptest.ResponseRecorder {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, path, nil)
 	request.RemoteAddr = remoteAddr
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
 	router.ServeHTTP(recorder, request)
 	return recorder
+}
+
+func restoreChannelMonitoringStatusRateLimit(t *testing.T) {
+	t.Helper()
+	previousEnable := common.ChannelMonitoringStatusRateLimitEnable
+	previousGuestNum := common.ChannelMonitoringStatusRateLimitNum
+	previousUserNum := common.ChannelMonitoringStatusUserRateLimitNum
+	previousDuration := common.ChannelMonitoringStatusRateLimitDuration
+	t.Cleanup(func() {
+		common.ChannelMonitoringStatusRateLimitEnable = previousEnable
+		common.ChannelMonitoringStatusRateLimitNum = previousGuestNum
+		common.ChannelMonitoringStatusUserRateLimitNum = previousUserNum
+		common.ChannelMonitoringStatusRateLimitDuration = previousDuration
+	})
 }
 
 func TestRedisIPRateLimiterThresholdTTLAndNamespace(t *testing.T) {
@@ -202,9 +223,7 @@ func TestChannelMonitoringStatusRateLimitUsesIsolatedBucket(t *testing.T) {
 	previousCriticalEnable := common.CriticalRateLimitEnable
 	previousCriticalNum := common.CriticalRateLimitNum
 	previousCriticalDuration := common.CriticalRateLimitDuration
-	previousMonitorEnable := common.ChannelMonitoringStatusRateLimitEnable
-	previousMonitorNum := common.ChannelMonitoringStatusRateLimitNum
-	previousMonitorDuration := common.ChannelMonitoringStatusRateLimitDuration
+	restoreChannelMonitoringStatusRateLimit(t)
 	common.CriticalRateLimitEnable = true
 	common.CriticalRateLimitNum = 1
 	common.CriticalRateLimitDuration = 45
@@ -215,9 +234,6 @@ func TestChannelMonitoringStatusRateLimitUsesIsolatedBucket(t *testing.T) {
 		common.CriticalRateLimitEnable = previousCriticalEnable
 		common.CriticalRateLimitNum = previousCriticalNum
 		common.CriticalRateLimitDuration = previousCriticalDuration
-		common.ChannelMonitoringStatusRateLimitEnable = previousMonitorEnable
-		common.ChannelMonitoringStatusRateLimitNum = previousMonitorNum
-		common.ChannelMonitoringStatusRateLimitDuration = previousMonitorDuration
 	})
 
 	router := gin.New()
@@ -242,6 +258,79 @@ func TestChannelMonitoringStatusRateLimitUsesIsolatedBucket(t *testing.T) {
 
 	assert.True(t, redisServer.Exists(redisIPRateLimitKey("CT", "192.0.2.70")))
 	assert.True(t, redisServer.Exists(redisIPRateLimitKey(channelMonitoringStatusRateLimitMark, "192.0.2.70")))
+}
+
+func TestChannelMonitoringStatusRateLimitSplitsGuestAndUserBuckets(t *testing.T) {
+	setupDashboardAuthMiddlewareTest(t)
+	gin.SetMode(gin.TestMode)
+	redisServer, _ := useRateLimitMiniRedis(t)
+	restoreChannelMonitoringStatusRateLimit(t)
+	common.ChannelMonitoringStatusRateLimitEnable = true
+	common.ChannelMonitoringStatusRateLimitNum = 1
+	common.ChannelMonitoringStatusUserRateLimitNum = 1
+	common.ChannelMonitoringStatusRateLimitDuration = 41
+
+	user, _, userToken := createMiddlewareSessionUser(t, "monitor-user", common.RoleCommonUser, common.UserStatusEnabled)
+	admin, _, adminToken := createMiddlewareSessionUser(t, "monitor-admin", common.RoleAdminUser, common.UserStatusEnabled)
+
+	router := gin.New()
+	require.NoError(t, router.SetTrustedProxies(nil))
+	router.GET("/monitor", ChannelMonitoringStatusRateLimit(), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
+	remoteAddr := "192.0.2.80:12345"
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequestWithAuth(router, "/monitor", remoteAddr, userToken).Code)
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/monitor", remoteAddr).Code)
+
+	userLimited := performRateLimitRequestWithAuth(router, "/monitor", remoteAddr, userToken)
+	assert.Equal(t, http.StatusTooManyRequests, userLimited.Code)
+	assert.Equal(t, "41", userLimited.Header().Get("Retry-After"))
+	assert.Empty(t, userLimited.Body.String())
+
+	guestLimited := performRateLimitRequest(router, "/monitor", remoteAddr)
+	assert.Equal(t, http.StatusTooManyRequests, guestLimited.Code)
+	assert.Equal(t, "41", guestLimited.Header().Get("Retry-After"))
+
+	assert.True(t, redisServer.Exists(redisUserRateLimitKey(channelMonitoringStatusUserRateLimitMark, user.Id)))
+	assert.True(t, redisServer.Exists(redisIPRateLimitKey(channelMonitoringStatusRateLimitMark, "192.0.2.80")))
+	assert.False(t, redisServer.Exists(redisUserRateLimitKey(channelMonitoringStatusUserRateLimitMark, admin.Id)))
+
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequestWithAuth(router, "/monitor", remoteAddr, adminToken).Code)
+	assert.True(t, redisServer.Exists(redisUserRateLimitKey(channelMonitoringStatusUserRateLimitMark, admin.Id)))
+}
+
+func TestChannelMonitoringStatusRateLimitTreatsInvalidTokenAsGuest(t *testing.T) {
+	setupDashboardAuthMiddlewareTest(t)
+	gin.SetMode(gin.TestMode)
+	redisServer, _ := useRateLimitMiniRedis(t)
+	restoreChannelMonitoringStatusRateLimit(t)
+	common.ChannelMonitoringStatusRateLimitEnable = true
+	common.ChannelMonitoringStatusRateLimitNum = 1
+	common.ChannelMonitoringStatusUserRateLimitNum = 1
+	common.ChannelMonitoringStatusRateLimitDuration = 17
+
+	user, identity, _ := createMiddlewareSessionUser(t, "monitor-expired-user", common.RoleCommonUser, common.UserStatusEnabled)
+	expiredToken := issueExpiredDashboardAccessToken(t, identity)
+
+	router := gin.New()
+	require.NoError(t, router.SetTrustedProxies(nil))
+	router.GET("/monitor", ChannelMonitoringStatusRateLimit(), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
+	remoteAddr := "192.0.2.81:12345"
+	first := performRateLimitRequestWithAuth(router, "/monitor", remoteAddr, expiredToken)
+	assert.Equal(t, http.StatusNoContent, first.Code)
+	assert.NotContains(t, first.Body.String(), "AUTH_")
+
+	second := performRateLimitRequestWithAuth(router, "/monitor", remoteAddr, expiredToken)
+	assert.Equal(t, http.StatusTooManyRequests, second.Code)
+	assert.Empty(t, second.Body.String())
+	assert.NotContains(t, second.Body.String(), "AUTH_")
+
+	assert.True(t, redisServer.Exists(redisIPRateLimitKey(channelMonitoringStatusRateLimitMark, "192.0.2.81")))
+	assert.False(t, redisServer.Exists(redisUserRateLimitKey(channelMonitoringStatusUserRateLimitMark, user.Id)))
 }
 
 func TestRedisFailurePolicies(t *testing.T) {

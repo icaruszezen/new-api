@@ -135,7 +135,8 @@ func InitEnv() {
 	SearchRateLimitDuration = int64(GetEnvOrDefault("SEARCH_RATE_LIMIT_DURATION", 60))
 
 	ChannelMonitoringStatusRateLimitEnable = GetEnvOrDefaultBool("CHANNEL_MONITORING_STATUS_RATE_LIMIT_ENABLE", true)
-	ChannelMonitoringStatusRateLimitNum = GetEnvOrDefault("CHANNEL_MONITORING_STATUS_RATE_LIMIT", 30)
+	ChannelMonitoringStatusRateLimitNum = GetEnvOrDefault("CHANNEL_MONITORING_STATUS_RATE_LIMIT", 10)
+	ChannelMonitoringStatusUserRateLimitNum = GetEnvOrDefault("CHANNEL_MONITORING_STATUS_USER_RATE_LIMIT", 30)
 	ChannelMonitoringStatusRateLimitDuration = int64(GetEnvOrDefault("CHANNEL_MONITORING_STATUS_RATE_LIMIT_DURATION", 60))
 	initConstantEnv()
 }

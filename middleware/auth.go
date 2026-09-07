@@ -89,6 +89,20 @@ func TryUserAuth() func(c *gin.Context) {
 	}
 }
 
+// peekEnabledDashboardUserID returns a dashboard user ID when the request
+// carries a valid, enabled session or PAT. It never writes context or aborts:
+// missing, expired, invalid, or disabled credentials are treated as a guest.
+func peekEnabledDashboardUserID(c *gin.Context) int {
+	user, _, kind, err := classifyDashboardCredential(c)
+	if err != nil || kind == dashboardCredentialUnmatched || user == nil {
+		return 0
+	}
+	if user.Status != common.UserStatusEnabled || user.Id <= 0 {
+		return 0
+	}
+	return user.Id
+}
+
 func UserAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		authHelper(c, common.RoleCommonUser)

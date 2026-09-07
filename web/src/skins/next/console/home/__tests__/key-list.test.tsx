@@ -205,7 +205,7 @@ describe('next console key list', () => {
     vi.clearAllMocks()
   })
 
-  test('shows console key columns with group ratio and hides created, last used, and preview-only columns', async () => {
+  test('shows console key columns with group ratio and hides models, IP restriction, created, last used, and preview-only columns', async () => {
     renderHome()
 
     await waitFor(() => {
@@ -217,10 +217,10 @@ describe('next console key list', () => {
     expect(screen.getByRole('columnheader', { name: 'API Key' })).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'Quota' })).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'Group' })).toBeVisible()
-    expect(screen.getByRole('columnheader', { name: 'Models' })).toBeVisible()
+    expect(screen.queryByRole('columnheader', { name: 'Models' })).toBeNull()
     expect(
-      screen.getByRole('columnheader', { name: 'IP Restriction' })
-    ).toBeVisible()
+      screen.queryByRole('columnheader', { name: 'IP Restriction' })
+    ).toBeNull()
     expect(screen.getByRole('columnheader', { name: 'Expires' })).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'CC Switch' })).toBeVisible()

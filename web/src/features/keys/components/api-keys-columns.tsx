@@ -39,12 +39,7 @@ import { API_KEY_STATUSES } from '../constants'
 import type { ApiKey } from '../types'
 import { ApiKeyGroupCell } from './api-key-group-cell'
 import { ApiKeyTimestampCell } from './api-key-timestamp-cell'
-import {
-  ApiKeyCell,
-  IpRestrictionsCell,
-  ModelLimitsCell,
-  UnlimitedQuotaBadge,
-} from './api-keys-cells'
+import { ApiKeyCell, UnlimitedQuotaBadge } from './api-keys-cells'
 import { DataTableRowActions } from './data-table-row-actions'
 
 function getQuotaProgressColor(percentage: number): string {
@@ -206,24 +201,6 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
         )
       },
       size: 220,
-      meta: { mobileHidden: true },
-    },
-    {
-      id: 'model_limits',
-      accessorKey: 'model_limits',
-      header: t('Models'),
-      cell: ({ row }) => <ModelLimitsCell apiKey={row.original} />,
-      enableSorting: false,
-      size: 160,
-      meta: { mobileHidden: true },
-    },
-    {
-      id: 'allow_ips',
-      accessorKey: 'allow_ips',
-      header: t('IP Restriction'),
-      cell: ({ row }) => <IpRestrictionsCell apiKey={row.original} />,
-      enableSorting: false,
-      size: 160,
       meta: { mobileHidden: true },
     },
     {

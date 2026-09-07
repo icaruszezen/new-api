@@ -148,7 +148,9 @@ export function ConsoleKeyList(props: ConsoleKeyListProps) {
           return (
             columnId !== 'select' &&
             columnId !== 'created_time' &&
-            columnId !== 'accessed_time'
+            columnId !== 'accessed_time' &&
+            columnId !== 'model_limits' &&
+            columnId !== 'allow_ips'
           )
         })
         .map((column) => {

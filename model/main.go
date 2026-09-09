@@ -268,6 +268,7 @@ func migrateDB() error {
 		&PasskeyCredential{},
 		&Option{},
 		&Redemption{},
+		&InviteRebate{},
 		&Ability{},
 		&Log{},
 		&Midjourney{},

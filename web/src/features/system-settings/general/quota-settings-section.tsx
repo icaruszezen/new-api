@@ -200,10 +200,7 @@ export function QuotaSettingsSection({
                   </FormControl>
                   <FormDescription>
                     {t(
-                      'Quota given to users who invite others ({{formattedQuota}})',
-                      {
-                        formattedQuota: formatQuotaInputValue(field.value),
-                      }
+                      'Legacy pending invite quota that inviters transfer to their balance manually. Sign-up and top-up rebates are configured in Referral Rebate settings.'
                     )}
                   </FormDescription>
                   <FormMessage />

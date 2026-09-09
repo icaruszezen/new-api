@@ -16,18 +16,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Navigate } from '@tanstack/react-router'
+
+import { NextInvite } from './next/invite'
+import { useResolvedConsoleSkin } from './use-resolved-console-skin'
+
 /**
- * Public surface of the UI Skin module.
+ * Referral page entry. The page is a Next surface; classic sessions (including
+ * administrators, who stay on classic) reach the referral card from the wallet
+ * page instead of seeing this layout inside the sidebar shell.
  */
-export { SkinnedAuthenticatedLayout } from './authenticated-layout'
-export { SkinnedChannelMonitoring } from './channel-monitoring'
-export { useUiSkin } from './context'
-export { SkinnedDashboard } from './dashboard'
-export { SkinnedHome } from './home'
-export { SkinnedInvite } from './invite'
-export { SkinnedPricing } from './pricing'
-export { SkinnedProfile } from './profile'
-export { SkinnedUsageLogs } from './usage-logs'
-export { SkinnedWallet } from './wallet'
-export { DEFAULT_UI_SKIN, parseUiSkin, resolveConsoleSkin } from './registry'
-export type { UiSkin } from './types'
+export function SkinnedInvite() {
+  const skin = useResolvedConsoleSkin()
+
+  if (skin === 'next') {
+    return <NextInvite />
+  }
+
+  return <Navigate to='/wallet' replace />
+}

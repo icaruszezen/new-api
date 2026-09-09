@@ -224,12 +224,20 @@ func validateOptionValue(key string, value string) error {
 	if key == operation_setting.EpayGatewaysOptionKey {
 		return operation_setting.ValidateEpayGatewaysJSON(value)
 	}
+	if operation_setting.IsInviteRebateAmountOptionKey(key) {
+		return operation_setting.ValidateInviteRebateAmount(value)
+	}
 	return nil
 }
 
 func UpdateOption(key string, value string) error {
 	if err := validateOptionValue(key, value); err != nil {
 		return err
+	}
+	if operation_setting.IsInviteRebateAmountOptionKey(key) {
+		if err := operation_setting.ValidateInviteRebateSettingUpdate(map[string]string{key: value}); err != nil {
+			return err
+		}
 	}
 	// Save to database first
 	option := Option{
@@ -259,6 +267,9 @@ func UpdateOptionsBulk(values map[string]string) error {
 		if err := validateOptionValue(key, value); err != nil {
 			return err
 		}
+	}
+	if err := operation_setting.ValidateInviteRebateSettingUpdate(values); err != nil {
+		return err
 	}
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		for k, v := range values {

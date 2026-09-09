@@ -17,18 +17,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
-import { CreditCard, FileText, UserRound, type LucideIcon } from 'lucide-react'
+import {
+  CreditCard,
+  FileText,
+  Share2,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { USAGE_LOGS_DEFAULT_SECTION } from '@/features/usage-logs/section-registry'
 
+// The shortcut column stretches to the stats panel next to it. Four rows only
+// fit without growing that panel if each row stays compact, so the row height is
+// left to the grid (`min-h-0` + tight padding) instead of a fixed minimum.
 const SHORTCUT_CLASS =
-  'bg-card hover:bg-muted/40 flex min-h-14 items-center justify-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-medium transition-colors lg:h-full'
+  'bg-card hover:bg-muted/40 flex min-h-0 items-center justify-center gap-2.5 rounded-xl border px-4 py-1.5 text-sm font-medium transition-colors lg:h-full'
 
 type ShortcutButtonProps = {
   label: string
   icon: LucideIcon
-  to: '/profile' | '/wallet' | '/usage-logs/$section'
+  to: '/profile' | '/wallet' | '/invite' | '/usage-logs/$section'
   params?: { section: string }
 }
 
@@ -37,7 +46,7 @@ function ShortcutButton(props: ShortcutButtonProps) {
 
   return (
     <Link to={props.to} params={props.params} className={SHORTCUT_CLASS}>
-      <span className='bg-muted text-muted-foreground flex size-8 items-center justify-center rounded-lg'>
+      <span className='bg-muted text-muted-foreground flex size-7 items-center justify-center rounded-lg'>
         <Icon className='size-4' aria-hidden='true' />
       </span>
       {props.label}
@@ -51,7 +60,7 @@ export function ConsoleShortcutRow() {
   return (
     <nav
       aria-label={t('Quick actions')}
-      className='grid grid-cols-1 gap-3 lg:h-full lg:grid-rows-3'
+      className='grid grid-cols-1 gap-3 lg:h-full lg:grid-rows-4'
     >
       <ShortcutButton
         label={t('Personal Center')}
@@ -65,6 +74,7 @@ export function ConsoleShortcutRow() {
         params={{ section: USAGE_LOGS_DEFAULT_SECTION }}
       />
       <ShortcutButton label={t('Recharge')} icon={CreditCard} to='/wallet' />
+      <ShortcutButton label={t('Referral Rebate')} icon={Share2} to='/invite' />
     </nav>
   )
 }

@@ -16,9 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { getInviteRebateCurrencySymbol } from '@/features/invite/lib/rules'
 import { parseCurrencyDisplayType } from '@/lib/currency'
 
 import { CheckinSettingsSection } from '../general/checkin-settings-section'
+import { InviteRebateOverviewSection } from '../general/invite-rebate-overview-section'
+import { InviteRebateSettingsSection } from '../general/invite-rebate-settings-section'
 import { PricingSection } from '../general/pricing-section'
 import { QuotaSettingsSection } from '../general/quota-settings-section'
 import { PaymentSettingsSection } from '../integrations/payment-settings-section'
@@ -77,6 +80,30 @@ const BILLING_SECTIONS = [
           settings['payment_setting.compliance_terms_version'] === 'v1'
         }
       />
+    ),
+  },
+  {
+    id: 'invite-rebate',
+    titleKey: 'Referral Rebate',
+    build: (settings: BillingSettings) => (
+      <>
+        <InviteRebateSettingsSection
+          defaultValues={{
+            invite_rebate_setting: {
+              register_amount: settings['invite_rebate_setting.register_amount'],
+              topup_amount: settings['invite_rebate_setting.topup_amount'],
+              topup_threshold:
+                settings['invite_rebate_setting.topup_threshold'],
+            },
+          }}
+          currencySymbol={getInviteRebateCurrencySymbol()}
+          complianceConfirmed={
+            (settings['payment_setting.compliance_confirmed'] ?? false) &&
+            settings['payment_setting.compliance_terms_version'] === 'v1'
+          }
+        />
+        <InviteRebateOverviewSection />
+      </>
     ),
   },
   {

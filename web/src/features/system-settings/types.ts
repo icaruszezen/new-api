@@ -337,6 +337,10 @@ export type BillingSettings = {
   'checkin_setting.enabled': boolean
   'checkin_setting.min_quota': number
   'checkin_setting.max_quota': number
+  // Rebate amounts are expressed in the site display currency, not in quota.
+  'invite_rebate_setting.register_amount': number
+  'invite_rebate_setting.topup_amount': number
+  'invite_rebate_setting.topup_threshold': number
 }
 
 export type OperationsSettings = {

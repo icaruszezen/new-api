@@ -212,6 +212,7 @@ describe('next console homepage layout', () => {
     expect(screen.getByRole('link', { name: 'Personal Center' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Usage records' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Recharge' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Referral Rebate' })).toBeVisible()
     expect(
       screen.getByRole('heading', { name: 'Key Management' })
     ).toBeVisible()
@@ -270,13 +271,33 @@ describe('next console homepage layout', () => {
     expect(stats).not.toHaveClass('xl:grid-cols-4')
     expect(shortcuts).toHaveClass('grid-cols-1')
     expect(shortcuts).toHaveClass('lg:h-full')
-    expect(shortcuts).toHaveClass('lg:grid-rows-3')
+    expect(shortcuts).toHaveClass('lg:grid-rows-4')
     expect(shortcuts).not.toHaveClass('sm:grid-cols-3')
 
     expect(keys).toBeTruthy()
     expect(keys?.parentElement).toHaveClass('flex-col')
     expect(keys?.parentElement).not.toHaveClass('lg:col-span-8')
     expect(keys?.previousElementSibling).toBe(topRow)
+  })
+
+  // The referral shortcut was added as a fourth row inside the existing column.
+  // It must not grow the column, so no shortcut may carry a fixed minimum height.
+  test('fits four shortcuts in the column without a fixed row height', () => {
+    renderHome()
+
+    const shortcuts = screen.getByRole('navigation', { name: 'Quick actions' })
+    const links = screen.getAllByRole('link', {
+      name: /Personal Center|Usage records|Recharge|Referral Rebate/,
+    })
+
+    expect(links).toHaveLength(4)
+    expect(shortcuts).toHaveClass('lg:grid-rows-4')
+    for (const link of links) {
+      expect(link).toHaveClass('min-h-0')
+      expect(link).toHaveClass('lg:h-full')
+      expect(link).not.toHaveClass('min-h-14')
+      expect(link).not.toHaveClass('py-3')
+    }
   })
 
   test('renders the four stats as quadrants of one panel', () => {

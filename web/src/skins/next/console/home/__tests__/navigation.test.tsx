@@ -174,6 +174,9 @@ describe('next console homepage navigation', () => {
       'href',
       '/wallet'
     )
+    expect(
+      screen.getByRole('link', { name: 'Referral Rebate' })
+    ).toHaveAttribute('href', '/invite')
   })
 
   test('points usage docs at /docs when no external docs link is configured', async () => {

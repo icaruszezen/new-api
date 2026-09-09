@@ -16,18 +16,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-/**
- * Public surface of the UI Skin module.
- */
-export { SkinnedAuthenticatedLayout } from './authenticated-layout'
-export { SkinnedChannelMonitoring } from './channel-monitoring'
-export { useUiSkin } from './context'
-export { SkinnedDashboard } from './dashboard'
-export { SkinnedHome } from './home'
-export { SkinnedInvite } from './invite'
-export { SkinnedPricing } from './pricing'
-export { SkinnedProfile } from './profile'
-export { SkinnedUsageLogs } from './usage-logs'
-export { SkinnedWallet } from './wallet'
-export { DEFAULT_UI_SKIN, parseUiSkin, resolveConsoleSkin } from './registry'
-export type { UiSkin } from './types'
+import { useQuery } from '@tanstack/react-query'
+
+import { getInviteAdminStats } from '../api'
+import type { InviteAdminStats } from '../types'
+
+export function useInviteAdminStats() {
+  const query = useQuery({
+    queryKey: ['invite', 'admin-stats'],
+    queryFn: getInviteAdminStats,
+    staleTime: 60 * 1000,
+  })
+
+  const stats: InviteAdminStats | null = query.data?.data ?? null
+
+  return {
+    stats,
+    loading: query.isPending,
+    error: query.isError,
+  }
+}

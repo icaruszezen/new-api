@@ -325,6 +325,13 @@ func InitResources() error {
 	}
 	model.InitOptionMap()
 
+	// 邀请返利金额按展示币种计价，迁移必须排在 InitOptionMap 之后才能拿到汇率配置。
+	if common.IsMasterNode {
+		if err := model.MigrateInviteRebateSettings(); err != nil {
+			common.SysError("failed to migrate invite rebate settings: " + err.Error())
+		}
+	}
+
 	// 清理旧的磁盘缓存文件
 	common.CleanupOldCacheFiles()
 

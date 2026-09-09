@@ -16,18 +16,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-/**
- * Public surface of the UI Skin module.
- */
-export { SkinnedAuthenticatedLayout } from './authenticated-layout'
-export { SkinnedChannelMonitoring } from './channel-monitoring'
-export { useUiSkin } from './context'
-export { SkinnedDashboard } from './dashboard'
-export { SkinnedHome } from './home'
-export { SkinnedInvite } from './invite'
-export { SkinnedPricing } from './pricing'
-export { SkinnedProfile } from './profile'
-export { SkinnedUsageLogs } from './usage-logs'
-export { SkinnedWallet } from './wallet'
-export { DEFAULT_UI_SKIN, parseUiSkin, resolveConsoleSkin } from './registry'
-export type { UiSkin } from './types'
+import { api } from '@/lib/api'
+
+import type {
+  InviteAdminStatsResponse,
+  InviteeFilter,
+  InviteOverviewResponse,
+} from './types'
+
+export async function getInviteOverview(status: InviteeFilter) {
+  const res = await api.get<InviteOverviewResponse>('/api/user/invite', {
+    params: status === 'all' ? undefined : { status },
+  })
+  return res.data
+}
+
+export async function getInviteAdminStats() {
+  const res = await api.get<InviteAdminStatsResponse>('/api/user/invite/stats')
+  return res.data
+}

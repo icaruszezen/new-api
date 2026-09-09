@@ -35,14 +35,16 @@ export function isNextUsageLogsPath(pathname: string): boolean {
 
 /**
  * Authenticated routes that keep the Next standalone chrome (top bar, no
- * sidebar). The homepage, personal center, wallet, and usage logs share
- * this shell; other console pages stay on the classic sidebar layout.
+ * sidebar). The homepage, personal center, wallet, referral page, and usage
+ * logs share this shell; other console pages stay on the classic sidebar
+ * layout.
  */
 export function isNextStandaloneShellPath(pathname: string): boolean {
   return (
     isNextConsoleHomePath(pathname) ||
     pathname === '/profile' ||
     pathname === '/wallet' ||
+    pathname === '/invite' ||
     isNextUsageLogsPath(pathname)
   )
 }
@@ -55,6 +57,7 @@ const NEXT_CONSOLE_PATH_PREFIXES = [
   '/dashboard',
   '/profile',
   '/wallet',
+  '/invite',
   '/usage-logs',
   '/keys',
   '/playground',

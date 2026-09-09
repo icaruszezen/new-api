@@ -454,28 +454,46 @@ func TransferAffQuota(c *gin.Context) {
 }
 
 func GetAffCode(c *gin.Context) {
-	id := c.GetInt("id")
-	user, err := model.GetUserById(id, true)
+	affCode, err := model.GetUserAffCode(c.GetInt("id"))
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	if user.AffCode == "" {
-		user.AffCode = common.GetRandomString(4)
-		if err := user.Update(false); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    affCode,
+	})
+}
+
+// GetInviteOverview 返回邀请页需要的全部数据：邀请码、当前返利规则、统计数字，以及
+// 脱敏后的被邀请人列表。status 支持按「仅注册 / 已充值」筛选列表。
+func GetInviteOverview(c *gin.Context) {
+	overview, err := model.GetInviteOverview(c.GetInt("id"), c.Query("status"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    user.AffCode,
+		"data":    overview,
 	})
-	return
+}
+
+// GetInviteAdminStats 返回全站邀请关系与返利发放快照，供邀请返利设置页展示。
+func GetInviteAdminStats(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	stats, err := model.GetInviteAdminStats(limit)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    stats,
+	})
 }
 
 func GetSelf(c *gin.Context) {

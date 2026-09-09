@@ -107,6 +107,9 @@ const defaultBillingSettings: BillingSettings = {
   'checkin_setting.enabled': false,
   'checkin_setting.min_quota': 1000,
   'checkin_setting.max_quota': 10000,
+  'invite_rebate_setting.register_amount': 0,
+  'invite_rebate_setting.topup_amount': 0,
+  'invite_rebate_setting.topup_threshold': 0,
 }
 
 export function BillingSettings() {

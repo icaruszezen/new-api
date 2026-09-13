@@ -63,6 +63,18 @@ describe('next console shell', () => {
     expect(document.body.hasAttribute('data-next-console')).toBe(false)
   })
 
+  test('fills the viewport on first-token-errors without the landing side gutters', () => {
+    pathnameRef.current = '/first-token-errors'
+    render(<NextConsoleShell />)
+
+    const main = screen.getByRole('main')
+    expect(main).toHaveClass('w-full')
+    expect(main).toHaveClass('px-0')
+    expect(main).toHaveClass('py-0')
+    expect(main).not.toHaveClass('max-w-7xl')
+    expect(main).not.toHaveClass('px-6')
+  })
+
   test('fills the viewport on usage-logs without the landing side gutters', () => {
     pathnameRef.current = '/usage-logs/common'
     render(<NextConsoleShell />)

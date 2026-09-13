@@ -16,8 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-
 const ADMIN_CONSOLE_PATHS = [
+  '/first-token-errors',
   '/channels',
   '/channel-monitoring-settings',
   '/models',

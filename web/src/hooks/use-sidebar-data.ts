@@ -97,6 +97,12 @@ export function useSidebarData(): SidebarData {
             icon: FileText,
           },
           {
+            title: t('First-token errors'),
+            url: '/first-token-errors',
+            icon: FileText,
+            requiredRole: ROLE.ADMIN,
+          },
+          {
             title: t('Task Logs'),
             url: '/usage-logs/task',
             activeUrls: ['/usage-logs/drawing'],

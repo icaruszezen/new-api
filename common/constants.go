@@ -93,6 +93,20 @@ var MemoryCacheEnabled bool
 
 var LogConsumeEnabled = true
 
+const (
+	FirstTokenErrorLogMaxKeepDefault = 5000
+	FirstTokenErrorLogMaxKeepMin     = 1
+	FirstTokenErrorLogMaxKeepMax     = 100000
+	FirstTokenErrorBodyKeep          = 10
+	FirstTokenErrorBodyMaxBytes      = 8 * 1024 * 1024
+)
+
+var FirstTokenErrorCorrectionEnabled = true
+var FirstTokenErrorTreatAllOutputOneEnabled = false
+var FirstTokenErrorLogEnabled = true
+var FirstTokenErrorLogMaxKeep = FirstTokenErrorLogMaxKeepDefault
+var FirstTokenErrorBodyCaptureEnabled = false
+
 var TLSInsecureSkipVerify bool
 var InsecureTLSConfig = &tls.Config{InsecureSkipVerify: true}
 

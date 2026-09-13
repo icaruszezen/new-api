@@ -99,7 +99,12 @@ describe('next authenticated layout chrome', () => {
     expect(screen.queryByTestId('sidebar-shell')).toBeNull()
   })
 
-  test.each(['/usage-logs/common', '/usage-logs/drawing', '/usage-logs/task'])(
+  test.each([
+    '/usage-logs/common',
+    '/usage-logs/drawing',
+    '/usage-logs/task',
+    '/first-token-errors',
+  ])(
     'uses the standalone console shell on %s',
     (pathname) => {
       routerPathRef.location = pathname

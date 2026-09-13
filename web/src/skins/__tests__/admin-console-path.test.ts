@@ -37,6 +37,7 @@ describe('isAdminConsolePath', () => {
     '/system-info',
     '/system-settings',
     '/system-settings/site/console-ui',
+    '/first-token-errors',
   ])('treats %s as an admin console route', (pathname) => {
     expect(isAdminConsolePath(pathname)).toBe(true)
   })

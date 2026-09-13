@@ -22,7 +22,10 @@ import { useEffect } from 'react'
 import { SkipToMain } from '@/components/skip-to-main'
 import { cn } from '@/lib/utils'
 
-import { isNextUsageLogsPath } from '../../console-home-path'
+import {
+  isNextFirstTokenErrorsPath,
+  isNextUsageLogsPath,
+} from '../../console-home-path'
 import { MinimalHeader } from '../home/components/minimal-header'
 import { LANDING_MEASURE_CLASS } from '../home/layout'
 
@@ -39,7 +42,8 @@ export function NextConsoleShell(props: NextConsoleShellProps) {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   })
-  const isFullBleed = isNextUsageLogsPath(pathname)
+  const isFullBleed =
+    isNextUsageLogsPath(pathname) || isNextFirstTokenErrorsPath(pathname)
 
   useEffect(() => {
     document.body.setAttribute('data-next-console', '')

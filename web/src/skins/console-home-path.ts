@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-
 /**
  * Next user-console homepage. `/dashboard` redirects here; both forms must
  * drop the sidebar shell so the first paint is the standalone console page.
@@ -33,6 +32,13 @@ export function isNextUsageLogsPath(pathname: string): boolean {
   return pathname === '/usage-logs' || pathname.startsWith('/usage-logs/')
 }
 
+export function isNextFirstTokenErrorsPath(pathname: string): boolean {
+  return (
+    pathname === '/first-token-errors' ||
+    pathname.startsWith('/first-token-errors/')
+  )
+}
+
 /**
  * Authenticated routes that keep the Next standalone chrome (top bar, no
  * sidebar). The homepage, personal center, wallet, referral page, and usage
@@ -45,7 +51,8 @@ export function isNextStandaloneShellPath(pathname: string): boolean {
     pathname === '/profile' ||
     pathname === '/wallet' ||
     pathname === '/invite' ||
-    isNextUsageLogsPath(pathname)
+    isNextUsageLogsPath(pathname) ||
+    isNextFirstTokenErrorsPath(pathname)
   )
 }
 
@@ -59,6 +66,7 @@ const NEXT_CONSOLE_PATH_PREFIXES = [
   '/wallet',
   '/invite',
   '/usage-logs',
+  '/first-token-errors',
   '/keys',
   '/playground',
   '/chat',

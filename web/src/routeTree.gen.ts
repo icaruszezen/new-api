@@ -41,6 +41,7 @@ import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
+import { Route as AuthenticatedFirstTokenErrorsIndexRouteImport } from './routes/_authenticated/first-token-errors/index'
 import { Route as AuthenticatedInviteIndexRouteImport } from './routes/_authenticated/invite/index'
 import { Route as AuthenticatedKeysIndexRouteImport } from './routes/_authenticated/keys/index'
 import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
@@ -233,6 +234,12 @@ const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
     id: '/errors/$error',
     path: '/errors/$error',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFirstTokenErrorsIndexRoute =
+  AuthenticatedFirstTokenErrorsIndexRouteImport.update({
+    id: '/first-token-errors/',
+    path: '/first-token-errors/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedInviteIndexRoute =
@@ -440,6 +447,7 @@ export interface FileRoutesByFullPath {
   '/channel-monitoring-settings/': typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/first-token-errors/': typeof AuthenticatedFirstTokenErrorsIndexRoute
   '/invite/': typeof AuthenticatedInviteIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
@@ -500,6 +508,7 @@ export interface FileRoutesByTo {
   '/channel-monitoring-settings': typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
+  '/first-token-errors': typeof AuthenticatedFirstTokenErrorsIndexRoute
   '/invite': typeof AuthenticatedInviteIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
   '/models': typeof AuthenticatedModelsIndexRoute
@@ -564,6 +573,7 @@ export interface FileRoutesById {
   '/_authenticated/channel-monitoring-settings/': typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/_authenticated/first-token-errors/': typeof AuthenticatedFirstTokenErrorsIndexRoute
   '/_authenticated/invite/': typeof AuthenticatedInviteIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
@@ -627,6 +637,7 @@ export interface FileRouteTypes {
     | '/channel-monitoring-settings/'
     | '/channels/'
     | '/dashboard/'
+    | '/first-token-errors/'
     | '/invite/'
     | '/keys/'
     | '/models/'
@@ -687,6 +698,7 @@ export interface FileRouteTypes {
     | '/channel-monitoring-settings'
     | '/channels'
     | '/dashboard'
+    | '/first-token-errors'
     | '/invite'
     | '/keys'
     | '/models'
@@ -750,6 +762,7 @@ export interface FileRouteTypes {
     | '/_authenticated/channel-monitoring-settings/'
     | '/_authenticated/channels/'
     | '/_authenticated/dashboard/'
+    | '/_authenticated/first-token-errors/'
     | '/_authenticated/invite/'
     | '/_authenticated/keys/'
     | '/_authenticated/models/'
@@ -1023,6 +1036,13 @@ declare module '@tanstack/react-router' {
       path: '/errors/$error'
       fullPath: '/errors/$error'
       preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/first-token-errors/': {
+      id: '/_authenticated/first-token-errors/'
+      path: '/first-token-errors'
+      fullPath: '/first-token-errors/'
+      preLoaderRoute: typeof AuthenticatedFirstTokenErrorsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/invite/': {
@@ -1325,6 +1345,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChannelMonitoringSettingsIndexRoute: typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
+  AuthenticatedFirstTokenErrorsIndexRoute: typeof AuthenticatedFirstTokenErrorsIndexRoute
   AuthenticatedInviteIndexRoute: typeof AuthenticatedInviteIndexRoute
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
   AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
@@ -1351,6 +1372,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedChannelMonitoringSettingsIndexRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
+  AuthenticatedFirstTokenErrorsIndexRoute:
+    AuthenticatedFirstTokenErrorsIndexRoute,
   AuthenticatedInviteIndexRoute: AuthenticatedInviteIndexRoute,
   AuthenticatedKeysIndexRoute: AuthenticatedKeysIndexRoute,
   AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,

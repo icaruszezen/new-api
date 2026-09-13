@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, test } from 'vitest'
 
+import { ROLE } from '@/lib/roles'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { useSidebarData } from '../use-sidebar-data'
@@ -51,6 +52,21 @@ describe('useSidebarData channel monitoring settings', () => {
     expect(urls.indexOf('/channel-monitoring-settings')).toBe(
       urls.indexOf('/channels') + 1
     )
+  })
+
+  test('lists first-token errors next to usage logs and requires admin', () => {
+    const { result } = renderHook(() => useSidebarData())
+    const general = result.current.navGroups.find((group) => group.id === 'general')
+    const items = general?.items ?? []
+    const usageIndex = items.findIndex(
+      (item) => 'url' in item && item.url === '/usage-logs/common'
+    )
+    const firstToken = items[usageIndex + 1]
+
+    expect(firstToken).toMatchObject({
+      url: '/first-token-errors',
+      requiredRole: ROLE.ADMIN,
+    })
   })
 
   test('omits Channel Monitoring Settings when the site skin is classic', () => {

@@ -22,6 +22,7 @@ import {
   isNextConsoleHomePath,
   isNextConsolePath,
   isNextStandaloneShellPath,
+  isNextFirstTokenErrorsPath,
   isNextUsageLogsPath,
   resolveNextConsoleShellPathname,
 } from '../console-home-path'
@@ -45,6 +46,22 @@ describe('isNextConsoleHomePath', () => {
   ])('does not treat %s as the console homepage', (pathname) => {
     expect(isNextConsoleHomePath(pathname)).toBe(false)
   })
+})
+
+describe('isNextFirstTokenErrorsPath', () => {
+  test.each(['/first-token-errors', '/first-token-errors/'])(
+    'treats %s as a first-token-errors path',
+    (pathname) => {
+      expect(isNextFirstTokenErrorsPath(pathname)).toBe(true)
+    }
+  )
+
+  test.each(['/dashboard', '/usage-logs', '/usage-logs/common'])(
+    'does not treat %s as a first-token-errors path',
+    (pathname) => {
+      expect(isNextFirstTokenErrorsPath(pathname)).toBe(false)
+    }
+  )
 })
 
 describe('isNextUsageLogsPath', () => {
@@ -76,6 +93,7 @@ describe('isNextStandaloneShellPath', () => {
     '/usage-logs/common',
     '/usage-logs/drawing',
     '/usage-logs/task',
+    '/first-token-errors',
   ])('uses the standalone shell on %s', (pathname) => {
     expect(isNextStandaloneShellPath(pathname)).toBe(true)
   })
@@ -100,6 +118,7 @@ describe('isNextConsolePath', () => {
     '/wallet',
     '/invite',
     '/usage-logs/common',
+    '/first-token-errors',
     '/keys',
     '/playground',
     '/chat/abc',

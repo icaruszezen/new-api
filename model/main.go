@@ -271,6 +271,8 @@ func migrateDB() error {
 		&InviteRebate{},
 		&Ability{},
 		&Log{},
+		&FirstTokenErrorLog{},
+		&FirstTokenErrorBody{},
 		&Midjourney{},
 		&TopUp{},
 		&QuotaData{},
@@ -298,6 +300,9 @@ func migrateDB() error {
 		&AuthzRole{},
 	)
 	if err != nil {
+		return err
+	}
+	if err := migrateFirstTokenErrorBodyColumn(); err != nil {
 		return err
 	}
 	if err := InitializeUserAuthVersions(); err != nil {
@@ -337,6 +342,8 @@ func migrateDBFast() error {
 		{&Redemption{}, "Redemption"},
 		{&Ability{}, "Ability"},
 		{&Log{}, "Log"},
+		{&FirstTokenErrorLog{}, "FirstTokenErrorLog"},
+		{&FirstTokenErrorBody{}, "FirstTokenErrorBody"},
 		{&Midjourney{}, "Midjourney"},
 		{&TopUp{}, "TopUp"},
 		{&QuotaData{}, "QuotaData"},
@@ -388,6 +395,9 @@ func migrateDBFast() error {
 		return err
 	}
 	if err := InitializeExternalIdentityClaims(); err != nil {
+		return err
+	}
+	if err := migrateFirstTokenErrorBodyColumn(); err != nil {
 		return err
 	}
 	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
@@ -585,6 +595,33 @@ PRIMARY KEY (` + "`id`" + `)
 
 // migrateTokenModelLimitsToText migrates model_limits column from varchar(1024) to text
 // This is safe to run multiple times - it checks the column type first
+func migrateFirstTokenErrorBodyColumn() error {
+	if DB == nil || !DB.Migrator().HasTable("first_token_error_bodies") {
+		return nil
+	}
+	if !DB.Migrator().HasColumn(&FirstTokenErrorBody{}, "body") {
+		return nil
+	}
+	if !common.UsingMainDatabase(common.DatabaseTypeMySQL) {
+		return nil
+	}
+	var columnType string
+	if err := DB.Raw(`SELECT COLUMN_TYPE FROM information_schema.columns
+		WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+		"first_token_error_bodies", "body").Scan(&columnType).Error; err != nil {
+		common.SysLog(fmt.Sprintf("Warning: failed to query metadata for first_token_error_bodies.body: %v", err))
+		return nil
+	}
+	if strings.Contains(strings.ToLower(columnType), "longtext") {
+		return nil
+	}
+	if err := DB.Exec("ALTER TABLE first_token_error_bodies MODIFY COLUMN body longtext").Error; err != nil {
+		return fmt.Errorf("failed to migrate first_token_error_bodies.body to longtext: %w", err)
+	}
+	common.SysLog("Successfully migrated first_token_error_bodies.body to longtext")
+	return nil
+}
+
 func migrateTokenModelLimitsToText() error {
 	// SQLite uses type affinity, so TEXT and VARCHAR are effectively the same — no migration needed
 	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {

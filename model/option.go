@@ -49,6 +49,11 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticDisableChannelEnabled"] = strconv.FormatBool(common.AutomaticDisableChannelEnabled)
 	common.OptionMap["AutomaticEnableChannelEnabled"] = strconv.FormatBool(common.AutomaticEnableChannelEnabled)
 	common.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(common.LogConsumeEnabled)
+	common.OptionMap["FirstTokenErrorCorrectionEnabled"] = strconv.FormatBool(common.FirstTokenErrorCorrectionEnabled)
+	common.OptionMap["FirstTokenErrorTreatAllOutputOneEnabled"] = strconv.FormatBool(common.FirstTokenErrorTreatAllOutputOneEnabled)
+	common.OptionMap["FirstTokenErrorLogEnabled"] = strconv.FormatBool(common.FirstTokenErrorLogEnabled)
+	common.OptionMap["FirstTokenErrorLogMaxKeep"] = strconv.Itoa(common.FirstTokenErrorLogMaxKeep)
+	common.OptionMap["FirstTokenErrorBodyCaptureEnabled"] = strconv.FormatBool(common.FirstTokenErrorBodyCaptureEnabled)
 	common.OptionMap["DisplayInCurrencyEnabled"] = strconv.FormatBool(common.DisplayInCurrencyEnabled)
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
@@ -227,6 +232,9 @@ func validateOptionValue(key string, value string) error {
 	if operation_setting.IsInviteRebateAmountOptionKey(key) {
 		return operation_setting.ValidateInviteRebateAmount(value)
 	}
+	if key == "FirstTokenErrorLogMaxKeep" {
+		return validateFirstTokenErrorLogMaxKeep(value)
+	}
 	return nil
 }
 
@@ -356,6 +364,14 @@ func updateOptionMap(key string, value string) (err error) {
 			common.AutomaticEnableChannelEnabled = boolValue
 		case "LogConsumeEnabled":
 			common.LogConsumeEnabled = boolValue
+		case "FirstTokenErrorCorrectionEnabled":
+			common.FirstTokenErrorCorrectionEnabled = boolValue
+		case "FirstTokenErrorTreatAllOutputOneEnabled":
+			common.FirstTokenErrorTreatAllOutputOneEnabled = boolValue
+		case "FirstTokenErrorLogEnabled":
+			common.FirstTokenErrorLogEnabled = boolValue
+		case "FirstTokenErrorBodyCaptureEnabled":
+			common.FirstTokenErrorBodyCaptureEnabled = boolValue
 		case "DisplayInCurrencyEnabled":
 			// 兼容旧字段：同步到新配置 general_setting.quota_display_type（运行时生效）
 			// true -> USD, false -> TOKENS
@@ -417,6 +433,10 @@ func updateOptionMap(key string, value string) (err error) {
 		}
 	}
 	switch key {
+	case "FirstTokenErrorLogMaxKeep":
+		intValue, _ := strconv.Atoi(value)
+		common.FirstTokenErrorLogMaxKeep = clampFirstTokenErrorLogMaxKeep(intValue)
+		_ = PruneFirstTokenErrorLogs()
 	case "EmailDomainWhitelist":
 		common.EmailDomainWhitelist = strings.Split(value, ",")
 	case "SMTPServer":

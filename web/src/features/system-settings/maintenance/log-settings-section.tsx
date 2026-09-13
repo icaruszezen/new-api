@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Link } from '@tanstack/react-router'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -36,7 +37,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Form,
   FormControl,
@@ -59,6 +60,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import dayjs from '@/lib/dayjs'
 import { formatTimestampToDate } from '@/lib/format'
 
@@ -174,7 +176,9 @@ export function LogSettingsSection({
   }, [])
 
   useEffect(() => {
-    form.reset({ LogConsumeEnabled: defaultEnabled })
+    form.reset({
+      LogConsumeEnabled: defaultEnabled,
+    })
   }, [defaultEnabled, form])
 
   useEffect(() => {
@@ -257,11 +261,19 @@ export function LogSettingsSection({
   }, [logCleanupActive, logCleanupTaskId, t])
 
   const onSubmit = async (values: LogSettingsFormValues) => {
-    if (values.LogConsumeEnabled === defaultEnabled) return
-    await updateOption.mutateAsync({
-      key: 'LogConsumeEnabled',
-      value: values.LogConsumeEnabled,
-    })
+    const updates: Array<{
+      key: keyof LogSettingsFormValues
+      value: boolean | number
+    }> = []
+    if (values.LogConsumeEnabled !== defaultEnabled) {
+      updates.push({
+        key: 'LogConsumeEnabled',
+        value: values.LogConsumeEnabled,
+      })
+    }
+    for (const update of updates) {
+      await updateOption.mutateAsync(update)
+    }
   }
 
   const handleRequestCleanLogs = () => {
@@ -366,6 +378,25 @@ export function LogSettingsSection({
               </SettingsSwitchItem>
             )}
           />
+
+          <SettingsControlGroup className='space-y-3'>
+            <div>
+              <h4 className='text-sm font-medium'>
+                {t('First-token errors')}
+              </h4>
+              <p className='text-muted-foreground text-sm'>
+                {t(
+                  'First-token billing and snapshot settings live on the first-token errors page.'
+                )}
+              </p>
+              <Link
+                to='/first-token-errors'
+                className={cn(buttonVariants({ variant: 'outline' }), 'mt-2')}
+              >
+                {t('Open first-token error settings')}
+              </Link>
+            </div>
+          </SettingsControlGroup>
 
           <SettingsControlGroup className='space-y-3'>
             <div>

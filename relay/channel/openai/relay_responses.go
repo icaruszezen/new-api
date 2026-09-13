@@ -88,6 +88,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	cacheBillingApplied := false
 	imageCounter := &relaycommon.ImageGenerationCallCounter{}
 	imageCommitted := false
+	var firstTokenScan responsesFirstTokenScan
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 
@@ -99,25 +100,11 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			return
 		}
 		outboundData := data
+		observeResponsesFirstTokenEvent(&firstTokenScan, &streamResponse)
 		switch streamResponse.Type {
 		case "response.completed", "response.done":
 			if streamResponse.Response != nil {
-				if streamResponse.Response.Usage != nil {
-					if streamResponse.Response.Usage.InputTokens != 0 {
-						usage.PromptTokens = streamResponse.Response.Usage.InputTokens
-					}
-					if streamResponse.Response.Usage.OutputTokens != 0 {
-						usage.CompletionTokens = streamResponse.Response.Usage.OutputTokens
-					}
-					if streamResponse.Response.Usage.TotalTokens != 0 {
-						usage.TotalTokens = streamResponse.Response.Usage.TotalTokens
-					}
-					if streamResponse.Response.Usage.InputTokensDetails != nil {
-						usage.PromptTokensDetails.CachedTokens = streamResponse.Response.Usage.InputTokensDetails.CachedTokens
-						usage.PromptTokensDetails.CacheWriteTokens = streamResponse.Response.Usage.InputTokensDetails.CacheWriteTokens
-						usage.InputTokensDetails = streamResponse.Response.Usage.InputTokensDetails
-					}
-				}
+				applyResponsesStreamUsage(usage, streamResponse.Response.Usage)
 				if !imageCommitted {
 					if relaycommon.IsNonBillableResponsesStatus(streamResponse.Response.Status) {
 						imageCounter.Reset()
@@ -141,6 +128,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			outboundData = string(bodyBytes)
 			cacheBillingApplied = true
 		case "response.failed", "response.incomplete", "response.cancelled", "response.canceled":
+			if streamResponse.Response != nil {
+				applyResponsesStreamUsage(usage, streamResponse.Response.Usage)
+			}
 			if !imageCommitted {
 				imageCounter.Reset()
 				imageCounter.Commit(info)
@@ -168,14 +158,44 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		sendResponsesStreamData(c, streamResponse, outboundData)
 	})
 
-	if usage.CompletionTokens == 0 {
-		// 计算输出文本的 token 数量
+	upstreamCompletion := usage.CompletionTokens
+	estimatedCompletion := 0
+	if upstreamCompletion == 0 {
 		tempStr := responseTextBuilder.String()
 		if len(tempStr) > 0 {
-			// 非正常结束，使用输出文本的 token 数量
-			completionTokens := service.CountTextToken(tempStr, info.UpstreamModelName)
-			usage.CompletionTokens = completionTokens
+			estimatedCompletion = service.CountTextToken(tempStr, info.UpstreamModelName)
 		}
+	}
+
+	dirty := cloneResponsesUsage(usage)
+	decisionTokens := upstreamCompletion
+	if upstreamCompletion == 0 && estimatedCompletion == 1 {
+		decisionTokens = 1
+		dirty.CompletionTokens = 1
+	}
+	if dirty.PromptTokens == 0 && dirty.CompletionTokens != 0 {
+		dirty.PromptTokens = info.GetEstimatePromptTokens()
+	}
+	dirty.TotalTokens = dirty.PromptTokens + dirty.CompletionTokens
+
+	endReason := relaycommon.StreamEndReasonNone
+	if info.StreamStatus != nil {
+		endReason = info.StreamStatus.EndReason
+	}
+	if common.FirstTokenErrorCorrectionEnabled {
+		decision := decideResponsesFirstTokenError(firstTokenScan, decisionTokens, endReason, common.FirstTokenErrorTreatAllOutputOneEnabled)
+		if decision.Hit {
+			if !cacheBillingApplied {
+				service.ApplyChannelCacheReadBillingRatio(info, dirty, nil)
+			}
+			service.HandleResponsesFirstTokenError(c, info, dirty, decision.ErrorMessage)
+			resetResponsesUsage(usage)
+			return usage, types.NewError(fmt.Errorf("%s", decision.ErrorMessage), types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
+		}
+	}
+
+	if usage.CompletionTokens == 0 && !(firstTokenScan.actualError && estimatedCompletion != 1) {
+		usage.CompletionTokens = estimatedCompletion
 	}
 
 	if usage.PromptTokens == 0 && usage.CompletionTokens != 0 {

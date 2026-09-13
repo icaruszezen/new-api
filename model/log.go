@@ -30,6 +30,20 @@ func applyExplicitLogTextFilter(tx *gorm.DB, column string, value string) (*gorm
 	return tx.Where(column+" = ?", value), nil
 }
 
+func applyMainDatabaseTextFilter(tx *gorm.DB, column string, value string) (*gorm.DB, error) {
+	if value == "" {
+		return tx, nil
+	}
+	if !strings.Contains(value, "%") {
+		return tx.Where(column+" = ?", value), nil
+	}
+	pattern, err := sanitizeLikePattern(value)
+	if err != nil {
+		return nil, err
+	}
+	return tx.Where(column+" LIKE ? ESCAPE '!'", pattern), nil
+}
+
 func buildLogLikeCondition(column string, value string) (string, string, error) {
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		pattern, err := sanitizeClickHouseLikePattern(value)

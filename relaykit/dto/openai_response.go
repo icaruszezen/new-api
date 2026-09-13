@@ -388,6 +388,9 @@ type ResponsesStreamResponse struct {
 	Response *OpenAIResponsesResponse `json:"response,omitempty"`
 	Delta    string                   `json:"delta,omitempty"`
 	Item     *ResponsesOutput         `json:"item,omitempty"`
+	Error    any                      `json:"error,omitempty"`
+	Message  string                   `json:"message,omitempty"`
+	Code     any                      `json:"code,omitempty"`
 	// - response.function_call_arguments.delta
 	// - response.function_call_arguments.done
 	OutputIndex  *int                           `json:"output_index,omitempty"`

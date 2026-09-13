@@ -346,3 +346,15 @@ func TestIsNonBillableResponsesStatus(t *testing.T) {
 	assert.False(t, IsNonBillableResponsesStatus([]byte(`"completed"`)))
 	assert.False(t, IsNonBillableResponsesStatus(nil))
 }
+
+func TestIsCompletedAndFailedResponsesStatus(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, IsCompletedResponsesStatus([]byte(`"completed"`)))
+	assert.False(t, IsCompletedResponsesStatus([]byte(`"failed"`)))
+	assert.False(t, IsCompletedResponsesStatus(nil))
+	assert.True(t, IsFailedOrIncompleteResponsesStatus([]byte(`"failed"`)))
+	assert.True(t, IsFailedOrIncompleteResponsesStatus([]byte(`"incomplete"`)))
+	assert.False(t, IsFailedOrIncompleteResponsesStatus([]byte(`"cancelled"`)))
+	assert.False(t, IsFailedOrIncompleteResponsesStatus([]byte(`"completed"`)))
+}

@@ -10,15 +10,16 @@ import (
 type StreamEndReason string
 
 const (
-	StreamEndReasonNone        StreamEndReason = ""
-	StreamEndReasonDone        StreamEndReason = "done"
-	StreamEndReasonTimeout     StreamEndReason = "timeout"
-	StreamEndReasonClientGone  StreamEndReason = "client_gone"
-	StreamEndReasonScannerErr  StreamEndReason = "scanner_error"
-	StreamEndReasonHandlerStop StreamEndReason = "handler_stop"
-	StreamEndReasonEOF         StreamEndReason = "eof"
-	StreamEndReasonPanic       StreamEndReason = "panic"
-	StreamEndReasonPingFail    StreamEndReason = "ping_fail"
+	StreamEndReasonNone            StreamEndReason = ""
+	StreamEndReasonDone            StreamEndReason = "done"
+	StreamEndReasonTimeout         StreamEndReason = "timeout"
+	StreamEndReasonClientGone      StreamEndReason = "client_gone"
+	StreamEndReasonScannerErr      StreamEndReason = "scanner_error"
+	StreamEndReasonHandlerStop     StreamEndReason = "handler_stop"
+	StreamEndReasonEOF             StreamEndReason = "eof"
+	StreamEndReasonPanic           StreamEndReason = "panic"
+	StreamEndReasonPingFail        StreamEndReason = "ping_fail"
+	StreamEndReasonFirstTokenError StreamEndReason = "first_token_error"
 )
 
 const maxStreamErrorEntries = 20
@@ -50,6 +51,16 @@ func (s *StreamStatus) SetEndReason(reason StreamEndReason, err error) {
 		s.EndReason = reason
 		s.EndError = err
 	})
+}
+
+// OverrideEndReason replaces the first-wins end reason after the scanner has
+// already closed the stream. Used only for Responses first-token-error billing.
+func (s *StreamStatus) OverrideEndReason(reason StreamEndReason, err error) {
+	if s == nil {
+		return
+	}
+	s.EndReason = reason
+	s.EndError = err
 }
 
 func (s *StreamStatus) RecordError(msg string) {

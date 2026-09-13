@@ -45,6 +45,8 @@ func TestMain(m *testing.M) {
 		&TwoFA{},
 		&TwoFABackupCode{},
 		&Log{},
+		&FirstTokenErrorLog{},
+		&FirstTokenErrorBody{},
 		&Channel{},
 		&QuotaData{},
 		&Ability{},

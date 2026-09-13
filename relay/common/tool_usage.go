@@ -192,3 +192,30 @@ func IsNonBillableResponsesStatus(status []byte) bool {
 		return false
 	}
 }
+
+func parseResponsesStatus(status []byte) string {
+	if len(status) == 0 {
+		return ""
+	}
+	var s string
+	if err := common.Unmarshal(status, &s); err != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+// IsCompletedResponsesStatus reports a terminal Responses status of completed.
+func IsCompletedResponsesStatus(status []byte) bool {
+	return parseResponsesStatus(status) == "completed"
+}
+
+// IsFailedOrIncompleteResponsesStatus is the first-token-error status signal
+// (failed / incomplete). Cancelled is intentionally excluded.
+func IsFailedOrIncompleteResponsesStatus(status []byte) bool {
+	switch parseResponsesStatus(status) {
+	case "failed", "incomplete":
+		return true
+	default:
+		return false
+	}
+}

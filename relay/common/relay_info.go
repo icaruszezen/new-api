@@ -180,6 +180,11 @@ type RelayInfo struct {
 
 	StreamStatus *StreamStatus
 
+	// FirstTokenErrorHandled is set when OpenAI Responses streaming treated
+	// the request as a first-token upstream error and returned that error.
+	// The relay error path refunds pre-consume and skips consume logs.
+	FirstTokenErrorHandled bool
+
 	// UpstreamCapture 累积上游响应原始字节，供调试捕获功能记录「上游返回的内容」。
 	// 仅在调试捕获开启时由 WrapUpstreamBody 初始化与填充；重试时通过 ResetUpstreamCapture 重置。
 	UpstreamCapture *UpstreamCaptureBuffer

@@ -37,6 +37,15 @@ func TestStreamStatus_SetEndReason_NilSafe(t *testing.T) {
 	s.SetEndReason(StreamEndReasonDone, nil)
 }
 
+func TestStreamStatus_OverrideEndReason(t *testing.T) {
+	t.Parallel()
+	s := NewStreamStatus()
+	s.SetEndReason(StreamEndReasonEOF, nil)
+	s.OverrideEndReason(StreamEndReasonFirstTokenError, nil)
+	assert.Equal(t, StreamEndReasonFirstTokenError, s.EndReason)
+	assert.False(t, s.IsNormalEnd())
+}
+
 func TestStreamStatus_SetEndReason_Concurrent(t *testing.T) {
 	t.Parallel()
 	s := NewStreamStatus()
@@ -143,6 +152,7 @@ func TestStreamStatus_IsNormalEnd(t *testing.T) {
 		{StreamEndReasonPanic, false},
 		{StreamEndReasonPingFail, false},
 		{StreamEndReasonNone, false},
+		{StreamEndReasonFirstTokenError, false},
 	}
 	for _, tt := range tests {
 		s := NewStreamStatus()

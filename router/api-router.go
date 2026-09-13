@@ -293,6 +293,10 @@ func SetApiRouter(router *gin.Engine) {
 		}
 		logRoute := apiRouter.Group("/log")
 		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)
+		logRoute.GET("/first-token-error", middleware.AdminAuth(), controller.GetFirstTokenErrorLogs)
+		logRoute.GET("/first-token-error/stat", middleware.AdminAuth(), controller.GetFirstTokenErrorLogsStat)
+		logRoute.GET("/first-token-error/:id", middleware.AdminAuth(), controller.GetFirstTokenErrorLog)
+		logRoute.GET("/first-token-error/:id/body", middleware.AdminAuth(), controller.GetFirstTokenErrorBody)
 		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
 		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), controller.GetChannelAffinityUsageCacheStats)

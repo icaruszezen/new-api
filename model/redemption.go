@@ -175,7 +175,18 @@ func Redeem(key string, userId int) (quota int, err error) {
 		if result.RowsAffected == 0 {
 			return errors.New("该兑换码已被使用")
 		}
-		return tx.Model(&User{}).Where("id = ?", userId).Update("quota", gorm.Expr("quota + ?", redemption.Quota)).Error
+		// Bound the resulting balance the way top-up settlement does: predicate and
+		// increment stay in one UPDATE so concurrent credits cannot both pass.
+		result = tx.Model(&User{}).
+			Where("id = ? AND quota <= ?", userId, common.MaxWalletQuota-redemption.Quota).
+			Update("quota", gorm.Expr("quota + ?", redemption.Quota))
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return errors.New("兑换后余额将超出系统可记录的额度上限")
+		}
+		return nil
 	})
 	if err != nil {
 		common.SysError("redemption failed: " + err.Error())

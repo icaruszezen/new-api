@@ -34,15 +34,23 @@ func TestTopUpQuotaValidation(t *testing.T) {
 		wantErr     bool
 	}{
 		{
-			name:        "currency amount below limit",
+			name:        "currency amount below legacy int32 ceiling",
 			displayType: operation_setting.QuotaDisplayTypeUSD,
 			amount:      4294,
 			wantQuota:   2_147_000_000,
 		},
 		{
-			name:        "currency amount above limit",
+			// The wallet is bounded by MaxWalletQuota, not by the per-request
+			// int32 charge domain, so this amount must convert instead of failing.
+			name:        "currency amount just above legacy int32 ceiling",
 			displayType: operation_setting.QuotaDisplayTypeUSD,
 			amount:      4295,
+			wantQuota:   2_147_500_000,
+		},
+		{
+			name:        "currency amount above wallet ceiling",
+			displayType: operation_setting.QuotaDisplayTypeUSD,
+			amount:      common.MaxWalletQuota,
 			wantErr:     true,
 		},
 		{
@@ -52,10 +60,10 @@ func TestTopUpQuotaValidation(t *testing.T) {
 			wantQuota:   2_147_000_000,
 		},
 		{
-			name:        "token amount above settlement limit",
+			name:        "token amount just above legacy int32 ceiling",
 			displayType: operation_setting.QuotaDisplayTypeTokens,
 			amount:      2_147_500_000,
-			wantErr:     true,
+			wantQuota:   2_147_500_000,
 		},
 	}
 
@@ -83,14 +91,15 @@ func TestValidateTopUpQuotaReturnsMaximumAmount(t *testing.T) {
 		operation_setting.GetGeneralSetting().QuotaDisplayType = oldDisplayType
 	})
 
-	maxAmount := decimal.NewFromInt(common.MaxQuota - 1).
+	maxAmount := decimal.NewFromInt(common.MaxWalletQuota - 1).
 		Div(decimal.NewFromFloat(common.QuotaPerUnit)).
 		Floor().IntPart()
+	require.EqualValues(t, 18_014_398_509, maxAmount)
 
 	_, err := validateTopUpQuota(maxAmount)
 	require.NoError(t, err)
 	_, err = validateTopUpQuota(maxAmount + 1)
-	require.EqualError(t, err, "单笔充值数量不能大于 4294")
+	require.EqualError(t, err, "单笔充值数量不能大于 18014398509")
 }
 
 func TestRequestAmountRejectsTopUpThatCannotBeSettled(t *testing.T) {
@@ -109,14 +118,14 @@ func TestRequestAmountRejectsTopUpThatCannotBeSettled(t *testing.T) {
 	ctx.Request = httptest.NewRequest(
 		http.MethodPost,
 		"/api/user/amount",
-		strings.NewReader(`{"amount":4295}`),
+		strings.NewReader(`{"amount":18014398510}`),
 	)
 	ctx.Request.Header.Set("Content-Type", "application/json")
 
 	RequestAmount(ctx)
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.JSONEq(t, `{"message":"error","data":"单笔充值数量不能大于 4294"}`, recorder.Body.String())
+	assert.JSONEq(t, `{"message":"error","data":"单笔充值数量不能大于 18014398509"}`, recorder.Body.String())
 }
 
 func TestRequestAmountRejectsTopUpThatWouldOverflowWallet(t *testing.T) {
@@ -143,7 +152,7 @@ func TestRequestAmountRejectsTopUpThatWouldOverflowWallet(t *testing.T) {
 	require.NoError(t, model.DB.Create(&model.User{
 		Id:       42,
 		Username: "topup_capacity_user",
-		Quota:    1_000_000,
+		Quota:    common.MaxWalletQuota - 1_000_000,
 		Status:   common.UserStatusEnabled,
 	}).Error)
 
@@ -164,12 +173,52 @@ func TestRequestAmountRejectsTopUpThatWouldOverflowWallet(t *testing.T) {
 	assert.JSONEq(t, `{"message":"error","data":"当前账户余额过高，继续充值会超出系统可记录的额度上限。请降低充值金额，或联系管理员处理账户余额"}`, recorder.Body.String())
 }
 
+// TestRejectInvalidTopUpQuotaAllowsBalanceAboveLegacyInt32Ceiling covers the
+// production regression: admin-granted balances above the old int32 ceiling
+// made every self-service top-up fail, whatever the amount.
+func TestRejectInvalidTopUpQuotaAllowsBalanceAboveLegacyInt32Ceiling(t *testing.T) {
+	oldQuotaPerUnit := common.QuotaPerUnit
+	oldDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	oldDB := model.DB
+	common.QuotaPerUnit = 500000
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}))
+	model.DB = db
+	t.Cleanup(func() {
+		common.QuotaPerUnit = oldQuotaPerUnit
+		operation_setting.GetGeneralSetting().QuotaDisplayType = oldDisplayType
+		model.DB = oldDB
+		sqlDB, dbErr := db.DB()
+		if dbErr == nil {
+			require.NoError(t, sqlDB.Close())
+		}
+	})
+
+	// Observed on production before the fix: a wallet above math.MaxInt32.
+	require.NoError(t, model.DB.Create(&model.User{
+		Id:       43,
+		Username: "topup_above_int32_user",
+		Quota:    2_545_540_817,
+		Status:   common.UserStatusEnabled,
+	}).Error)
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+
+	assert.False(t, rejectInvalidTopUpQuota(ctx, 43, 5000))
+	assert.Empty(t, recorder.Body.String())
+}
+
 func TestValidateCreditedQuotaRejectsOverflow(t *testing.T) {
-	_, err := validateCreditedQuota(decimal.NewFromInt(common.MaxQuota - 1))
+	_, err := validateCreditedQuota(decimal.NewFromInt(common.MaxWalletQuota))
 	require.NoError(t, err)
 	_, err = validateCreditedQuota(decimal.Zero)
 	require.EqualError(t, err, "充值额度必须大于 0")
-	_, err = validateCreditedQuota(decimal.NewFromInt(common.MaxQuota))
+	_, err = validateCreditedQuota(decimal.NewFromInt(common.MaxWalletQuota).Add(decimal.NewFromInt(1)))
 	require.EqualError(
 		t,
 		err,
@@ -187,9 +236,11 @@ func TestStripeCreditedQuotaIncludesGroupRatio(t *testing.T) {
 		require.NoError(t, common.UpdateTopupGroupRatioByJSONString(oldTopupGroupRatio))
 	})
 
-	_, err := validateCreditedQuota(getStripeCreditedQuota(2147, "vip"))
+	// The vip ratio doubles the credited quota, so the wallet ceiling is reached
+	// at half of MaxWalletQuota / QuotaPerUnit.
+	_, err := validateCreditedQuota(getStripeCreditedQuota(9_007_199_254, "vip"))
 	require.NoError(t, err)
-	_, err = validateCreditedQuota(getStripeCreditedQuota(2148, "vip"))
+	_, err = validateCreditedQuota(getStripeCreditedQuota(9_007_199_255, "vip"))
 	require.Error(t, err)
 
 	require.NoError(t, common.UpdateTopupGroupRatioByJSONString(`{"free":0}`))

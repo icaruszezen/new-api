@@ -148,6 +148,26 @@ func TestRedeemCreditsQuotaExactlyOnce(t *testing.T) {
 	assert.Equal(t, 500, user.Quota)
 }
 
+// A redemption that would push the wallet past MaxWalletQuota must fail and
+// roll back, leaving both the balance and the code untouched so the code stays
+// usable once the balance comes down.
+func TestRedeemRejectsCreditAboveWalletCeiling(t *testing.T) {
+	userId, key := setupRedeemFixture(t, 500)
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", userId).
+		Update("quota", common.MaxWalletQuota-100).Error)
+
+	_, err := Redeem(key, userId)
+	require.ErrorIs(t, err, ErrRedeemFailed)
+
+	var user User
+	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
+	assert.Equal(t, common.MaxWalletQuota-100, user.Quota)
+
+	var redemption Redemption
+	require.NoError(t, DB.First(&redemption, "name = ?", "redeem-test").Error)
+	assert.Equal(t, common.RedemptionCodeStatusEnabled, redemption.Status)
+}
+
 // Exactly one of several concurrent redeems of the same code may win, and
 // quota must be credited exactly once.
 func TestRedeemConcurrentSingleSuccess(t *testing.T) {

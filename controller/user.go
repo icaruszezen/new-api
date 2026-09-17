@@ -1185,6 +1185,11 @@ func ManageUser(c *gin.Context) {
 				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
 				return
 			}
+			// Compared as a remaining headroom so a huge req.Value cannot overflow the sum.
+			if req.Value > common.MaxWalletQuota-user.Quota {
+				common.ApiErrorI18n(c, i18n.MsgUserQuotaExceedWalletMax, map[string]any{"Max": common.MaxWalletQuota})
+				return
+			}
 			if err := model.IncreaseUserQuota(user.Id, req.Value, true); err != nil {
 				common.ApiError(c, err)
 				return
@@ -1205,6 +1210,10 @@ func ManageUser(c *gin.Context) {
 				"quota": logger.LogQuota(req.Value),
 			})
 		case "override":
+			if req.Value > common.MaxWalletQuota || req.Value < common.MinWalletQuota {
+				common.ApiErrorI18n(c, i18n.MsgUserQuotaExceedWalletMax, map[string]any{"Max": common.MaxWalletQuota})
+				return
+			}
 			oldQuota := user.Quota
 			if err := model.DB.Model(&model.User{}).Where("id = ?", user.Id).Update("quota", req.Value).Error; err != nil {
 				common.ApiError(c, err)

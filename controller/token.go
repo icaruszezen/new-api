@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 type tokenAutoGroupsInput struct {
@@ -261,6 +262,19 @@ func GetTokenUsage(c *gin.Context) {
 	})
 }
 
+// maxTokenRemainQuota bounds a token allowance at one billion display units.
+// The wallet ceiling caps it as well, so an unusually large QuotaPerUnit cannot
+// let a token hold more than a balance column can represent.
+func maxTokenRemainQuota() int {
+	quota, err := common.QuotaFromDecimalWalletStrict(
+		decimal.NewFromInt(1_000_000_000).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
+	)
+	if err != nil {
+		return common.MaxWalletQuota
+	}
+	return quota
+}
+
 func AddToken(c *gin.Context) {
 	request := tokenRequest{}
 	err := c.ShouldBindJSON(&request)
@@ -279,7 +293,7 @@ func AddToken(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgTokenQuotaNegative)
 			return
 		}
-		maxQuotaValue := common.QuotaFromFloat(1000000000 * common.QuotaPerUnit)
+		maxQuotaValue := maxTokenRemainQuota()
 		if token.RemainQuota > maxQuotaValue {
 			common.ApiErrorI18n(c, i18n.MsgTokenQuotaExceedMax, map[string]any{"Max": maxQuotaValue})
 			return
@@ -373,7 +387,7 @@ func UpdateToken(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgTokenQuotaNegative)
 			return
 		}
-		maxQuotaValue := common.QuotaFromFloat(1000000000 * common.QuotaPerUnit)
+		maxQuotaValue := maxTokenRemainQuota()
 		if token.RemainQuota > maxQuotaValue {
 			common.ApiErrorI18n(c, i18n.MsgTokenQuotaExceedMax, map[string]any{"Max": maxQuotaValue})
 			return

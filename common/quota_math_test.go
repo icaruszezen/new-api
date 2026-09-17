@@ -48,6 +48,41 @@ func TestQuotaFromDecimal(t *testing.T) {
 	assert.Equal(t, MinQuota, QuotaFromDecimal(decimal.NewFromInt(-2000).Mul(decimal.NewFromFloat(1.8446744073686647e19))))
 }
 
+// TestQuotaFromDecimalWalletStrict guards the balance-scale conversion: it must
+// accept values far above the per-request int32 charge ceiling and reject —
+// never silently truncate — anything past the wallet ceiling.
+func TestQuotaFromDecimalWalletStrict(t *testing.T) {
+	quota, err := QuotaFromDecimalWalletStrict(decimal.NewFromInt(MaxQuota).Add(decimal.NewFromInt(1)))
+	require.NoError(t, err)
+	assert.Equal(t, MaxQuota+1, quota)
+
+	quota, err = QuotaFromDecimalWalletStrict(decimal.NewFromInt(MaxWalletQuota))
+	require.NoError(t, err)
+	assert.Equal(t, MaxWalletQuota, quota)
+
+	quota, err = QuotaFromDecimalWalletStrict(decimal.NewFromInt(MinWalletQuota))
+	require.NoError(t, err)
+	assert.Equal(t, MinWalletQuota, quota)
+
+	quota, err = QuotaFromDecimalWalletStrict(decimal.NewFromInt(MaxWalletQuota).Add(decimal.NewFromInt(1)))
+	assert.Zero(t, quota)
+	var clamp *QuotaClamp
+	require.ErrorAs(t, err, &clamp)
+	assert.Equal(t, QuotaClampOverflow, clamp.Kind)
+	assert.Equal(t, MaxWalletQuota, clamp.Clamped)
+
+	quota, err = QuotaFromDecimalWalletStrict(decimal.NewFromInt(MinWalletQuota).Sub(decimal.NewFromInt(1)))
+	assert.Zero(t, quota)
+	require.ErrorAs(t, err, &clamp)
+	assert.Equal(t, QuotaClampUnderflow, clamp.Kind)
+
+	// Well past int64 so the bounds check cannot rely on IntPart.
+	quota, err = QuotaFromDecimalWalletStrict(decimal.NewFromInt(1).Shift(30))
+	assert.Zero(t, quota)
+	require.ErrorAs(t, err, &clamp)
+	assert.Equal(t, QuotaClampOverflow, clamp.Kind)
+}
+
 // TestQuotaFromFloatChecked verifies the clamp descriptor is nil in range and
 // carries the correct kind/clamped value on saturation, so billing callers can
 // audit the event.

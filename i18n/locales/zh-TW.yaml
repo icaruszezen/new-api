@@ -109,6 +109,7 @@ user.telegram_id_empty: "Telegram id 為空！"
 user.telegram_not_bound: "該 Telegram 帳號未綁定"
 user.linux_do_id_empty: "Linux DO id 為空！"
 user.quota_change_zero: "額度變更量不能為0"
+user.quota_exceed_wallet_max: "變更後的餘額將超出系統可記錄的額度上限 {{.Max}}"
 
 # Quota messages
 quota.negative: "額度不能為負數！"

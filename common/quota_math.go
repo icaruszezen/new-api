@@ -8,12 +8,28 @@ import (
 )
 
 // Quota conversions are centralized here so every billing path shares one
-// saturation + logging policy. Quota columns (user/token/log) are 32-bit
-// integers in the database, so an oversized product must clamp to the int32
-// range instead of wrapping around and turning a charge into a credit.
+// saturation + logging policy.
+//
+// MaxQuota bounds a single request's charge: a per-request amount anywhere near
+// it signals a bug or an abusive request, so an oversized product clamps to the
+// int32 range instead of wrapping around and turning a charge into a credit.
+//
+// Accumulated balances (user wallet, token allowance, top-up credit) are a
+// different scale and are bounded by MaxWalletQuota instead. Both fit the
+// bigint quota columns.
 const (
 	MaxQuota = math.MaxInt32
 	MinQuota = math.MinInt32
+
+	// MaxWalletQuota keeps every balance exactly representable as a JSON number
+	// in the frontend (2^53-1) while staying far below the database bigint range.
+	MaxWalletQuota = 1<<53 - 1
+	MinWalletQuota = -MaxWalletQuota
+)
+
+var (
+	maxWalletQuotaDecimal = decimal.NewFromInt(MaxWalletQuota)
+	minWalletQuotaDecimal = decimal.NewFromInt(MinWalletQuota)
 )
 
 // QuotaClampKind identifies why a quota conversion had to be saturated.
@@ -151,4 +167,25 @@ func QuotaFromDecimalChecked(d decimal.Decimal) (int, *QuotaClamp) {
 // value that would otherwise be saturated at the database's int32 boundary.
 func QuotaFromDecimalStrict(d decimal.Decimal) (int, error) {
 	return strictQuota(QuotaFromDecimalChecked(d))
+}
+
+// QuotaFromDecimalWalletStrict converts a balance-scale quota decimal (top-up
+// credit, wallet capacity) to int. It is bounded by MaxWalletQuota rather than
+// the per-request int32 range, and rejects out-of-range input instead of
+// saturating, so a balance is never silently truncated. The bounds are compared
+// as decimals because IntPart is undefined once the value leaves int64.
+func QuotaFromDecimalWalletStrict(d decimal.Decimal) (int, error) {
+	rounded := d.Round(0)
+	if !rounded.GreaterThan(maxWalletQuotaDecimal) && !rounded.LessThan(minWalletQuotaDecimal) {
+		return int(rounded.IntPart()), nil
+	}
+
+	kind, clamped := QuotaClampOverflow, MaxWalletQuota
+	if rounded.LessThan(minWalletQuotaDecimal) {
+		kind, clamped = QuotaClampUnderflow, MinWalletQuota
+	}
+	original, _ := rounded.Float64()
+	clamp := &QuotaClamp{Op: "QuotaFromDecimalWallet", Kind: kind, Original: original, Clamped: clamped}
+	SysError(clamp.Error())
+	return 0, clamp
 }

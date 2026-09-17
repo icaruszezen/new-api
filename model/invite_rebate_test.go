@@ -480,7 +480,7 @@ func TestCreditInviteRebateRollsBackWhenWalletWouldOverflow(t *testing.T) {
 	inviter := createInviteTestUser(t, "inviter", 0)
 	invitee := createInviteTestUser(t, "invitee", inviter.Id)
 	require.NoError(t, DB.Model(&User{}).Where("id = ?", inviter.Id).Updates(map[string]interface{}{
-		"quota":       common.MaxQuota - 5,
+		"quota":       common.MaxWalletQuota - 5,
 		"aff_history": 7,
 	}).Error)
 
@@ -495,7 +495,7 @@ func TestCreditInviteRebateRollsBackWhenWalletWouldOverflow(t *testing.T) {
 
 	var stored User
 	require.NoError(t, DB.Select("quota", "aff_history").Where("id = ?", inviter.Id).First(&stored).Error)
-	assert.Equal(t, common.MaxQuota-5, stored.Quota)
+	assert.Equal(t, common.MaxWalletQuota-5, stored.Quota)
 	assert.Equal(t, 7, stored.AffHistoryQuota)
 }
 

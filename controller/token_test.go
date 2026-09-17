@@ -16,10 +16,28 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+// The token allowance cap is one billion display units. It used to be squeezed
+// through the per-request int32 charge ceiling, which silently collapsed it to
+// roughly 4294 display units and made large allowances unsettable.
+func TestMaxTokenRemainQuotaUsesWalletCeiling(t *testing.T) {
+	oldQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() { common.QuotaPerUnit = oldQuotaPerUnit })
+
+	common.QuotaPerUnit = 500000
+	maxQuota := maxTokenRemainQuota()
+	assert.Equal(t, 500_000_000_000_000, maxQuota)
+	assert.Greater(t, maxQuota, common.MaxQuota)
+
+	// An extreme QuotaPerUnit must not push the cap past what a balance holds.
+	common.QuotaPerUnit = float64(common.MaxWalletQuota)
+	assert.Equal(t, common.MaxWalletQuota, maxTokenRemainQuota())
+}
 
 type tokenAPIResponse struct {
 	Success bool            `json:"success"`

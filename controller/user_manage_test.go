@@ -134,6 +134,43 @@ func TestManageUserDemoteAdvancesAuthVersionAndRevokesSessionsOnce(t *testing.T)
 	assert.Equal(t, 1, sessionUpdateCount)
 }
 
+// Admin grants write the same wallet column as self-service top-ups. They may
+// exceed the per-request int32 charge ceiling, but not the wallet ceiling, and
+// a rejected grant must leave the balance untouched.
+func TestManageUserAddQuotaBoundsWalletCeiling(t *testing.T) {
+	db := setupManageUserTestDB(t)
+	user := model.User{
+		Username: "managed-quota-user", Password: "password", Role: common.RoleCommonUser,
+		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1, AffCode: "quota-aff",
+		Quota: 1_000,
+	}
+	require.NoError(t, db.Create(&user).Error)
+
+	recorder := performManageUserRequest(t,
+		fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":"add","value":%d}`, user.Id, common.MaxQuota))
+	assert.Contains(t, recorder.Body.String(), `"success":true`)
+	require.NoError(t, db.First(&user, user.Id).Error)
+	assert.Equal(t, common.MaxQuota+1_000, user.Quota)
+
+	recorder = performManageUserRequest(t,
+		fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":"add","value":%d}`, user.Id, common.MaxWalletQuota))
+	assert.Contains(t, recorder.Body.String(), `"success":false`)
+	require.NoError(t, db.First(&user, user.Id).Error)
+	assert.Equal(t, common.MaxQuota+1_000, user.Quota, "rejected grant must not change the balance")
+
+	recorder = performManageUserRequest(t,
+		fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":"override","value":%d}`, user.Id, int64(common.MaxWalletQuota)+1))
+	assert.Contains(t, recorder.Body.String(), `"success":false`)
+	require.NoError(t, db.First(&user, user.Id).Error)
+	assert.Equal(t, common.MaxQuota+1_000, user.Quota, "rejected override must not change the balance")
+
+	recorder = performManageUserRequest(t,
+		fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":"override","value":%d}`, user.Id, common.MaxWalletQuota))
+	assert.Contains(t, recorder.Body.String(), `"success":true`)
+	require.NoError(t, db.First(&user, user.Id).Error)
+	assert.Equal(t, common.MaxWalletQuota, user.Quota)
+}
+
 func TestManageUserDeleteReturnsImmediatelyAndUnknownActionFails(t *testing.T) {
 	db := setupManageUserTestDB(t)
 	deleted := model.User{

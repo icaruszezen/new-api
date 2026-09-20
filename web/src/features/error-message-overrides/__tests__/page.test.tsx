@@ -19,8 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import i18next from 'i18next'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
+
+import zh from '@/i18n/locales/zh.json'
 
 import type { ErrorMessageOverride } from '../types'
 
@@ -64,8 +67,13 @@ function renderPage() {
   return render(<ErrorMessageOverrides />, { wrapper: Wrapper })
 }
 
-afterEach(() => {
+afterEach(async () => {
   vi.clearAllMocks()
+  i18next.options.keySeparator = '.'
+  i18next.options.nsSeparator = ':'
+  if (i18next.language !== 'en') {
+    await i18next.changeLanguage('en')
+  }
 })
 
 describe('error message override page', () => {
@@ -188,5 +196,41 @@ describe('error message override page', () => {
     await waitFor(() => {
       expect(apiMocks.deleteErrorMessageOverride).toHaveBeenCalledWith(1)
     })
+  })
+
+  test('renders Chinese chrome and the add dialog when zh is active', async () => {
+    const user = userEvent.setup()
+    i18next.options.keySeparator = false
+    i18next.options.nsSeparator = false
+    i18next.addResourceBundle('zhCN', 'translation', zh.translation, true, true)
+    await i18next.changeLanguage('zhCN')
+    apiMocks.getErrorMessageOverrides.mockResolvedValue([])
+
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: '报错信息覆盖' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: '添加覆盖规则' })
+    ).toBeInTheDocument()
+    expect(await screen.findByText('暂无覆盖规则')).toBeInTheDocument()
+    expect(screen.getByText('匹配文本')).toBeInTheDocument()
+    expect(screen.getByText('替换文案')).toBeInTheDocument()
+    expect(screen.getByText('生效范围')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '当上游报错信息包含匹配文本时，返回给用户的报错会被整段替换。',
+        { exact: false }
+      )
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '添加覆盖规则' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '添加覆盖规则' })
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('匹配文本')).toBeInTheDocument()
+    expect(screen.getByLabelText('替换文案')).toBeInTheDocument()
   })
 })

@@ -163,6 +163,14 @@ channel.no_valid_upstream: "No valid upstream channel"
 channel.upstream_saturated: "Current group upstream load is saturated, please try again later"
 channel.get_available_failed: "Failed to get available channels for model {{.Model}} under group {{.Group}}"
 
+# Error message override messages
+error_message_override.not_exists: "Error message override does not exist"
+error_message_override.id_format_error: "Error message override ID format error"
+error_message_override.match_required: "Match text cannot be empty"
+error_message_override.match_too_long: "Match text cannot exceed {{.Max}} characters"
+error_message_override.replacement_required: "Replacement message cannot be empty"
+error_message_override.channel_id_invalid: "Invalid channel, please select again"
+
 # Model messages
 model.name_empty: "Model name cannot be empty"
 model.name_exists: "Model name already exists"

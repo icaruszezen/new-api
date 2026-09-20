@@ -28,6 +28,7 @@ describe('isAdminConsolePath', () => {
     '/channels',
     '/channels/12',
     '/channel-monitoring-settings',
+    '/error-message-overrides',
     '/models',
     '/models/metadata',
     '/users',

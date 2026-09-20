@@ -348,6 +348,15 @@ func SetApiRouter(router *gin.Engine) {
 			prefillGroupRoute.DELETE("/:id", controller.DeletePrefillGroup)
 		}
 
+		errorMessageOverrideRoute := apiRouter.Group("/error-message-override")
+		errorMessageOverrideRoute.Use(middleware.AdminAuth())
+		{
+			errorMessageOverrideRoute.GET("/", controller.GetErrorMessageOverrides)
+			errorMessageOverrideRoute.POST("/", controller.CreateErrorMessageOverride)
+			errorMessageOverrideRoute.PUT("/:id", controller.UpdateErrorMessageOverride)
+			errorMessageOverrideRoute.DELETE("/:id", controller.DeleteErrorMessageOverride)
+		}
+
 		mjRoute := apiRouter.Group("/mj")
 		mjRoute.GET("/self", middleware.UserAuth(), controller.GetUserMidjourney)
 		mjRoute.GET("/", middleware.AdminAuth(), controller.GetAllMidjourney)

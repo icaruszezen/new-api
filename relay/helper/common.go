@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -68,7 +69,7 @@ func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {
 		common.SysError("error marshalling stream response: " + err.Error())
 	} else {
 		c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
-		c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonData)})
+		c.Render(-1, common.CustomEvent{Data: "data: " + service.RewriteStreamErrorPayload(c, string(jsonData))})
 	}
 	_ = FlushWriter(c)
 	return nil
@@ -80,7 +81,7 @@ func ClaudeChunkData(c *gin.Context, resp dto.ClaudeResponse, data string) {
 	}
 
 	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
-	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s\n", data)})
+	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s\n", service.RewriteStreamErrorPayload(c, data))})
 	_ = FlushWriter(c)
 }
 
@@ -90,7 +91,7 @@ func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data st
 	}
 
 	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
-	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s", data)})
+	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s", service.RewriteStreamErrorPayload(c, data))})
 	return FlushWriter(c)
 }
 
@@ -103,7 +104,7 @@ func StringData(c *gin.Context, str string) error {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
 
-	c.Render(-1, common.CustomEvent{Data: "data: " + str})
+	c.Render(-1, common.CustomEvent{Data: "data: " + service.RewriteStreamErrorPayload(c, str)})
 	return FlushWriter(c)
 }
 
@@ -149,7 +150,7 @@ func WssString(c *gin.Context, ws *websocket.Conn, str string) error {
 		return errors.New("websocket connection is nil")
 	}
 	//common.LogInfo(c, fmt.Sprintf("sending message: %s", str))
-	return ws.WriteMessage(1, []byte(str))
+	return ws.WriteMessage(1, []byte(service.RewriteStreamErrorPayload(c, str)))
 }
 
 func WssObject(c *gin.Context, ws *websocket.Conn, object interface{}) error {
@@ -162,7 +163,7 @@ func WssObject(c *gin.Context, ws *websocket.Conn, object interface{}) error {
 		return errors.New("websocket connection is nil")
 	}
 	//common.LogInfo(c, fmt.Sprintf("sending message: %s", jsonData))
-	return ws.WriteMessage(1, jsonData)
+	return ws.WriteMessage(1, []byte(service.RewriteStreamErrorPayload(c, string(jsonData))))
 }
 
 func WssError(c *gin.Context, ws *websocket.Conn, openaiError types.OpenAIError) {

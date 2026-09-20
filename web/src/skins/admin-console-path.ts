@@ -20,6 +20,7 @@ const ADMIN_CONSOLE_PATHS = [
   '/first-token-errors',
   '/channels',
   '/channel-monitoring-settings',
+  '/error-message-overrides',
   '/models',
   '/users',
   '/redemption-codes',

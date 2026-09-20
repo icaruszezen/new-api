@@ -186,6 +186,16 @@ const (
 	MsgChannelGetAvailableFailed = "channel.get_available_failed"
 )
 
+// Error message override related messages
+const (
+	MsgErrorMessageOverrideNotExists        = "error_message_override.not_exists"
+	MsgErrorMessageOverrideIdFormatError    = "error_message_override.id_format_error"
+	MsgErrorMessageOverrideMatchRequired    = "error_message_override.match_required"
+	MsgErrorMessageOverrideMatchTooLong     = "error_message_override.match_too_long"
+	MsgErrorMessageOverrideReplaceRequired  = "error_message_override.replacement_required"
+	MsgErrorMessageOverrideChannelIdInvalid = "error_message_override.channel_id_invalid"
+)
+
 // Model related messages
 const (
 	MsgModelNameEmpty     = "model.name_empty"

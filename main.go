@@ -106,6 +106,12 @@ func main() {
 	// endpoint inference can read cached route settings on first request.
 	model.GetPricing()
 
+	// 报错信息覆盖规则走内存缓存，relay 热路径不再查库
+	if err := service.ReloadErrorMessageOverrides(); err != nil {
+		common.SysError("failed to load error message overrides: " + err.Error())
+	}
+	go service.SyncErrorMessageOverrides(common.SyncFrequency)
+
 	// 热更新配置
 	go model.SyncOptions(common.SyncFrequency)
 

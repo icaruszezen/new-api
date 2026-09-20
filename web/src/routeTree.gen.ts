@@ -40,6 +40,7 @@ import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authenticated/chat/$chatId'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
+import { Route as AuthenticatedErrorMessageOverridesIndexRouteImport } from './routes/_authenticated/error-message-overrides/index'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedFirstTokenErrorsIndexRouteImport } from './routes/_authenticated/first-token-errors/index'
 import { Route as AuthenticatedInviteIndexRouteImport } from './routes/_authenticated/invite/index'
@@ -228,6 +229,12 @@ const AuthenticatedDashboardSectionRoute =
   AuthenticatedDashboardSectionRouteImport.update({
     id: '/dashboard/$section',
     path: '/dashboard/$section',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedErrorMessageOverridesIndexRoute =
+  AuthenticatedErrorMessageOverridesIndexRouteImport.update({
+    id: '/error-message-overrides/',
+    path: '/error-message-overrides/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedErrorsErrorRoute =
@@ -447,6 +454,7 @@ export interface FileRoutesByFullPath {
   '/channel-monitoring-settings/': typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/error-message-overrides/': typeof AuthenticatedErrorMessageOverridesIndexRoute
   '/first-token-errors/': typeof AuthenticatedFirstTokenErrorsIndexRoute
   '/invite/': typeof AuthenticatedInviteIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
@@ -508,6 +516,7 @@ export interface FileRoutesByTo {
   '/channel-monitoring-settings': typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
+  '/error-message-overrides': typeof AuthenticatedErrorMessageOverridesIndexRoute
   '/first-token-errors': typeof AuthenticatedFirstTokenErrorsIndexRoute
   '/invite': typeof AuthenticatedInviteIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
@@ -573,6 +582,7 @@ export interface FileRoutesById {
   '/_authenticated/channel-monitoring-settings/': typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/_authenticated/error-message-overrides/': typeof AuthenticatedErrorMessageOverridesIndexRoute
   '/_authenticated/first-token-errors/': typeof AuthenticatedFirstTokenErrorsIndexRoute
   '/_authenticated/invite/': typeof AuthenticatedInviteIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
@@ -637,6 +647,7 @@ export interface FileRouteTypes {
     | '/channel-monitoring-settings/'
     | '/channels/'
     | '/dashboard/'
+    | '/error-message-overrides/'
     | '/first-token-errors/'
     | '/invite/'
     | '/keys/'
@@ -698,6 +709,7 @@ export interface FileRouteTypes {
     | '/channel-monitoring-settings'
     | '/channels'
     | '/dashboard'
+    | '/error-message-overrides'
     | '/first-token-errors'
     | '/invite'
     | '/keys'
@@ -762,6 +774,7 @@ export interface FileRouteTypes {
     | '/_authenticated/channel-monitoring-settings/'
     | '/_authenticated/channels/'
     | '/_authenticated/dashboard/'
+    | '/_authenticated/error-message-overrides/'
     | '/_authenticated/first-token-errors/'
     | '/_authenticated/invite/'
     | '/_authenticated/keys/'
@@ -1029,6 +1042,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard/$section'
       fullPath: '/dashboard/$section'
       preLoaderRoute: typeof AuthenticatedDashboardSectionRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/error-message-overrides/': {
+      id: '/_authenticated/error-message-overrides/'
+      path: '/error-message-overrides'
+      fullPath: '/error-message-overrides/'
+      preLoaderRoute: typeof AuthenticatedErrorMessageOverridesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/errors/$error': {
@@ -1345,6 +1365,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChannelMonitoringSettingsIndexRoute: typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
+  AuthenticatedErrorMessageOverridesIndexRoute: typeof AuthenticatedErrorMessageOverridesIndexRoute
   AuthenticatedFirstTokenErrorsIndexRoute: typeof AuthenticatedFirstTokenErrorsIndexRoute
   AuthenticatedInviteIndexRoute: typeof AuthenticatedInviteIndexRoute
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
@@ -1372,6 +1393,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedChannelMonitoringSettingsIndexRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
+  AuthenticatedErrorMessageOverridesIndexRoute:
+    AuthenticatedErrorMessageOverridesIndexRoute,
   AuthenticatedFirstTokenErrorsIndexRoute:
     AuthenticatedFirstTokenErrorsIndexRoute,
   AuthenticatedInviteIndexRoute: AuthenticatedInviteIndexRoute,

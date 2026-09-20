@@ -96,6 +96,9 @@ type NewAPIError struct {
 	errorCode      ErrorCode
 	StatusCode     int
 	Metadata       json.RawMessage
+	// overriddenFrom keeps the upstream message after an administrator-authored
+	// override replaced it, so logs and diagnostics stay on the real failure.
+	overriddenFrom string
 }
 
 // Unwrap enables errors.Is / errors.As to work with NewAPIError by exposing the underlying error.
@@ -153,6 +156,9 @@ func (e *NewAPIError) MaskSensitiveError() string {
 		return string(e.errorCode)
 	}
 	errStr := e.Err.Error()
+	if e.overriddenFrom != "" {
+		errStr = e.overriddenFrom
+	}
 	if e.errorCode == ErrorCodeCountTokenFailed {
 		return errStr
 	}
@@ -175,6 +181,37 @@ func (e *NewAPIError) MaskSensitiveErrorWithStatusCode() string {
 
 func (e *NewAPIError) SetMessage(message string) {
 	e.Err = errors.New(message)
+}
+
+// OverrideMessage replaces every message the client can see with an
+// administrator-authored string. Upstream metadata is dropped because it would
+// contradict the replacement, and the original message is kept for logs.
+func (e *NewAPIError) OverrideMessage(message string) {
+	if e == nil {
+		return
+	}
+	if e.overriddenFrom == "" {
+		e.overriddenFrom = e.Error()
+	}
+	e.Err = errors.New(message)
+	e.Metadata = nil
+	switch relayError := e.RelayError.(type) {
+	case OpenAIError:
+		relayError.Message = message
+		relayError.Metadata = nil
+		e.RelayError = relayError
+	case ClaudeError:
+		relayError.Message = message
+		e.RelayError = relayError
+	}
+}
+
+// IsMessageOverridden reports whether OverrideMessage replaced the message.
+func (e *NewAPIError) IsMessageOverridden() bool {
+	if e == nil {
+		return false
+	}
+	return e.overriddenFrom != ""
 }
 
 func (e *NewAPIError) ToOpenAIError() OpenAIError {
@@ -201,7 +238,7 @@ func (e *NewAPIError) ToOpenAIError() OpenAIError {
 			Code:    e.errorCode,
 		}
 	}
-	if e.errorCode != ErrorCodeCountTokenFailed {
+	if e.errorCode != ErrorCodeCountTokenFailed && e.overriddenFrom == "" {
 		result.Message = kitutil.MaskSensitiveInfo(result.Message)
 	}
 	if result.Message == "" {
@@ -230,7 +267,7 @@ func (e *NewAPIError) ToClaudeError() ClaudeError {
 			Type:    string(e.errorType),
 		}
 	}
-	if e.errorCode != ErrorCodeCountTokenFailed {
+	if e.errorCode != ErrorCodeCountTokenFailed && e.overriddenFrom == "" {
 		result.Message = kitutil.MaskSensitiveInfo(result.Message)
 	}
 	if result.Message == "" {

@@ -27,6 +27,7 @@ import {
   LayoutDashboard,
   ListTodo,
   MessageSquare,
+  MessageSquareWarning,
   Radio,
   ServerCog,
   Settings,
@@ -145,6 +146,11 @@ export function useSidebarData(): SidebarData {
                 },
               ]
             : []),
+          {
+            title: t('Error Message Override'),
+            url: '/error-message-overrides',
+            icon: MessageSquareWarning,
+          },
           {
             title: t('Models'),
             url: '/models/metadata',

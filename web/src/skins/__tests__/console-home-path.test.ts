@@ -125,6 +125,7 @@ describe('isNextConsolePath', () => {
     '/chat2link',
     '/channels',
     '/channel-monitoring-settings',
+    '/error-message-overrides',
     '/models/deployments',
     '/users',
     '/redemption-codes',

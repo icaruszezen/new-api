@@ -65,7 +65,7 @@ describe('MonitorCard', () => {
 
     expect(screen.getByText('ChatGPT-Pro')).toBeInTheDocument()
     expect(screen.getByText('gpt-5-sol')).toBeInTheDocument()
-    expect(screen.getByText('Chat latency')).toBeInTheDocument()
+    expect(screen.getByText('First token')).toBeInTheDocument()
     expect(screen.getByText('3201')).toBeInTheDocument()
     expect(screen.getByText('Endpoint ping')).toBeInTheDocument()
     expect(screen.getByText('23')).toBeInTheDocument()
@@ -77,18 +77,42 @@ describe('MonitorCard', () => {
     expect(screen.getByText('91.15%')).toBeInTheDocument()
   })
 
-  test('labels availability separately and puts the record count on the beat bar', () => {
+  test('paints the success rate with the continuous HSL arc', () => {
+    const { rerender } = renderCard({ uptime: 0 })
+    expect(screen.getByText('0.00%')).toHaveStyle({ color: 'hsl(0 72% 42%)' })
+
+    rerender(
+      <MonitorCard monitor={monitor({ uptime: 50 })} slots={60} />
+    )
+    expect(screen.getByText('50.00%')).toHaveStyle({ color: 'hsl(60 72% 42%)' })
+
+    rerender(
+      <MonitorCard monitor={monitor({ uptime: 100 })} slots={60} />
+    )
+    expect(screen.getByText('100.00%')).toHaveStyle({
+      color: 'hsl(120 72% 42%)',
+    })
+
+    rerender(
+      <MonitorCard monitor={monitor({ uptime: null })} slots={60} />
+    )
+    const fallback = screen.getByText('Success rate').parentElement
+      ?.lastElementChild
+    expect(fallback).toHaveStyle({ color: 'rgb(156, 163, 175)' })
+  })
+
+  test('labels success rate separately and puts the trend caption on the beat bar', () => {
     renderCard({}, { slots: 30 })
 
-    expect(screen.getByText('Availability')).toBeInTheDocument()
-    expect(screen.getByText('Recent 30 records')).toBeInTheDocument()
+    expect(screen.getByText('Success rate')).toBeInTheDocument()
+    expect(screen.getByText('Availability trend')).toBeInTheDocument()
     expect(screen.queryByText(/last 30 records|7 days/)).not.toBeInTheDocument()
   })
 
-  test('shows the refresh countdown next to the record count when provided', () => {
+  test('shows the refresh countdown next to the trend caption when provided', () => {
     renderCard({}, { countdown: 3 })
 
-    const caption = screen.getByText('Recent 60 records')
+    const caption = screen.getByText('Availability trend')
     const countdown = screen.getByText('Refreshing in 3s')
     expect(countdown.parentElement).toBe(caption.parentElement)
   })
@@ -101,11 +125,11 @@ describe('MonitorCard', () => {
     expect(avatarIcon.parentElement).toHaveClass('rounded-full')
     expect(screen.getByText('ChatGPT-Pro')).toHaveClass('truncate')
 
-    const metricRow = screen.getByText('Chat latency').closest('.grid')
+    const metricRow = screen.getByText('First token').closest('.grid')
     expect(metricRow).toHaveClass('grid-cols-2')
     expect(metricRow?.childElementCount).toBe(2)
 
-    const caption = screen.getByText('Recent 60 records')
+    const caption = screen.getByText('Availability trend')
     const bar = screen.getByRole('img')
     const follows =
       caption.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING
@@ -115,7 +139,7 @@ describe('MonitorCard', () => {
   test('falls back to a dash for metrics that have no measurement yet', () => {
     renderCard({ avg_ttft_ms: 0, ping_ms: 0, uptime: null })
 
-    // Three placeholders: chat latency, endpoint ping and uptime.
+    // Three placeholders: first token, endpoint ping and success rate.
     expect(screen.getAllByText('--')).toHaveLength(3)
   })
 

@@ -74,7 +74,7 @@ describe('ChannelMonitoring page', () => {
     expect(title).toHaveClass('sr-only')
     expect(screen.getByText('ChatGPT-Pro')).toBeInTheDocument()
 
-    const caption = screen.getByText('Recent 60 records')
+    const caption = screen.getByText('Availability trend')
     const countdown = screen.getByText('Refreshing in 42s')
     expect(countdown.parentElement).toBe(caption.parentElement)
     expect(

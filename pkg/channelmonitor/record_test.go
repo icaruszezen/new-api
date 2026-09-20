@@ -1,11 +1,17 @@
 package channelmonitor
 
 import (
+	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting/config"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPreferSampleKeepsFastestSuccessInWindow(t *testing.T) {
@@ -69,8 +75,13 @@ func TestHotBeatOfferKeepsWinningSample(t *testing.T) {
 
 	sample, ok := beat.take()
 	assert.True(t, ok)
-	assert.Equal(t, model.ChannelMonitorStatusUp, sample.Status)
-	assert.Equal(t, 900, sample.TtftMs)
+	assert.Equal(t, model.ChannelMonitorStatusUp, sample.sample.Status)
+	assert.Equal(t, 900, sample.sample.TtftMs)
+	assert.Equal(t, int64(1), sample.downCount)
+	assert.Equal(t, int64(2), sample.upCount)
+	assert.Equal(t, int64(3), sample.total())
+	assert.Equal(t, int64(2400), sample.ttftSumMs)
+	assert.Equal(t, int64(2), sample.ttftCount)
 
 	_, ok = beat.take()
 	assert.False(t, ok, "a drained bucket must not emit the same beat twice")
@@ -101,7 +112,90 @@ func TestHotBeatRestorePutsSampleBackForRetry(t *testing.T) {
 
 	restored, ok := beat.take()
 	assert.True(t, ok, "a failed flush must leave the sample available for the next pass")
-	assert.Equal(t, 120, restored.TtftMs)
+	assert.Equal(t, 120, restored.sample.TtftMs)
+	assert.Equal(t, int64(1), restored.upCount)
+}
+
+func TestHotBeatOfferCountsFailuresEvenWhenASuccessWins(t *testing.T) {
+	beat := &hotBeat{}
+	beat.offer(Sample{MonitorId: "m1", Status: model.ChannelMonitorStatusDown})
+	beat.offer(Sample{MonitorId: "m1", Status: model.ChannelMonitorStatusDown})
+	beat.offer(Sample{MonitorId: "m1", Status: model.ChannelMonitorStatusUp, TtftMs: 400, HasTtft: true})
+
+	snap, ok := beat.take()
+	assert.True(t, ok)
+	assert.Equal(t, model.ChannelMonitorStatusUp, snap.sample.Status)
+	assert.Equal(t, int64(1), snap.upCount)
+	assert.Equal(t, int64(2), snap.downCount)
+	assert.Equal(t, int64(3), snap.total())
+}
+
+func TestHotBeatRestoreMergesCountsWhenNewSamplesArrived(t *testing.T) {
+	beat := &hotBeat{}
+	beat.offer(Sample{MonitorId: "m1", Status: model.ChannelMonitorStatusDown})
+
+	snap, ok := beat.take()
+	assert.True(t, ok)
+
+	beat.offer(Sample{MonitorId: "m1", Status: model.ChannelMonitorStatusUp, TtftMs: 80, HasTtft: true})
+	beat.restore(snap)
+
+	merged, ok := beat.take()
+	assert.True(t, ok)
+	assert.Equal(t, int64(1), merged.upCount)
+	assert.Equal(t, int64(1), merged.downCount)
+	assert.Equal(t, int64(2), merged.total())
+	assert.Equal(t, int64(80), merged.ttftSumMs)
+}
+
+func TestRecordRelaySampleSkipsIgnoredUserErrors(t *testing.T) {
+	t.Cleanup(clearHotBeats)
+	t.Cleanup(resetMonitorRegistry)
+	clearHotBeats()
+	resetMonitorRegistry()
+	enableMonitoredRelay(t)
+
+	info := &relaycommon.RelayInfo{
+		IsStream:        true,
+		UsingGroup:      "default",
+		OriginModelName: "gpt-5",
+		LastError:       types.NewError(errors.New("insufficient quota"), types.ErrorCodeInsufficientUserQuota),
+	}
+	RecordRelaySample(info, false)
+	assert.Equal(t, 0, countFilledHotBeats("m1"))
+}
+
+func TestRecordRelaySampleRecordsUpstreamFailures(t *testing.T) {
+	t.Cleanup(clearHotBeats)
+	t.Cleanup(resetMonitorRegistry)
+	clearHotBeats()
+	resetMonitorRegistry()
+	enableMonitoredRelay(t)
+
+	info := &relaycommon.RelayInfo{
+		IsStream:        true,
+		UsingGroup:      "default",
+		OriginModelName: "gpt-5",
+		LastError: types.NewErrorWithStatusCode(
+			errors.New("bad gateway"),
+			types.ErrorCodeBadResponseStatusCode,
+			http.StatusBadGateway,
+		),
+	}
+	RecordRelaySample(info, false)
+	assert.Equal(t, 1, countFilledHotBeats("m1"))
+}
+
+func enableMonitoredRelay(t *testing.T) {
+	t.Helper()
+	saved := config.GlobalConfig.ExportAllConfigs()
+	t.Cleanup(func() {
+		_ = config.GlobalConfig.LoadFromDB(saved)
+	})
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"channel_monitoring_setting.enabled":  "true",
+		"channel_monitoring_setting.monitors": `[{"id":"m1","name":"Pro","group":"default","model":"gpt-5","enabled":true}]`,
+	}))
 }
 
 func TestBucketStartAlignsToSampleWindow(t *testing.T) {

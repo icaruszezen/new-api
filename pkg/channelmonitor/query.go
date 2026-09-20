@@ -151,11 +151,7 @@ func loadBeats(monitorId string, limit int, pending []BeatView) ([]BeatView, err
 
 	beats := make([]BeatView, 0, len(rows)+len(pending))
 	for _, row := range rows {
-		beats = append(beats, BeatView{
-			Ts:     row.BucketTs,
-			Status: row.Status,
-			TtftMs: row.TtftMs,
-		})
+		beats = append(beats, beatViewFromRow(row))
 	}
 	beats = append(beats, pending...)
 
@@ -189,21 +185,15 @@ func collectHotBeats(sampleWindowSeconds int) map[string][]BeatView {
 	hotBeats.Range(func(key, value any) bool {
 		k := key.(beatKey)
 		beat := value.(*hotBeat)
-		beat.mu.Lock()
-		filled, sample := beat.filled, beat.sample
-		beat.mu.Unlock()
-		if !filled {
+		view, ok := beat.view(k.bucketTs)
+		if !ok {
 			return true
 		}
 		// 当前进行中的桶也纳入展示，它的当选样本随后续请求可能变化，属于预期行为。
 		if k.bucketTs > currentBucket {
 			return true
 		}
-		pending[k.monitorId] = append(pending[k.monitorId], BeatView{
-			Ts:     k.bucketTs,
-			Status: sample.Status,
-			TtftMs: sample.TtftMs,
-		})
+		pending[k.monitorId] = append(pending[k.monitorId], view)
 		return true
 	})
 	return pending
@@ -232,23 +222,29 @@ func latestStatus(beats []BeatView) string {
 	}
 }
 
-// averageTtft 是「对话延迟」指标：最近这批 beat 的首字平均值。
+// averageTtft 是「首字」指标：最近趋势窗内全部成功请求的 TTFT 均值。
+// 优先用窗口累计；旧 beat 没有累计时回退到代表样本的 ttft_ms。
 func averageTtft(beats []BeatView) int {
-	sum := 0
-	count := 0
+	sum := int64(0)
+	count := int64(0)
 	for _, beat := range beats {
+		if beat.TtftCount > 0 {
+			sum += beat.TtftSumMs
+			count += beat.TtftCount
+			continue
+		}
 		if beat.TtftMs > 0 {
-			sum += beat.TtftMs
+			sum += int64(beat.TtftMs)
 			count++
 		}
 	}
 	if count == 0 {
 		return 0
 	}
-	return sum / count
+	return int(sum / count)
 }
 
-// resolveMonitorUptime 按监控项口径选择成功率样本：recent 用状态条同一批 beat，
+// resolveMonitorUptime 按监控项口径选择成功率样本：recent 用最近趋势窗内计入的请求，
 // all 用小时汇总加上尚未刷盘的热桶。
 func resolveMonitorUptime(monitor Monitor, recentBeats []BeatView, history model.ChannelMonitorUptime, hot []BeatView) *float64 {
 	if uptimeScopeOf(monitor) == UptimeScopeAll {
@@ -261,32 +257,52 @@ func uptimeFromHistory(history model.ChannelMonitorUptime, hot []BeatView) *floa
 	available := history.UpCount + history.SlowCount
 	total := history.Total
 	for _, beat := range hot {
-		switch beat.Status {
-		case model.ChannelMonitorStatusUp, model.ChannelMonitorStatusSlow:
-			available++
-			total++
-		case model.ChannelMonitorStatusDown:
-			total++
-		}
+		beatAvailable, beatTotal := beatRequestCounts(beat)
+		available += beatAvailable
+		total += beatTotal
 	}
 	return uptimePercent(available, total)
 }
 
-// uptimeFromBeats 用状态条上的同一批样本算可用性，保证百分比与条形图口径一致。
-// 慢响应仍算作可用，只有失败计入不可用。
+// uptimeFromBeats 用趋势窗内计入的全部请求算成功率。慢响应仍算成功。
+// 无请求计数的旧 beat 按该格 status 视为 1 次请求。
 func uptimeFromBeats(beats []BeatView) *float64 {
 	total := int64(0)
 	available := int64(0)
 	for _, beat := range beats {
-		switch beat.Status {
-		case model.ChannelMonitorStatusUp, model.ChannelMonitorStatusSlow:
-			available++
-			total++
-		case model.ChannelMonitorStatusDown:
-			total++
-		}
+		beatAvailable, beatTotal := beatRequestCounts(beat)
+		available += beatAvailable
+		total += beatTotal
 	}
 	return uptimePercent(available, total)
+}
+
+func beatViewFromRow(row model.ChannelMonitorBeat) BeatView {
+	return BeatView{
+		Ts:           row.BucketTs,
+		Status:       row.Status,
+		TtftMs:       row.TtftMs,
+		RequestTotal: row.RequestTotal,
+		RequestUp:    row.RequestUp,
+		RequestSlow:  row.RequestSlow,
+		RequestDown:  row.RequestDown,
+		TtftSumMs:    row.TtftSumMs,
+		TtftCount:    row.TtftCount,
+	}
+}
+
+func beatRequestCounts(beat BeatView) (available int64, total int64) {
+	if beat.RequestTotal > 0 {
+		return beat.RequestUp + beat.RequestSlow, beat.RequestTotal
+	}
+	switch beat.Status {
+	case model.ChannelMonitorStatusUp, model.ChannelMonitorStatusSlow:
+		return 1, 1
+	case model.ChannelMonitorStatusDown:
+		return 0, 1
+	default:
+		return 0, 0
+	}
 }
 
 func uptimePercent(available int64, total int64) *float64 {

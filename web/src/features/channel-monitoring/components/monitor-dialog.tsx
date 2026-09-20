@@ -132,7 +132,7 @@ export function MonitorDialog(props: MonitorDialogProps) {
 
   const uptimeScopeOptions = useMemo(
     () => [
-      { value: UPTIME_SCOPE_RECENT, label: t('Recent records') },
+      { value: UPTIME_SCOPE_RECENT, label: t('Recent windows') },
       { value: UPTIME_SCOPE_ALL, label: t('All historical samples') },
     ],
     [t]
@@ -300,8 +300,13 @@ export function MonitorDialog(props: MonitorDialogProps) {
                   <Combobox
                     options={uptimeScopeOptions}
                     value={field.value}
-                    onValueChange={(value) => {
-                      if (value === null) return
+                    onValueChange={(value: string | null) => {
+                      if (
+                        value !== UPTIME_SCOPE_ALL &&
+                        value !== UPTIME_SCOPE_RECENT
+                      ) {
+                        return
+                      }
                       field.onChange(value)
                     }}
                     placeholder={t('Select a success rate window')}
@@ -310,7 +315,7 @@ export function MonitorDialog(props: MonitorDialogProps) {
                 </FormControl>
                 <FormDescription>
                   {t(
-                    'Recent records match the status bar. All historical samples use the retained hourly totals.'
+                    'Recent windows count every scored request in those trend slots. All historical samples use the retained hourly totals.'
                   )}
                 </FormDescription>
                 <FormMessage />

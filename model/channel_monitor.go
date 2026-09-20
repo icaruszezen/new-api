@@ -22,14 +22,21 @@ const (
 
 // ChannelMonitorBeat 是状态条上的一格。BucketTs 已按采样窗口对齐，
 // 同一 (monitor_id, bucket_ts) 只保留一条记录。
+// Status / TtftMs 是窗口代表样本；Request* 与 TtftSumMs 累计该窗全部计入的请求。
 type ChannelMonitorBeat struct {
-	Id        int64  `json:"id" gorm:"primaryKey"`
-	MonitorId string `json:"monitor_id" gorm:"size:64;uniqueIndex:idx_cm_beat_monitor_bucket,priority:1"`
-	BucketTs  int64  `json:"bucket_ts" gorm:"uniqueIndex:idx_cm_beat_monitor_bucket,priority:2;index:idx_cm_beat_bucket_ts"`
-	Status    int    `json:"status" gorm:"default:0"`
-	TtftMs    int    `json:"ttft_ms" gorm:"default:0"`
-	ChannelId int    `json:"channel_id" gorm:"default:0"`
-	Source    int    `json:"source" gorm:"default:0"`
+	Id           int64  `json:"id" gorm:"primaryKey"`
+	MonitorId    string `json:"monitor_id" gorm:"size:64;uniqueIndex:idx_cm_beat_monitor_bucket,priority:1"`
+	BucketTs     int64  `json:"bucket_ts" gorm:"uniqueIndex:idx_cm_beat_monitor_bucket,priority:2;index:idx_cm_beat_bucket_ts"`
+	Status       int    `json:"status" gorm:"default:0"`
+	TtftMs       int    `json:"ttft_ms" gorm:"default:0"`
+	ChannelId    int    `json:"channel_id" gorm:"default:0"`
+	Source       int    `json:"source" gorm:"default:0"`
+	RequestTotal int64  `json:"request_total" gorm:"default:0"`
+	RequestUp    int64  `json:"request_up" gorm:"default:0"`
+	RequestSlow  int64  `json:"request_slow" gorm:"default:0"`
+	RequestDown  int64  `json:"request_down" gorm:"default:0"`
+	TtftSumMs    int64  `json:"ttft_sum_ms" gorm:"default:0"`
+	TtftCount    int64  `json:"ttft_count" gorm:"default:0"`
 }
 
 func (ChannelMonitorBeat) TableName() string {

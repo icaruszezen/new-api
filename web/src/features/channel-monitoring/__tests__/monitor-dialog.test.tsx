@@ -173,10 +173,15 @@ describe('MonitorDialog', () => {
       },
     })
 
-    await user.click(screen.getByDisplayValue('Recent records'))
+    await user.click(screen.getByDisplayValue('Recent windows'))
     await user.click(
       await screen.findByRole('option', { name: 'All historical samples' })
     )
+    expect(
+      screen.getByText(
+        'Recent windows count every scored request in those trend slots. All historical samples use the retained hourly totals.'
+      )
+    ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Update' }))
 
     await waitFor(() => {

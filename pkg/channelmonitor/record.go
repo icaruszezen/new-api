@@ -17,14 +17,47 @@ type beatKey struct {
 	bucketTs  int64
 }
 
-// hotBeat 是某个采样窗口内的当选样本。
+// hotBeat 同时保存窗口代表样本和该窗计入的全部请求计数。
 //
-// 降采样规则：一个窗口只显示一格，成功样本优先于失败样本，多个成功样本取首字最快的一次。
-// 这意味着窗口内只要有一次成功请求，该格就是绿色；只有整个窗口都失败才会变红。
+// 代表样本规则：成功优先于失败，多个成功取首字最快的一次，只决定趋势条高度。
+// 计数规则：每次计入的请求都累加，失败不会被同窗成功盖掉。
 type hotBeat struct {
-	mu     sync.Mutex
-	filled bool
-	sample Sample
+	mu        sync.Mutex
+	filled    bool
+	sample    Sample
+	upCount   int64
+	slowCount int64
+	downCount int64
+	ttftSumMs int64
+	ttftCount int64
+}
+
+// beatSnapshot 是 flush 取出的完整窗口状态，restore 时必须整份回写以免丢计数。
+type beatSnapshot struct {
+	sample    Sample
+	upCount   int64
+	slowCount int64
+	downCount int64
+	ttftSumMs int64
+	ttftCount int64
+}
+
+func (s beatSnapshot) total() int64 {
+	return s.upCount + s.slowCount + s.downCount
+}
+
+func (s beatSnapshot) view(bucketTs int64) BeatView {
+	return BeatView{
+		Ts:           bucketTs,
+		Status:       s.sample.Status,
+		TtftMs:       s.sample.TtftMs,
+		RequestTotal: s.total(),
+		RequestUp:    s.upCount,
+		RequestSlow:  s.slowCount,
+		RequestDown:  s.downCount,
+		TtftSumMs:    s.ttftSumMs,
+		TtftCount:    s.ttftCount,
+	}
 }
 
 // RecordRelaySample 在请求结束时采集监控样本。
@@ -34,6 +67,9 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool) {
 		return
 	}
 	if !channel_monitoring_setting.IsEnabled() {
+		return
+	}
+	if !success && shouldIgnoreMonitorError(info.LastError) {
 		return
 	}
 	monitor, ok := Lookup(info.UsingGroup, info.OriginModelName)
@@ -79,7 +115,7 @@ func RecordProbeResult(monitorId string, success bool, ttftMs int, channelId int
 	})
 }
 
-// Record 把样本写入当前采样桶，桶内按降采样规则择优保留。
+// Record 把样本写入当前采样桶：累加计数，并按规则更新代表样本。
 func Record(sample Sample) {
 	if sample.MonitorId == "" {
 		return
@@ -128,27 +164,83 @@ func HasActivitySince(monitorId string, sinceTs int64) bool {
 func (b *hotBeat) offer(sample Sample) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	switch sample.Status {
+	case model.ChannelMonitorStatusUp:
+		b.upCount++
+	case model.ChannelMonitorStatusSlow:
+		b.slowCount++
+	case model.ChannelMonitorStatusDown:
+		b.downCount++
+	}
+	if sample.HasTtft && sample.TtftMs > 0 {
+		b.ttftSumMs += int64(sample.TtftMs)
+		b.ttftCount++
+	}
 	if !b.filled || preferSample(sample, b.sample) {
 		b.sample = sample
 		b.filled = true
 	}
 }
 
-// take 取出并清空当选样本，供 flush 使用。
-func (b *hotBeat) take() (Sample, bool) {
+func (b *hotBeat) take() (beatSnapshot, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if !b.filled {
-		return Sample{}, false
+		return beatSnapshot{}, false
 	}
-	sample := b.sample
+	snap := beatSnapshot{
+		sample:    b.sample,
+		upCount:   b.upCount,
+		slowCount: b.slowCount,
+		downCount: b.downCount,
+		ttftSumMs: b.ttftSumMs,
+		ttftCount: b.ttftCount,
+	}
 	b.filled = false
-	return sample, true
+	b.sample = Sample{}
+	b.upCount = 0
+	b.slowCount = 0
+	b.downCount = 0
+	b.ttftSumMs = 0
+	b.ttftCount = 0
+	return snap, true
 }
 
-// restore 在落库失败时把样本放回桶里，等下一轮重试。
-func (b *hotBeat) restore(sample Sample) {
-	b.offer(sample)
+// restore 在落库失败时把窗口状态放回桶里。若 take 之后已有新样本入桶，把计数合并进去。
+func (b *hotBeat) restore(snap beatSnapshot) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.filled {
+		b.sample = snap.sample
+		b.filled = true
+		b.upCount = snap.upCount
+		b.slowCount = snap.slowCount
+		b.downCount = snap.downCount
+		b.ttftSumMs = snap.ttftSumMs
+		b.ttftCount = snap.ttftCount
+		return
+	}
+	b.upCount += snap.upCount
+	b.slowCount += snap.slowCount
+	b.downCount += snap.downCount
+	b.ttftSumMs += snap.ttftSumMs
+	b.ttftCount += snap.ttftCount
+}
+
+func (b *hotBeat) view(bucketTs int64) (BeatView, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.filled {
+		return BeatView{}, false
+	}
+	return beatSnapshot{
+		sample:    b.sample,
+		upCount:   b.upCount,
+		slowCount: b.slowCount,
+		downCount: b.downCount,
+		ttftSumMs: b.ttftSumMs,
+		ttftCount: b.ttftCount,
+	}.view(bucketTs), true
 }
 
 // preferSample 判定 candidate 是否应该取代 current：成功优先，其次首字更快者优先。
@@ -167,7 +259,7 @@ func preferSample(candidate Sample, current Sample) bool {
 	return candidate.TtftMs < current.TtftMs
 }
 
-// resolveStatus 把请求结果映射到状态条配色：失败为红，首字超过慢阈值为黄，其余为绿。
+// resolveStatus 把请求结果映射到状态条高度：失败为矮红，首字超过慢阈值为黄，其余为绿。
 func resolveStatus(success bool, hasTtft bool, ttftMs int) int {
 	if !success {
 		return model.ChannelMonitorStatusDown

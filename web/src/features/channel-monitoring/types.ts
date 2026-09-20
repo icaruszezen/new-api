@@ -28,6 +28,10 @@ export type Beat = {
   ts: number
   status: number
   ttft_ms: number
+  request_total?: number
+  request_up?: number
+  request_slow?: number
+  request_down?: number
 }
 
 /**
@@ -50,7 +54,7 @@ export type MonitorView = {
 export type ChannelMonitoringStatus = {
   enabled: boolean
   sample_window_seconds: number
-  /** Sample count behind the status bar. */
+  /** Slot count behind the availability trend bar. */
   beat_limit: number
   monitors: MonitorView[]
 }
@@ -64,7 +68,7 @@ export type ChannelMonitor = {
   icon?: string
   enabled: boolean
   sort: number
-  /** recent = status-bar window; all = retained hourly totals. */
+  /** recent = recent trend windows; all = retained hourly totals. */
   uptime_scope?: string
 }
 

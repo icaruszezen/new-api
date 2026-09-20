@@ -12,7 +12,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
+along with this program. If you did not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
+import { beatBarColor, beatHeightPct } from '../lib/monitor-colors'
 import {
   BEAT_STATUS_DOWN,
   BEAT_STATUS_SLOW,
@@ -39,23 +40,11 @@ type BeatBarProps = {
   className?: string
 }
 
-function beatToneClass(status: number): string {
-  switch (status) {
-    case BEAT_STATUS_UP:
-      return 'bg-emerald-500 dark:bg-emerald-400'
-    case BEAT_STATUS_SLOW:
-      return 'bg-amber-500 dark:bg-amber-400'
-    case BEAT_STATUS_DOWN:
-      return 'bg-rose-500 dark:bg-rose-400'
-    default:
-      return 'bg-muted'
-  }
-}
-
 /**
- * Status strip of recent samples. The newest sample sits on the right so the
- * bar reads left-to-right as past-to-now; missing history is padded with muted
- * placeholders to keep every card the same width.
+ * Availability trend strip. The newest sample sits on the right so the bar
+ * reads left-to-right as past-to-now; missing history is padded to keep every
+ * card the same width. Colour follows the window success rate; height follows
+ * the representative status.
  */
 export function BeatBar(props: BeatBarProps) {
   const { t } = useTranslation()
@@ -79,34 +68,35 @@ export function BeatBar(props: BeatBarProps) {
   return (
     <div className={cn('space-y-1.5', props.className)}>
       <div
-        className='grid h-8 gap-[2px]'
+        className='flex h-8 items-end gap-[2px]'
         role='img'
-        aria-label={t('Recent {{count}} records', { count: props.slots })}
-        style={{
-          gridTemplateColumns: `repeat(${slots.length}, minmax(0, 1fr))`,
-        }}
+        aria-label={t('Availability trend')}
       >
         {slots.map((slot) => {
+          const heightPct = beatHeightPct(slot.beat?.status)
+          const color = beatBarColor(slot.beat)
           if (!slot.beat) {
             return (
               <div
                 key={slot.id}
-                className='bg-muted/50 min-w-0 rounded-[2px]'
+                className='min-w-0 flex-1 rounded-[2px]'
+                style={{ height: `${heightPct}%`, backgroundColor: color }}
                 aria-hidden='true'
               />
             )
           }
           const beat = slot.beat
           return (
-            <div key={slot.id} className='h-full min-w-0'>
+            <div key={slot.id} className='flex h-full min-w-0 flex-1 items-end'>
               <Tooltip>
                 <TooltipTrigger
                   render={
                     <div
-                      className={cn(
-                        'size-full rounded-[2px] transition-opacity hover:opacity-70',
-                        beatToneClass(beat.status)
-                      )}
+                      className='w-full rounded-[2px] transition-opacity hover:opacity-70'
+                      style={{
+                        height: `${heightPct}%`,
+                        backgroundColor: color,
+                      }}
                     />
                   }
                 />

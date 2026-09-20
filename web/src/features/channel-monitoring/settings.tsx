@@ -84,7 +84,7 @@ function MonitorRow(props: {
           {props.monitor.group} · {props.monitor.model} ·{' '}
           {normalizeUptimeScope(props.monitor.uptime_scope) === UPTIME_SCOPE_ALL
             ? t('All historical samples')
-            : t('Recent records')}
+            : t('Recent windows')}
         </div>
       </div>
 

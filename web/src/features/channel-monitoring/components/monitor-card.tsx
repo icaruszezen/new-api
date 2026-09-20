@@ -24,39 +24,30 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { getLobeIcon } from '@/lib/lobe-icon'
-import { cn } from '@/lib/utils'
 
+import { hslForPct } from '../lib/monitor-colors'
 import type { MonitorStatus, MonitorView } from '../types'
 import { BeatBar } from './beat-bar'
 
 type MonitorCardProps = {
   monitor: MonitorView
-  /** Sample count behind both the status bar and the availability percentage. */
+  /** Slot count behind the availability trend bar. */
   slots: number
   /** Seconds until the status page refetches; omitted when the parent has no clock. */
   countdown?: number
 }
 
-type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'warning'
-
-function statusBadgeVariant(status: MonitorStatus): BadgeVariant {
+function statusBadgeClass(status: MonitorStatus): string {
   switch (status) {
     case 'up':
-      return 'default'
+      return 'border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
     case 'degraded':
-      return 'warning'
+      return 'border-transparent bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
     case 'down':
-      return 'destructive'
+      return 'border-transparent bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300'
     default:
-      return 'secondary'
+      return 'border-transparent bg-gray-100 text-gray-800 dark:bg-gray-500/15 dark:text-gray-300'
   }
-}
-
-/** Uptime colouring mirrors the status bar so a red bar never sits under a green number. */
-function uptimeToneClass(uptime: number): string {
-  if (uptime >= 95) return 'text-emerald-600 dark:text-emerald-400'
-  if (uptime >= 90) return 'text-amber-600 dark:text-amber-400'
-  return 'text-rose-600 dark:text-rose-400'
 }
 
 function MetricTile(props: {
@@ -114,7 +105,10 @@ export function MonitorCard(props: MonitorCardProps) {
               >
                 {props.monitor.name}
               </span>
-              <Badge variant={statusBadgeVariant(props.monitor.status)}>
+              <Badge
+                variant='outline'
+                className={statusBadgeClass(props.monitor.status)}
+              >
                 {statusLabel[props.monitor.status]}
               </Badge>
             </div>
@@ -145,7 +139,7 @@ export function MonitorCard(props: MonitorCardProps) {
         <div className='grid grid-cols-2 gap-2'>
           <MetricTile
             icon={<Timer className='size-3.5' />}
-            label={t('Chat latency')}
+            label={t('First token')}
             value={props.monitor.avg_ttft_ms}
             unit='ms'
           />
@@ -159,15 +153,13 @@ export function MonitorCard(props: MonitorCardProps) {
 
         <div className='flex items-baseline justify-between gap-2'>
           <span className='text-muted-foreground text-xs'>
-            {t('Availability')}
+            {t('Success rate')}
           </span>
           <span
-            className={cn(
-              'text-2xl font-semibold tabular-nums',
-              props.monitor.uptime == null
-                ? undefined
-                : uptimeToneClass(props.monitor.uptime)
-            )}
+            className='text-2xl font-semibold tabular-nums'
+            style={{
+              color: hslForPct(props.monitor.uptime) ?? 'rgb(156 163 175)',
+            }}
           >
             {props.monitor.uptime == null
               ? '--'
@@ -177,7 +169,7 @@ export function MonitorCard(props: MonitorCardProps) {
 
         <div className='space-y-1.5'>
           <div className='text-muted-foreground flex items-center justify-between gap-2 text-xs'>
-            <span>{t('Recent {{count}} records', { count: props.slots })}</span>
+            <span>{t('Availability trend')}</span>
             {props.countdown !== undefined && (
               <span className='tabular-nums'>
                 {t('Refreshing in {{seconds}}s', { seconds: props.countdown })}

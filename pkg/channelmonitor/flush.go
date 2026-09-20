@@ -58,7 +58,7 @@ func flushCompletedBuckets(sampleWindowSeconds int) {
 			return true
 		}
 
-		sample, ok := beat.take()
+		snap, ok := beat.take()
 		if !ok {
 			if k.bucketTs < staleBefore {
 				hotBeats.Delete(key)
@@ -66,8 +66,8 @@ func flushCompletedBuckets(sampleWindowSeconds int) {
 			return true
 		}
 
-		if err := persistBeat(k, sample); err != nil {
-			beat.restore(sample)
+		if err := persistBeat(k, snap); err != nil {
+			beat.restore(snap)
 			common.SysError(fmt.Sprintf("failed to flush channel monitor beat monitor=%s bucket=%d: %s", k.monitorId, k.bucketTs, err.Error()))
 			return true
 		}
@@ -77,31 +77,34 @@ func flushCompletedBuckets(sampleWindowSeconds int) {
 	})
 }
 
-func persistBeat(key beatKey, sample Sample) error {
+func persistBeat(key beatKey, snap beatSnapshot) error {
+	total := snap.total()
+	if total <= 0 {
+		return nil
+	}
 	stat := &model.ChannelMonitorStat{
 		MonitorId: key.monitorId,
 		HourTs:    key.bucketTs - (key.bucketTs % hourSeconds),
-		Total:     1,
-	}
-	switch sample.Status {
-	case model.ChannelMonitorStatusUp:
-		stat.UpCount = 1
-	case model.ChannelMonitorStatusSlow:
-		stat.SlowCount = 1
-	default:
-		stat.DownCount = 1
-	}
-	if sample.HasTtft {
-		stat.TtftSumMs = int64(sample.TtftMs)
-		stat.TtftCount = 1
+		Total:     total,
+		UpCount:   snap.upCount,
+		SlowCount: snap.slowCount,
+		DownCount: snap.downCount,
+		TtftSumMs: snap.ttftSumMs,
+		TtftCount: snap.ttftCount,
 	}
 	return model.PersistChannelMonitorSample(model.ChannelMonitorBeat{
-		MonitorId: key.monitorId,
-		BucketTs:  key.bucketTs,
-		Status:    sample.Status,
-		TtftMs:    sample.TtftMs,
-		ChannelId: sample.ChannelId,
-		Source:    sample.Source,
+		MonitorId:    key.monitorId,
+		BucketTs:     key.bucketTs,
+		Status:       snap.sample.Status,
+		TtftMs:       snap.sample.TtftMs,
+		ChannelId:    snap.sample.ChannelId,
+		Source:       snap.sample.Source,
+		RequestTotal: total,
+		RequestUp:    snap.upCount,
+		RequestSlow:  snap.slowCount,
+		RequestDown:  snap.downCount,
+		TtftSumMs:    snap.ttftSumMs,
+		TtftCount:    snap.ttftCount,
 	}, stat)
 }
 

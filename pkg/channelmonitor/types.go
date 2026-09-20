@@ -25,10 +25,17 @@ type Sample struct {
 }
 
 // BeatView 是状态条上的一格，ts 为采样窗口起始秒。
+// Status / TtftMs 是窗口代表样本；Request* 供成功率和色阶使用。
 type BeatView struct {
-	Ts     int64 `json:"ts"`
-	Status int   `json:"status"`
-	TtftMs int   `json:"ttft_ms"`
+	Ts           int64 `json:"ts"`
+	Status       int   `json:"status"`
+	TtftMs       int   `json:"ttft_ms"`
+	RequestTotal int64 `json:"request_total,omitempty"`
+	RequestUp    int64 `json:"request_up,omitempty"`
+	RequestSlow  int64 `json:"request_slow,omitempty"`
+	RequestDown  int64 `json:"request_down,omitempty"`
+	TtftSumMs    int64 `json:"ttft_sum_ms,omitempty"`
+	TtftCount    int64 `json:"ttft_count,omitempty"`
 }
 
 // MonitorView 是公开状态页的单卡片数据。
@@ -63,7 +70,7 @@ const (
 	MonitorStatusDown     = "down"
 )
 
-// 成功率统计口径：recent 与状态条同一批最近采样，all 用保留期内的小时汇总。
+// 成功率统计口径：recent 用最近趋势窗内计入的全部请求，all 用保留期内的小时汇总。
 const (
 	UptimeScopeRecent = "recent"
 	UptimeScopeAll    = "all"

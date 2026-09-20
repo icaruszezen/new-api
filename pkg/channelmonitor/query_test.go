@@ -43,6 +43,15 @@ func TestLatestStatusReflectsNewestBeat(t *testing.T) {
 	}
 }
 
+func TestAverageTtftPrefersWindowTotalsOverRepresentativeSample(t *testing.T) {
+	beats := []BeatView{
+		{Ts: 1, Status: model.ChannelMonitorStatusUp, TtftMs: 100, TtftSumMs: 900, TtftCount: 3},
+		{Ts: 2, Status: model.ChannelMonitorStatusUp, TtftMs: 400},
+	}
+
+	assert.Equal(t, 325, averageTtft(beats))
+}
+
 func TestAverageTtftIgnoresBeatsWithoutFirstToken(t *testing.T) {
 	beats := []BeatView{
 		{Ts: 1, Status: model.ChannelMonitorStatusUp, TtftMs: 200},
@@ -57,7 +66,7 @@ func TestAverageTtftIgnoresBeatsWithoutFirstToken(t *testing.T) {
 	assert.Equal(t, 0, averageTtft(nil))
 }
 
-// 可用性与状态条读同一批 beat，因此百分比的分母必须是实际渲染出的样本数。
+// 成功率按计入的请求计；无计数的旧 beat 回退为每格 1 次。
 func TestUptimeFromBeatsCountsSlowSamplesAsAvailable(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -100,6 +109,19 @@ func TestUptimeFromBeatsCountsSlowSamplesAsAvailable(t *testing.T) {
 			},
 			expect: 100,
 		},
+		{
+			name: "request counts beat the representative status",
+			beats: []BeatView{
+				{
+					Ts:           1,
+					Status:       model.ChannelMonitorStatusUp,
+					RequestTotal: 10,
+					RequestUp:    1,
+					RequestDown:  9,
+				},
+			},
+			expect: 10,
+		},
 	}
 
 	for _, testCase := range cases {
@@ -136,7 +158,7 @@ func TestResolveMonitorUptimeUsesConfiguredSampleWindow(t *testing.T) {
 	legacy := resolveMonitorUptime(Monitor{}, recentBeats, history, hot)
 	all := resolveMonitorUptime(Monitor{UptimeScope: UptimeScopeAll}, recentBeats, history, hot)
 
-	// Recent (and missing scope) stay on the status-bar window, so older hourly
+	// Recent (and missing scope) stay on the trend-window request counts, so older hourly
 	// failures and the unflushed hot miss must not pull the percentage down.
 	require.NotNil(t, recent)
 	require.NotNil(t, legacy)
@@ -158,6 +180,11 @@ func TestUptimeFromHistoryMergesUnflushedHotBeats(t *testing.T) {
 	})
 	require.NotNil(t, got)
 	assert.InDelta(t, 75, *got, 0.0001)
+	got = uptimeFromHistory(history, []BeatView{
+		{RequestTotal: 4, RequestUp: 1, RequestDown: 3},
+	})
+	require.NotNil(t, got)
+	assert.InDelta(t, 300.0/7.0, *got, 0.0001)
 	assert.Nil(t, uptimeFromHistory(model.ChannelMonitorUptime{}, nil))
 }
 

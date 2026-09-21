@@ -10,10 +10,13 @@ import (
 type StreamEndReason string
 
 const (
-	StreamEndReasonNone            StreamEndReason = ""
-	StreamEndReasonDone            StreamEndReason = "done"
-	StreamEndReasonTimeout         StreamEndReason = "timeout"
-	StreamEndReasonClientGone      StreamEndReason = "client_gone"
+	StreamEndReasonNone       StreamEndReason = ""
+	StreamEndReasonDone       StreamEndReason = "done"
+	StreamEndReasonTimeout    StreamEndReason = "timeout"
+	StreamEndReasonClientGone StreamEndReason = "client_gone"
+	// StreamEndReasonDrained：客户端已断开，但 DrainUpstreamOnClientDisconnect
+	// 仍把上游读到了正常终态（[DONE]/EOF）。不是上游截断；首字后错误准则 4 只认 EOF。
+	StreamEndReasonDrained         StreamEndReason = "drained"
 	StreamEndReasonScannerErr      StreamEndReason = "scanner_error"
 	StreamEndReasonHandlerStop     StreamEndReason = "handler_stop"
 	StreamEndReasonEOF             StreamEndReason = "eof"
@@ -54,7 +57,8 @@ func (s *StreamStatus) SetEndReason(reason StreamEndReason, err error) {
 }
 
 // OverrideEndReason replaces the first-wins end reason after the scanner has
-// already closed the stream. Used only for Responses first-token-error billing.
+// already closed the stream. Used for Responses first-token-error billing and
+// for remapping a successful client-disconnect drain to StreamEndReasonDrained.
 func (s *StreamStatus) OverrideEndReason(reason StreamEndReason, err error) {
 	if s == nil {
 		return
@@ -102,7 +106,8 @@ func (s *StreamStatus) IsNormalEnd() bool {
 	}
 	return s.EndReason == StreamEndReasonDone ||
 		s.EndReason == StreamEndReasonEOF ||
-		s.EndReason == StreamEndReasonHandlerStop
+		s.EndReason == StreamEndReasonHandlerStop ||
+		s.EndReason == StreamEndReasonDrained
 }
 
 func (s *StreamStatus) Summary() string {

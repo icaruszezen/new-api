@@ -283,6 +283,227 @@ func TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns(t *testing.T)
 	assert.NotContains(t, body, "second")
 }
 
+func TestStreamScannerHandler_ClientCancelDrainsUntilTerminalWhenEnabled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(ctx)
+
+	resp := &http.Response{Body: pr}
+	info := &relaycommon.RelayInfo{
+		DisablePing:                     true,
+		DrainUpstreamOnClientDisconnect: true,
+		ChannelMeta:                     &relaycommon.ChannelMeta{},
+	}
+
+	var last atomic.Value
+	firstHandled := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+			last.Store(data)
+			_ = StringData(c, data)
+			if strings.Contains(data, `"type":"response.created"`) {
+				close(firstHandled)
+			}
+		})
+		close(done)
+	}()
+
+	_, err := fmt.Fprint(pw, `data: {"type":"response.created","response":{"id":"resp_1"}}`+"\n")
+	require.NoError(t, err)
+
+	select {
+	case <-firstHandled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for first chunk")
+	}
+
+	cancel()
+
+	select {
+	case <-done:
+		t.Fatal("handler returned immediately after client disconnect")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	completed := `{"type":"response.completed","response":{"usage":{"input_tokens":3,"output_tokens":5}}}`
+	_, err = fmt.Fprint(pw, "data: "+completed+"\n")
+	require.NoError(t, err)
+	_, err = fmt.Fprint(pw, "data: [DONE]\n")
+	require.NoError(t, err)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not return after upstream terminal")
+	}
+
+	got, _ := last.Load().(string)
+	assert.Contains(t, got, `"type":"response.completed"`)
+
+	_, err = fmt.Fprint(pw, "data: after-close\n")
+	require.ErrorIs(t, err, io.ErrClosedPipe, "upstream body should be closed after drain finishes")
+
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonDrained, info.StreamStatus.EndReason)
+	assert.True(t, info.StreamStatus.IsNormalEnd())
+	assert.False(t, info.StreamStatus.HasErrors())
+
+	body := recorder.Body.String()
+	assert.Contains(t, body, "response.created")
+	assert.NotContains(t, body, "response.completed")
+}
+
+func TestStreamScannerHandler_ClientCancelDrainIdleTimeoutClosesBody(t *testing.T) {
+	// Not parallel: modifies global constant.StreamingTimeout
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 1
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(ctx)
+
+	resp := &http.Response{Body: pr}
+	info := &relaycommon.RelayInfo{
+		DisablePing:                     true,
+		DrainUpstreamOnClientDisconnect: true,
+		ChannelMeta:                     &relaycommon.ChannelMeta{},
+	}
+
+	firstHandled := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+			_ = StringData(c, data)
+			close(firstHandled)
+		})
+		close(done)
+	}()
+
+	_, err := fmt.Fprint(pw, "data: {\"type\":\"response.created\"}\n")
+	require.NoError(t, err)
+
+	select {
+	case <-firstHandled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for first chunk")
+	}
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("handler did not return after drain idle timeout")
+	}
+
+	_, err = fmt.Fprint(pw, "data: late\n")
+	require.ErrorIs(t, err, io.ErrClosedPipe, "upstream body should be closed after drain timeout")
+
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+	assert.True(t, info.StreamStatus.HasErrors())
+}
+
+func TestStreamScannerHandler_ClientCancelDrainCommentsDoNotExtendIdle(t *testing.T) {
+	// Not parallel: modifies global constant.StreamingTimeout
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 1
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(ctx)
+
+	resp := &http.Response{Body: pr}
+	info := &relaycommon.RelayInfo{
+		DisablePing:                     true,
+		DrainUpstreamOnClientDisconnect: true,
+		ChannelMeta:                     &relaycommon.ChannelMeta{},
+	}
+
+	firstHandled := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+			_ = StringData(c, data)
+			close(firstHandled)
+		})
+		close(done)
+	}()
+
+	_, err := fmt.Fprint(pw, "data: {\"type\":\"response.created\"}\n")
+	require.NoError(t, err)
+
+	select {
+	case <-firstHandled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for first chunk")
+	}
+
+	cancel()
+
+	commentWrites := 0
+	timeout := time.After(3 * time.Second)
+	for {
+		select {
+		case <-done:
+			require.Greater(t, commentWrites, 0, "should have written keepalive comments before idle timeout")
+			_, err = fmt.Fprint(pw, "data: late\n")
+			require.ErrorIs(t, err, io.ErrClosedPipe, "upstream body should be closed after drain idle timeout")
+			require.NotNil(t, info.StreamStatus)
+			assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+			assert.True(t, info.StreamStatus.HasErrors())
+			return
+		case <-timeout:
+			t.Fatal("keepalive comments extended drain past idle timeout")
+		case <-time.After(200 * time.Millisecond):
+			_, writeErr := fmt.Fprint(pw, ": keepalive\n")
+			if writeErr != nil {
+				require.ErrorIs(t, writeErr, io.ErrClosedPipe)
+				select {
+				case <-done:
+				case <-time.After(2 * time.Second):
+					t.Fatal("handler did not return after drain closed the body")
+				}
+				require.NotNil(t, info.StreamStatus)
+				assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+				assert.True(t, info.StreamStatus.HasErrors())
+				return
+			}
+			commentWrites++
+		}
+	}
+}
+
 // ---------- Ping tests ----------
 
 func TestStreamScannerHandler_PingSentDuringSlowUpstream(t *testing.T) {

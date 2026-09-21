@@ -96,6 +96,7 @@ export interface ChannelSettings {
   stream_prelude_enabled?: boolean
   stream_prelude_delay_min_seconds?: number
   stream_prelude_delay_max_seconds?: number
+  responses_client_disconnect_drain_enabled?: boolean
   http_protocol?: 'auto' | 'http1' | string
   http2_connection_shards?: number
 }

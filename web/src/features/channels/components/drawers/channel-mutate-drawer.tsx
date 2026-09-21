@@ -291,6 +291,7 @@ const SENSITIVE_FORM_FIELDS = [
   'http_protocol',
   'http2_connection_shards',
   'pass_through_body_enabled',
+  'responses_client_disconnect_drain_enabled',
   'system_prompt',
   'system_prompt_override',
   'allow_service_tier',
@@ -347,6 +348,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.auto_set_reasoning_effort_by_model ||
     values.cache_billing_ratio_enabled ||
     values.stream_prelude_enabled ||
+    values.responses_client_disconnect_drain_enabled ||
     values.pass_through_body_enabled ||
     values.system_prompt_override ||
     (values.http_protocol && values.http_protocol !== 'auto') ||
@@ -4471,6 +4473,33 @@ export function ChannelMutateDrawer({
                                   />
                                 </div>
                               )}
+
+                              <FormField
+                                control={form.control}
+                                name='responses_client_disconnect_drain_enabled'
+                                render={({ field }) => (
+                                  <FormItem className='flex items-center justify-between px-4 py-3'>
+                                    <div className='space-y-0.5'>
+                                      <FormLabel>
+                                        {t(
+                                          'Drain Responses upstream after client disconnect'
+                                        )}
+                                      </FormLabel>
+                                      <FormDescription>
+                                        {t(
+                                          "When enabled, this channel's POST /v1/responses streams keep reading the upstream SSE after the client disconnects until a terminal event (usage or error) or the streaming idle timeout, then bill. Default off: close upstream immediately."
+                                        )}
+                                      </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                      <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
 
                               <FormField
                                 control={form.control}

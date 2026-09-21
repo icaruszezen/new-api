@@ -274,6 +274,7 @@ export const channelFormSchema = z
     stream_prelude_enabled: z.boolean().optional(),
     stream_prelude_delay_min_seconds: z.number().optional(),
     stream_prelude_delay_max_seconds: z.number().optional(),
+    responses_client_disconnect_drain_enabled: z.boolean().optional(),
     // Type-specific settings (stored in settings JSON)
     is_enterprise_account: z.boolean().optional(), // OpenRouter specific
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
@@ -556,6 +557,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   stream_prelude_enabled: false,
   stream_prelude_delay_min_seconds: 0,
   stream_prelude_delay_max_seconds: 5,
+  responses_client_disconnect_drain_enabled: false,
   // Type-specific settings
   is_enterprise_account: false,
   vertex_key_type: 'json',
@@ -606,6 +608,7 @@ export function transformChannelToFormDefaults(
     stream_prelude_enabled: false,
     stream_prelude_delay_min_seconds: 0,
     stream_prelude_delay_max_seconds: 5,
+    responses_client_disconnect_drain_enabled: false,
   }
 
   if (channel.setting) {
@@ -657,6 +660,8 @@ export function transformChannelToFormDefaults(
           parsed.stream_prelude_delay_max_seconds >= 0
             ? parsed.stream_prelude_delay_max_seconds
             : 5,
+        responses_client_disconnect_drain_enabled:
+          parsed.responses_client_disconnect_drain_enabled === true,
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -802,6 +807,10 @@ export function buildSettingJSON(formData: ChannelFormValues): string {
     stream_prelude_delay_max_seconds: formData.stream_prelude_enabled
       ? (formData.stream_prelude_delay_max_seconds ?? 5)
       : undefined,
+    responses_client_disconnect_drain_enabled:
+      formData.responses_client_disconnect_drain_enabled === true
+        ? true
+        : undefined,
   }
 
   const protocol = normalizeHttpProtocol(formData.http_protocol)

@@ -2,16 +2,20 @@ package openai
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -264,4 +268,85 @@ func TestOaiResponsesStreamHandlerDoesNotCountPartialImageEvent(t *testing.T) {
 	)
 
 	assert.Equal(t, 0, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
+}
+
+func TestOaiResponsesStreamHandlerDrainUsesCompletedUsage(t *testing.T) {
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(ctx)
+	c.Set(common.RequestIdKey, "responses-drain-billing-test")
+
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-5.1",
+		DisablePing:     true,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "gpt-5.1",
+			ChannelSetting: dto.ChannelSettings{
+				ResponsesClientDisconnectDrainEnabled: true,
+			},
+		},
+	}
+
+	type result struct {
+		usage  *dto.Usage
+		apiErr *types.NewAPIError
+	}
+	done := make(chan result, 1)
+	go func() {
+		usage, apiErr := OaiResponsesStreamHandler(c, info, &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       pr,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		})
+		done <- result{usage: usage, apiErr: apiErr}
+	}()
+
+	_, err := fmt.Fprint(pw, `data: {"type":"response.created","response":{"id":"resp_1"}}`+"\n")
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return strings.Contains(w.Body.String(), "response.created")
+	}, 2*time.Second, 10*time.Millisecond)
+
+	_, err = fmt.Fprint(pw, `data: {"type":"response.output_text.delta","delta":"hello world this is some text"}`+"\n")
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return strings.Contains(w.Body.String(), "hello world this is some text")
+	}, 2*time.Second, 10*time.Millisecond)
+
+	cancel()
+
+	select {
+	case got := <-done:
+		t.Fatalf("handler returned immediately after client disconnect: err=%v usage=%v", got.apiErr, got.usage)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	_, err = fmt.Fprint(pw, `data: {"type":"response.completed","response":{"usage":{"input_tokens":3,"output_tokens":5,"total_tokens":8}}}`+"\n")
+	require.NoError(t, err)
+	_, err = fmt.Fprint(pw, "data: [DONE]\n")
+	require.NoError(t, err)
+
+	select {
+	case got := <-done:
+		require.Nil(t, got.apiErr)
+		require.NotNil(t, got.usage)
+		assert.Equal(t, 3, got.usage.PromptTokens)
+		assert.Equal(t, 5, got.usage.CompletionTokens)
+		assert.Equal(t, 8, got.usage.TotalTokens)
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not return after drained completed event")
+	}
 }

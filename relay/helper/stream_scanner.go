@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -198,6 +199,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	}
 
 	dataChan := make(chan string, 10)
+	var lastDataUnix atomic.Int64
 
 	wg.Add(1)
 	gopool.Go(func() {
@@ -266,6 +268,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			if !strings.HasPrefix(data, "[DONE]") {
 				info.SetFirstResponseTime()
 				info.ReceivedResponseCount++
+				lastDataUnix.Store(time.Now().UnixNano())
 
 				select {
 				case dataChan <- data:
@@ -297,9 +300,53 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	case <-stopChan:
 		// EndReason already set by the goroutine that triggered stopChan
 	case <-c.Request.Context().Done():
-		// 客户端断开：立即 cleanup 关闭上游 resp.Body，解除 scanner 阻塞并让上游停止生成，
-		// 避免为已放弃的请求继续消费上游 token。
-		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+		// 客户端断开：默认立即 cleanup 关闭上游 resp.Body，解除 scanner 阻塞并让上游停止生成。
+		// DrainUpstreamOnClientDisconnect 时不立刻关 Body，继续读上游直到终态或空闲超时。
+		// 先不写 client_gone，让 scanner 的 [DONE]/EOF/错误先落到 EndReason；
+		// 成功终态再改成 drained，避免被记成 stream error，也不触发首字后错误准则 4（只认 EOF）。
+		if !info.DrainUpstreamOnClientDisconnect {
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+			break
+		}
+		logger.LogInfo(c, "responses stream: client disconnected, draining upstream for billing")
+		remaining := streamingTimeout
+		if ts := lastDataUnix.Load(); ts > 0 {
+			if left := streamingTimeout - time.Since(time.Unix(0, ts)); left > 0 {
+				remaining = left
+			} else {
+				remaining = 0
+			}
+		}
+		if remaining == 0 {
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+			info.StreamStatus.RecordError("drain idle timeout")
+			logger.LogInfo(c, "responses stream: drain ended by idle timeout")
+			break
+		}
+		drainTimer := time.NewTimer(remaining)
+		for {
+			select {
+			case <-drainTimer.C:
+				select {
+				case <-stopChan:
+					markResponsesDrainTerminal(c, info)
+				default:
+					if ts := lastDataUnix.Load(); ts > 0 {
+						if left := streamingTimeout - time.Since(time.Unix(0, ts)); left > 0 {
+							drainTimer.Reset(left)
+							continue
+						}
+					}
+					info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+					info.StreamStatus.RecordError("drain idle timeout")
+					logger.LogInfo(c, "responses stream: drain ended by idle timeout")
+				}
+			case <-stopChan:
+				markResponsesDrainTerminal(c, info)
+			}
+			break
+		}
+		drainTimer.Stop()
 	}
 
 	cleanup()
@@ -308,4 +355,19 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	} else {
 		logger.LogError(c, fmt.Sprintf("stream ended: %s, received=%d", info.StreamStatus.Summary(), info.ReceivedResponseCount))
 	}
+}
+
+// markResponsesDrainTerminal remaps a normal upstream terminal ([DONE]/EOF)
+// after client-disconnect drain to drained. Error terminals stay as-is.
+// drained is IsNormalEnd so we do not LogError; first-token criterion 4
+// still only matches EOF.
+func markResponsesDrainTerminal(c *gin.Context, info *relaycommon.RelayInfo) {
+	if info == nil || info.StreamStatus == nil {
+		return
+	}
+	switch info.StreamStatus.EndReason {
+	case relaycommon.StreamEndReasonNone, relaycommon.StreamEndReasonDone, relaycommon.StreamEndReasonEOF:
+		info.StreamStatus.OverrideEndReason(relaycommon.StreamEndReasonDrained, nil)
+	}
+	logger.LogInfo(c, "responses stream: drain ended after upstream terminal/EOF")
 }

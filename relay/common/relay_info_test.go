@@ -189,3 +189,32 @@ func TestInitChannelMetaClearsResolvedCacheReadBillingRatio(t *testing.T) {
 	_, ok := info.ResolvedCacheReadBillingRatio()
 	assert.False(t, ok)
 }
+
+func TestApplyResponsesClientDisconnectDrain(t *testing.T) {
+	info := &RelayInfo{}
+	info.ApplyResponsesClientDisconnectDrain()
+	assert.False(t, info.DrainUpstreamOnClientDisconnect)
+
+	info.ChannelMeta = &ChannelMeta{}
+	info.ApplyResponsesClientDisconnectDrain()
+	assert.False(t, info.DrainUpstreamOnClientDisconnect)
+
+	info.ChannelSetting.ResponsesClientDisconnectDrainEnabled = true
+	info.ApplyResponsesClientDisconnectDrain()
+	assert.True(t, info.DrainUpstreamOnClientDisconnect)
+
+	info.ChannelSetting.ResponsesClientDisconnectDrainEnabled = false
+	info.ApplyResponsesClientDisconnectDrain()
+	assert.False(t, info.DrainUpstreamOnClientDisconnect)
+}
+
+func TestInitChannelMetaClearsDrainUpstreamOnClientDisconnect(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+	info := &RelayInfo{DrainUpstreamOnClientDisconnect: true}
+
+	info.InitChannelMeta(ctx)
+
+	assert.False(t, info.DrainUpstreamOnClientDisconnect)
+}

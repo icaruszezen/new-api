@@ -109,21 +109,25 @@ type RelayInfo struct {
 	RequestHeaders                map[string]string
 	ShouldIncludeUsage            bool
 	DisablePing                   bool // 是否禁止向下游发送自定义 Ping
-	ClientWs                      *websocket.Conn
-	TargetWs                      *websocket.Conn
-	InputAudioFormat              string
-	OutputAudioFormat             string
-	RealtimeTools                 []dto.RealTimeTool
-	IsFirstRequest                bool
-	AudioUsage                    bool
-	ReasoningEffort               string
-	UserSetting                   dto.UserSetting
-	UserEmail                     string
-	UserQuota                     int
-	RelayFormat                   types.RelayFormat
-	SendResponseCount             int
-	ReceivedResponseCount         int
-	FinalPreConsumedQuota         int // 最终预消耗的配额
+	// DrainUpstreamOnClientDisconnect：客户端断开后不立刻关 resp.Body，
+	// 继续把 data: 交给 dataHandler，直到 [DONE]/EOF/超时/scanner 错。
+	// 仅由 /v1/responses 流式入口按本渠道 ChannelSetting 置位。
+	DrainUpstreamOnClientDisconnect bool
+	ClientWs                        *websocket.Conn
+	TargetWs                        *websocket.Conn
+	InputAudioFormat                string
+	OutputAudioFormat               string
+	RealtimeTools                   []dto.RealTimeTool
+	IsFirstRequest                  bool
+	AudioUsage                      bool
+	ReasoningEffort                 string
+	UserSetting                     dto.UserSetting
+	UserEmail                       string
+	UserQuota                       int
+	RelayFormat                     types.RelayFormat
+	SendResponseCount               int
+	ReceivedResponseCount           int
+	FinalPreConsumedQuota           int // 最终预消耗的配额
 	// ForcePreConsume 为 true 时禁用 BillingSession 的信任额度旁路，
 	// 强制预扣全额。用于异步任务（视频/音乐生成等），因为请求返回后任务仍在运行，
 	// 必须在提交前锁定全额。
@@ -260,6 +264,8 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	info.ChannelMeta = channelMeta
 	info.cacheReadBillingRatio = 0
 	info.cacheReadBillingRatioSet = false
+	// Drain 标志按渠道设置重新 Apply；换渠道重试时先清掉，避免上一渠道的 true 粘住。
+	info.DrainUpstreamOnClientDisconnect = false
 
 	// Channel identity feeds the converter options snapshot (e.g.
 	// OpenRouterDialect); drop the cache so a cross-channel retry rebuilds it.
@@ -896,6 +902,20 @@ func (info *RelayInfo) StreamWriteMutex() *sync.Mutex {
 		info.streamWriteMu = &sync.Mutex{}
 	}
 	return info.streamWriteMu
+}
+
+// ApplyResponsesClientDisconnectDrain copies the per-channel setting onto
+// DrainUpstreamOnClientDisconnect so StreamScannerHandler can keep reading
+// upstream after the client is gone. Only /v1/responses stream handlers call this.
+func (info *RelayInfo) ApplyResponsesClientDisconnectDrain() {
+	if info == nil {
+		return
+	}
+	if info.ChannelMeta == nil {
+		info.DrainUpstreamOnClientDisconnect = false
+		return
+	}
+	info.DrainUpstreamOnClientDisconnect = info.ChannelSetting.ResponsesClientDisconnectDrainEnabled
 }
 
 // shouldFakeStreamFirstResponseTime 判断是否对记录的首字时间进行伪造：

@@ -83,6 +83,8 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	defer service.CloseResponseBodyGracefully(resp)
 
+	info.ApplyResponsesClientDisconnectDrain()
+
 	var usage = &dto.Usage{}
 	var responseTextBuilder strings.Builder
 	cacheBillingApplied := false

@@ -29,6 +29,10 @@ type ChannelSettings struct {
 	StreamPreludeEnabled         bool `json:"stream_prelude_enabled,omitempty"`
 	StreamPreludeDelayMinSeconds int  `json:"stream_prelude_delay_min_seconds,omitempty"`
 	StreamPreludeDelayMaxSeconds int  `json:"stream_prelude_delay_max_seconds,omitempty"`
+	// ResponsesClientDisconnectDrainEnabled 仅 /v1/responses HTTP SSE：
+	// 客户端断开后继续读上游直到 usage/错误/超时，再关 Body。
+	// false（默认 / 缺省）= 立刻关 Body，停上游生成。
+	ResponsesClientDisconnectDrainEnabled bool `json:"responses_client_disconnect_drain_enabled,omitempty"`
 	// HTTPProtocol controls outbound HTTP version negotiation for this channel.
 	// Accepted values: "", "auto" (default), "http1".
 	HTTPProtocol string `json:"http_protocol,omitempty"`

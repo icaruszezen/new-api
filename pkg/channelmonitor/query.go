@@ -13,6 +13,9 @@ import (
 // 而底层数据最快也只有一个采样窗口才变化一次。
 const statusCacheTTL = 5 * time.Second
 
+// avgTtftWindowSeconds 是卡片「首字」均值的墙钟窗口。趋势条仍用 BeatLimit。
+const avgTtftWindowSeconds = 5 * 60
+
 var statusCache struct {
 	mu        sync.Mutex
 	view      StatusView
@@ -102,7 +105,7 @@ func buildStatusView(setting channel_monitoring_setting.ChannelMonitoringSetting
 			// when the stored config predates icon resolution.
 			Icon:      resolveIcon(monitor),
 			Status:    latestStatus(beats),
-			AvgTtftMs: averageTtft(beats),
+			AvgTtftMs: averageTtft(beats, time.Now().Unix()-avgTtftWindowSeconds),
 			PingMs:    stateById[monitor.Id].PingMs,
 			Uptime: resolveMonitorUptime(
 				monitor,
@@ -222,12 +225,15 @@ func latestStatus(beats []BeatView) string {
 	}
 }
 
-// averageTtft 是「首字」指标：最近趋势窗内全部成功请求的 TTFT 均值。
-// 优先用窗口累计；旧 beat 没有累计时回退到代表样本的 ttft_ms。
-func averageTtft(beats []BeatView) int {
+// averageTtft 是「首字」指标：sinceTs 之后全部成功请求的 TTFT 均值。
+// sinceTs <= 0 时不过滤。优先用窗口累计；旧 beat 没有累计时回退到代表样本的 ttft_ms。
+func averageTtft(beats []BeatView, sinceTs int64) int {
 	sum := int64(0)
 	count := int64(0)
 	for _, beat := range beats {
+		if sinceTs > 0 && beat.Ts < sinceTs {
+			continue
+		}
 		if beat.TtftCount > 0 {
 			sum += beat.TtftSumMs
 			count += beat.TtftCount

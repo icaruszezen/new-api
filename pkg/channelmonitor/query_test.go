@@ -49,7 +49,7 @@ func TestAverageTtftPrefersWindowTotalsOverRepresentativeSample(t *testing.T) {
 		{Ts: 2, Status: model.ChannelMonitorStatusUp, TtftMs: 400},
 	}
 
-	assert.Equal(t, 325, averageTtft(beats))
+	assert.Equal(t, 325, averageTtft(beats, 0))
 }
 
 func TestAverageTtftIgnoresBeatsWithoutFirstToken(t *testing.T) {
@@ -61,9 +61,21 @@ func TestAverageTtftIgnoresBeatsWithoutFirstToken(t *testing.T) {
 
 	// Failures carry no first-token timing, so averaging them in would drag the
 	// displayed latency toward zero.
-	assert.Equal(t, 300, averageTtft(beats))
-	assert.Equal(t, 0, averageTtft([]BeatView{{Ts: 1, TtftMs: 0}}))
-	assert.Equal(t, 0, averageTtft(nil))
+	assert.Equal(t, 300, averageTtft(beats, 0))
+	assert.Equal(t, 0, averageTtft([]BeatView{{Ts: 1, TtftMs: 0}}, 0))
+	assert.Equal(t, 0, averageTtft(nil, 0))
+}
+
+func TestAverageTtftIgnoresBeatsBeforeWindow(t *testing.T) {
+	now := int64(1_700_000_000)
+	sinceTs := now - avgTtftWindowSeconds
+	beats := []BeatView{
+		{Ts: now - 600, Status: model.ChannelMonitorStatusUp, TtftMs: 35434, TtftSumMs: 35434, TtftCount: 1},
+		{Ts: now - 10, Status: model.ChannelMonitorStatusUp, TtftMs: 1606, TtftSumMs: 4818, TtftCount: 3},
+	}
+
+	assert.Equal(t, 1606, averageTtft(beats, sinceTs))
+	assert.Equal(t, 0, averageTtft(beats[:1], sinceTs))
 }
 
 // 成功率按计入的请求计；无计数的旧 beat 回退为每格 1 次。

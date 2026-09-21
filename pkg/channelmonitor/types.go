@@ -46,6 +46,7 @@ type MonitorView struct {
 	Model     string `json:"model"`
 	Icon      string `json:"icon"`
 	Status    string `json:"status"`
+	// AvgTtftMs 是最近 avgTtftWindowSeconds 内全部成功请求的 TTFT 均值。
 	AvgTtftMs int    `json:"avg_ttft_ms"`
 	PingMs    int    `json:"ping_ms"`
 	// Uptime 无样本时为 nil，前端显示 "--"；全失败时为 0。

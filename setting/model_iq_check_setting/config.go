@@ -23,11 +23,11 @@ const (
 	MinHistoryLimit     = 1
 	MaxHistoryLimit     = 50
 
-	// RequestTimeoutSeconds 是单次检查（含完整流式输出）的硬上限，
-	// 生成长网页的模型可能需要数分钟。
-	DefaultRequestTimeoutSeconds = 300
-	MinRequestTimeoutSeconds     = 30
-	MaxRequestTimeoutSeconds     = 1800
+	// RequestTimeoutSeconds 是单次检查（含完整流式输出）的硬上限。推理模型可能先静默思考
+	// 数分钟再输出，生成长网页还要数分钟，因此至少 10 分钟；低于下限的旧配置按默认值处理。
+	DefaultRequestTimeoutSeconds = 600
+	MinRequestTimeoutSeconds     = 600
+	MaxRequestTimeoutSeconds     = 3600
 )
 
 var modelIQCheckSetting = ModelIQCheckSetting{

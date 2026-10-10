@@ -46,9 +46,9 @@ export const MIN_HISTORY_LIMIT = 1
 export const MAX_HISTORY_LIMIT = 50
 
 /** Mirrors model_iq_check_setting request timeout bounds, in seconds. */
-export const DEFAULT_REQUEST_TIMEOUT_SECONDS = 300
-export const MIN_REQUEST_TIMEOUT_SECONDS = 30
-export const MAX_REQUEST_TIMEOUT_SECONDS = 1800
+export const DEFAULT_REQUEST_TIMEOUT_SECONDS = 600
+export const MIN_REQUEST_TIMEOUT_SECONDS = 600
+export const MAX_REQUEST_TIMEOUT_SECONDS = 3600
 
 /**
  * A run whose finish was never recorded is treated as abandoned once this much

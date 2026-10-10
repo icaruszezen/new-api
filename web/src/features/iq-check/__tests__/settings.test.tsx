@@ -73,7 +73,7 @@ function config(overrides: Partial<IqCheckConfig> = {}): IqCheckConfig {
   return {
     enabled: true,
     history_limit: 10,
-    request_timeout_seconds: 300,
+    request_timeout_seconds: 600,
     checks: [adminCheck()],
     ...overrides,
   }
@@ -253,16 +253,26 @@ describe('IqCheckSettings', () => {
     ).toBeInTheDocument()
     expect(apiMocks.updateIqCheckConfig).not.toHaveBeenCalled()
 
+    // Checks must be allowed at least ten minutes before they count as timed out.
     await user.clear(history)
     await user.type(history, '20')
     await user.clear(timeout)
-    await user.type(timeout, '600')
+    await user.type(timeout, '300')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(
+      await screen.findByText('Enter a whole number between 600 and 3600')
+    ).toBeInTheDocument()
+    expect(apiMocks.updateIqCheckConfig).not.toHaveBeenCalled()
+
+    await user.clear(timeout)
+    await user.type(timeout, '900')
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
       expect(apiMocks.updateIqCheckConfig).toHaveBeenCalledWith({
         history_limit: 20,
-        request_timeout_seconds: 600,
+        request_timeout_seconds: 900,
       })
     })
   })

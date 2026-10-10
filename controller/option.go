@@ -400,7 +400,8 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	case model_iq_check_setting.ChecksOptionKey:
-		// 检查项通常经 /api/iq-check/config 保存，这里为直接写 option 的路径补上同一份结构校验。
+		// 检查项通常经 /api/iq-check/config 保存，这里为直接写 option 的路径补上同一份结构校验，
+		// 并保存规范化后的结果：缺少 id 的检查项无法记录调度状态，会被反复判定为到期。
 		checks, parseErr := modeliqcheck.ParseChecks(option.Value.(string))
 		if parseErr != nil {
 			c.JSON(http.StatusOK, gin.H{
@@ -409,13 +410,20 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
-		if _, err = modeliqcheck.ValidateChecks(checks, nil, nil); err != nil {
+		normalized, validateErr := modeliqcheck.ValidateChecks(checks, nil, nil)
+		if validateErr != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
-				"message": err.Error(),
+				"message": validateErr.Error(),
 			})
 			return
 		}
+		normalizedValue, marshalErr := common.Marshal(normalized)
+		if marshalErr != nil {
+			common.ApiError(c, marshalErr)
+			return
+		}
+		option.Value = string(normalizedValue)
 	}
 	err = model.UpdateOption(option.Key, option.Value.(string))
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 
 func TestIsDue(t *testing.T) {
 	const now = int64(1_700_000_000)
+	const runningWindow = int64(420)
 	hourly := Check{Id: "c1", Enabled: true, IntervalMinutes: 60}
 
 	cases := []struct {
@@ -54,22 +55,36 @@ func TestIsDue(t *testing.T) {
 			want:  false,
 		},
 		{
+			name:  "attempt still inside the running window is not repeated",
+			check: hourly,
+			state: model.ModelIQCheckState{LastStartedAt: now - runningWindow, LastFinishedAt: now - 7200},
+			want:  false,
+		},
+		{
+			// The runner crashed or lost its lease: no result was written and the
+			// attempt must not count as the run for this interval.
+			name:  "abandoned attempt runs again before the interval",
+			check: hourly,
+			state: model.ModelIQCheckState{LastStartedAt: now - runningWindow - 1, LastFinishedAt: now - 7200},
+			want:  true,
+		},
+		{
 			name:  "unset interval uses the default",
 			check: Check{Id: "c1", Enabled: true},
-			state: model.ModelIQCheckState{LastStartedAt: now - int64(DefaultIntervalMinutes)*60},
+			state: model.ModelIQCheckState{LastStartedAt: now - int64(DefaultIntervalMinutes)*60, LastFinishedAt: now - int64(DefaultIntervalMinutes)*60 + 30},
 			want:  true,
 		},
 		{
 			name:  "unset interval still waits for the default",
 			check: Check{Id: "c1", Enabled: true},
-			state: model.ModelIQCheckState{LastStartedAt: now - int64(DefaultIntervalMinutes)*60 + 1},
+			state: model.ModelIQCheckState{LastStartedAt: now - int64(DefaultIntervalMinutes)*60 + 1, LastFinishedAt: now - int64(DefaultIntervalMinutes)*60 + 30},
 			want:  false,
 		},
 	}
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			assert.Equal(t, testCase.want, IsDue(testCase.check, testCase.state, now))
+			assert.Equal(t, testCase.want, IsDue(testCase.check, testCase.state, now, runningWindow))
 		})
 	}
 }

@@ -11,10 +11,6 @@ import (
 // statusCacheTTL 保护公开接口：页面会被未登录访客轮询，而结果最快也要几分钟才变化一次。
 const statusCacheTTL = 10 * time.Second
 
-// runningGraceSeconds 让「运行中」在执行节点崩溃后自动失效：
-// 开始后超过请求超时再加该余量仍未结束，即视为已中断。
-const runningGraceSeconds = 120
-
 var statusCache struct {
 	mu        sync.Mutex
 	view      StatusView
@@ -89,7 +85,7 @@ func buildCheckViews(checks []Check, states []model.ModelIQCheckState, history [
 		})
 	}
 
-	runningWindow := int64(setting.RequestTimeoutSeconds + runningGraceSeconds)
+	runningWindow := runningWindowSeconds(setting)
 	views := make([]CheckView, 0, len(checks))
 	for _, check := range checks {
 		state := stateById[check.Id]

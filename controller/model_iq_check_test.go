@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -323,4 +324,73 @@ func TestUpdateModelIQCheckConfigRejectsInvalidInputWithoutSaving(t *testing.T) 
 			assert.Empty(t, modeliqcheck.Checks())
 		})
 	}
+}
+
+// A check can wait in the queue for minutes, and the admin's save may land on
+// another node that this one has not synced with yet. The runner must start
+// each check from the config stored in the database, so a queued re-run is not
+// spent on the old prompt and removed checks cost no upstream calls.
+func TestRunModelIQCheckStartsFromStoredConfig(t *testing.T) {
+	db := setupModelIQCheckConfigTest(t)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		model_iq_check_setting.EnabledOptionKey: "true",
+		model_iq_check_setting.ChecksOptionKey: `[
+			{"id":"edited","name":"Edited","group":"default","model":"gpt-5","prompt":"old prompt","interval_minutes":60,"enabled":true,"sort":0},
+			{"id":"removed","name":"Removed","group":"default","model":"gpt-5","prompt":"p","interval_minutes":60,"enabled":true,"sort":1}
+		]`,
+	}))
+	queued := modeliqcheck.Checks()
+	require.Len(t, queued, 2)
+	require.NoError(t, db.Create(&model.Option{
+		Key:   model_iq_check_setting.ChecksOptionKey,
+		Value: `[{"id":"edited","name":"Edited","group":"default","model":"gpt-5","prompt":"new prompt","interval_minutes":60,"enabled":true,"sort":0}]`,
+	}).Error)
+	setting := model_iq_check_setting.GetSetting()
+
+	assert.Zero(t, runModelIQCheck(context.Background(), queued[1], 1, setting), "a removed check is skipped")
+	// No channel serves the model in this fixture, so the run fails right after
+	// it starts, which is enough to see which config it used.
+	assert.Equal(t, model.ModelIQCheckStatusFailed, runModelIQCheck(context.Background(), queued[0], 1, setting))
+
+	var results []model.ModelIQCheckResult
+	require.NoError(t, db.Find(&results).Error)
+	require.Len(t, results, 1)
+	assert.Equal(t, "edited", results[0].CheckId)
+	assert.Equal(t, "new prompt", results[0].Prompt)
+	assert.Equal(t, modeliqcheck.ErrorTypeNoChannel, results[0].ErrorType)
+
+	states, err := model.GetModelIQCheckStates([]string{"edited", "removed"})
+	require.NoError(t, err)
+	require.Len(t, states, 1, "a skipped check must not be marked as started")
+	assert.Equal(t, "edited", states[0].CheckId)
+}
+
+// Writing the checks option directly must store the normalized config: a
+// check without an id could never record its run and would be due forever.
+func TestUpdateOptionStoresNormalizedModelIQChecks(t *testing.T) {
+	setupModelIQCheckConfigTest(t)
+	payload, err := common.Marshal(map[string]any{
+		"key":   model_iq_check_setting.ChecksOptionKey,
+		"value": `[{"name":" Pro ","group":"default","model":"gpt-5","prompt":"Write a landing page","enabled":true}]`,
+	})
+	require.NoError(t, err)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/option/", bytes.NewReader(payload))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	UpdateOption(c)
+
+	var response struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success, response.Message)
+
+	checks := modeliqcheck.Checks()
+	require.Len(t, checks, 1)
+	assert.NotEmpty(t, checks[0].Id)
+	assert.Equal(t, "Pro", checks[0].Name)
+	assert.Equal(t, modeliqcheck.DefaultIntervalMinutes, checks[0].IntervalMinutes)
 }

@@ -21,6 +21,14 @@ const (
 	modelIQCheckTimeoutGrace = 5 * time.Second
 )
 
+// modelIQCheckOptionKeys 是执行检查前从数据库刷新的配置项。
+var modelIQCheckOptionKeys = []string{
+	model_iq_check_setting.EnabledOptionKey,
+	model_iq_check_setting.ChecksOptionKey,
+	model_iq_check_setting.HistoryLimitOptionKey,
+	model_iq_check_setting.RequestTimeoutOptionKey,
+}
+
 type modelIQCheckSummary struct {
 	Checks    int `json:"checks"`
 	Succeeded int `json:"succeeded"`
@@ -31,6 +39,7 @@ type modelIQCheckSummary struct {
 // 进度与汇总只在调用方 goroutine 归并，因此 report 无需并发安全。
 func runModelIQCheckTask(ctx context.Context, report func(processed, total int)) (modelIQCheckSummary, error) {
 	summary := modelIQCheckSummary{}
+	refreshModelIQCheckSettings()
 	setting := model_iq_check_setting.GetSetting()
 	if !setting.Enabled {
 		return summary, nil
@@ -107,9 +116,29 @@ func runModelIQCheckTask(ctx context.Context, report func(processed, total int))
 	return summary, nil
 }
 
-// runModelIQCheck 执行一次检查并落库，返回结果状态。
-// 任务租约丢失（ctx 取消）时不写结果，返回 0，由接手的节点按调度状态决定是否重跑。
+// refreshModelIQCheckSettings 在执行前读取最新配置。管理员的保存可能落在其它节点，
+// 本节点的配置要等下一次 SyncOptions 才更新；用旧配置运行会以旧提示词消耗掉立即运行请求。
+func refreshModelIQCheckSettings() {
+	if err := model.ReloadOptions(modelIQCheckOptionKeys); err != nil {
+		common.SysError("failed to reload model iq check settings: " + err.Error())
+	}
+}
+
+// runModelIQCheck 执行一次检查并落库，返回结果状态。检查可能在队列中等待多时，
+// 开始前按最新配置重新确认：已停用或删除的检查项跳过，修改过的按新配置运行。
+// 任务租约丢失（ctx 取消）时不写结果，返回 0；开始时间已写入而结束时间没有，
+// 超过运行窗口后调度器会把它视为中断并重跑。
 func runModelIQCheck(ctx context.Context, check modeliqcheck.Check, userID int, setting model_iq_check_setting.ModelIQCheckSetting) int {
+	if ctx.Err() != nil {
+		return 0
+	}
+	refreshModelIQCheckSettings()
+	current, found := modeliqcheck.FindCheck(check.Id)
+	if !found || !current.Enabled || !model_iq_check_setting.IsEnabled() {
+		return 0
+	}
+	check = current
+
 	startedAt := time.Now()
 	if err := model.MarkModelIQCheckStarted(check.Id, startedAt.Unix()); err != nil {
 		common.SysError(fmt.Sprintf("failed to mark model iq check %s started: %s", check.Id, err.Error()))

@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/channel/openrouter"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
@@ -288,6 +289,15 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 					responseText += tc.Function.Name + tc.Function.Arguments
 				}
 				completionTokens += service.CountTextToken(responseText, info.UpstreamModelName) + len(toolCalls)*7
+			}
+			if info.RelayMode == relayconstant.RelayModeCompletions {
+				// completions 的输出在 choices[].text，不在 message 里
+				var completionsResponse dto.CompletionsStreamResponse
+				if err := common.Unmarshal(responseBody, &completionsResponse); err == nil {
+					var completionText strings.Builder
+					processCompletionsStreamResponse(completionsResponse, &completionText)
+					completionTokens += service.CountTextToken(completionText.String(), info.UpstreamModelName)
+				}
 			}
 		}
 		simpleResponse.Usage = dto.Usage{

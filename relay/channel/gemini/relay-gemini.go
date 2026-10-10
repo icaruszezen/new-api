@@ -71,6 +71,15 @@ func geminiResponseUsageText(response *dto.GeminiChatResponse) string {
 			if part.Text != "" {
 				text.WriteString(part.Text)
 			}
+			// 函数调用也是模型输出，上游不给 usage 时要算进输出 token
+			if part.FunctionCall != nil {
+				text.WriteString(part.FunctionCall.FunctionName)
+				if part.FunctionCall.Arguments != nil {
+					if args, err := common.Marshal(part.FunctionCall.Arguments); err == nil {
+						text.Write(args)
+					}
+				}
+			}
 		}
 	}
 	return text.String()
@@ -163,17 +172,8 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 
 		markGeminiGoogleSearchCall(c, &geminiResponse)
 
-		// 统计图片数量
-		for _, candidate := range geminiResponse.Candidates {
-			for _, part := range candidate.Content.Parts {
-				if part.InlineData != nil && part.InlineData.MimeType != "" {
-					imageCount++
-				}
-				if part.Text != "" {
-					responseText.WriteString(part.Text)
-				}
-			}
-		}
+		imageCount += geminiResponseInlineImageCount(&geminiResponse)
+		responseText.WriteString(geminiResponseUsageText(&geminiResponse))
 
 		// 更新使用量统计
 		if metadata := geminiResponse.GetUsageMetadata(); dto.HasGeminiUsageMetadataTokens(metadata) {

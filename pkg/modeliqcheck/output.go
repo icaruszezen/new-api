@@ -36,9 +36,15 @@ func ExtractOutput(body []byte) Output {
 		ErrorMessage: collector.errorMessage,
 	}
 	content, reasoning := separateInlineThinking(collector.content.String(), collector.reasoning.String())
-	output.Content, output.ContentTruncated = truncateUTF8(content, MaxResultContentBytes)
-	output.Reasoning, output.ReasoningTruncated = truncateUTF8(reasoning, MaxResultReasoningBytes)
+	output.Content, output.ContentTruncated = truncateUTF8(storableText(content), MaxResultContentBytes)
+	output.Reasoning, output.ReasoningTruncated = truncateUTF8(storableText(reasoning), MaxResultReasoningBytes)
 	return output
+}
+
+// storableText 去掉 NUL 并替换非法 UTF-8。PostgreSQL 的 text 列拒绝这两类内容，
+// 而模型输出里 JSON 的 \u0000 会被解码成 NUL，一旦出现整条结果都会写入失败。
+func storableText(value string) string {
+	return strings.ReplaceAll(strings.ToValidUTF8(value, "\uFFFD"), "\x00", "")
 }
 
 // separateInlineThinking 把正文开头的 <think>…</think> 思考块移出正文。
@@ -64,7 +70,7 @@ func separateInlineThinking(content string, reasoning string) (string, string) {
 // TruncateErrorMessage 把错误信息裁剪到 MaxErrorMessageLength 个字符，
 // 避免上游返回的整页错误 HTML 撑大结果行。
 func TruncateErrorMessage(message string) string {
-	message = strings.TrimSpace(message)
+	message = strings.TrimSpace(storableText(message))
 	if utf8.RuneCountInString(message) <= MaxErrorMessageLength {
 		return message
 	}

@@ -169,6 +169,11 @@ func runModelIQCheck(ctx context.Context, check modeliqcheck.Check, userID int, 
 	if ctx.Err() != nil {
 		return 0
 	}
+	// 运行期间检查项被删除时不再落库：删除时的清理已经执行过，此时写入会留下无人清理的结果与状态。
+	refreshModelIQCheckSettings()
+	if _, found := modeliqcheck.FindCheck(check.Id); !found {
+		return 0
+	}
 
 	result.CheckedAt = time.Now().Unix()
 	if err := model.SaveModelIQCheckResult(&result, setting.HistoryLimit); err != nil {

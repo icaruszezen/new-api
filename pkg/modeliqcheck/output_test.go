@@ -275,3 +275,15 @@ func TestTruncateErrorMessageCountsCharacters(t *testing.T) {
 	assert.Equal(t, MaxErrorMessageLength, utf8.RuneCountInString(truncated))
 	assert.True(t, utf8.ValidString(truncated))
 }
+
+// PostgreSQL rejects NUL bytes and invalid UTF-8 in text columns, so a single
+// stray byte in a model answer would lose the whole result.
+func TestExtractOutputKeepsOnlyStorableText(t *testing.T) {
+	body := "data: {\"choices\":[{\"delta\":{\"content\":\"a\\u0000b\xffc\",\"reasoning_content\":\"r\\u0000\"}}]}\n"
+
+	output := ExtractOutput([]byte(body))
+
+	assert.Equal(t, "ab�c", output.Content)
+	assert.Equal(t, "r", output.Reasoning)
+	assert.Equal(t, "boom", TruncateErrorMessage("bo\x00om"))
+}

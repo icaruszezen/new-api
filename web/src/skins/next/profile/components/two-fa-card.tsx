@@ -21,10 +21,12 @@ import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { TwoFABackupDialog } from '@/features/profile/components/dialogs/two-fa-backup-dialog'
-import { TwoFADisableDialog } from '@/features/profile/components/dialogs/two-fa-disable-dialog'
-import { TwoFASetupDialog } from '@/features/profile/components/dialogs/two-fa-setup-dialog'
-import { useTwoFA } from '@/features/profile/hooks'
+import { SecureVerificationDialog } from '@/features/auth/secure-verification'
+import { TwoFABackupDialog } from '@/features/security/components/dialogs/two-fa-backup-dialog'
+import { TwoFADisableDialog } from '@/features/security/components/dialogs/two-fa-disable-dialog'
+import { TwoFASetupDialog } from '@/features/security/components/dialogs/two-fa-setup-dialog'
+import { useTwoFA } from '@/features/security/hooks/use-two-fa'
+import { useTwoFASetup } from '@/features/security/hooks/use-two-fa-setup'
 import { useDialogs } from '@/hooks/use-dialog'
 
 import { NextStatusPill } from './status-pill'
@@ -33,12 +35,14 @@ type NextProfileTwoFACardProps = {
   loading: boolean
 }
 
-type DialogKey = 'setup' | 'disable' | 'backup'
+type DialogKey = 'disable' | 'backup'
 
 export function NextProfileTwoFACard(props: NextProfileTwoFACardProps) {
   const { t } = useTranslation()
-  const { status, loading, refetch } = useTwoFA(!props.loading)
+  const { status, loading, error, refetch } = useTwoFA(!props.loading)
   const dialogs = useDialogs<DialogKey>()
+  // Setup runs its own step-up verification before the QR code is issued.
+  const setup = useTwoFASetup(refetch)
 
   if (props.loading || loading) {
     return (
@@ -49,6 +53,29 @@ export function NextProfileTwoFACard(props: NextProfileTwoFACardProps) {
         <Skeleton className='h-6 w-32' />
         <Skeleton className='mt-2 h-4 w-56' />
         <Skeleton className='mt-4 h-9 w-20' />
+      </section>
+    )
+  }
+
+  if (error) {
+    return (
+      <section
+        data-slot='next-profile-two-fa'
+        className='bg-card overflow-hidden rounded-xl border px-5 py-5'
+      >
+        <h2 className='text-lg font-medium tracking-tight'>
+          {t('Two-Step Verification')}
+        </h2>
+        <p role='alert' className='text-muted-foreground mt-1.5 text-sm'>
+          {t(error)}
+        </p>
+        <Button
+          variant='outline'
+          className='mt-4'
+          onClick={() => void refetch()}
+        >
+          {t('Retry')}
+        </Button>
       </section>
     )
   }
@@ -83,7 +110,11 @@ export function NextProfileTwoFACard(props: NextProfileTwoFACardProps) {
         </p>
 
         {!status.enabled && (
-          <Button className='mt-4' onClick={() => dialogs.open('setup')}>
+          <Button
+            className='mt-4'
+            onClick={setup.start}
+            disabled={setup.active}
+          >
             {t('Enable')}
           </Button>
         )}
@@ -105,12 +136,10 @@ export function NextProfileTwoFACard(props: NextProfileTwoFACardProps) {
         )}
       </section>
 
+      <SecureVerificationDialog {...setup.verificationDialogProps} />
       <TwoFASetupDialog
-        open={dialogs.isOpen('setup')}
-        onOpenChange={(open) =>
-          open ? dialogs.open('setup') : dialogs.close('setup')
-        }
-        onSuccess={refetch}
+        key={setup.setupDialogProps.setupData?.flow_token ?? 'initializing'}
+        {...setup.setupDialogProps}
       />
       <TwoFADisableDialog
         open={dialogs.isOpen('disable')}

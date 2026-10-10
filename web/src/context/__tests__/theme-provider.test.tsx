@@ -20,7 +20,6 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { getCookie, removeCookie, setCookie } from '@/lib/cookies'
 import {
   SYSTEM_CONFIG_STORAGE_KEY,
   useSystemConfigStore,
@@ -28,7 +27,7 @@ import {
 
 import { ThemeProvider, useTheme } from '../theme-provider'
 
-const THEME_COOKIE = 'vite-ui-theme'
+const THEME_STORAGE_KEY = 'newapi:theme:v1:mode'
 
 function ThemeProbe() {
   const { defaultTheme, resetTheme, resolvedTheme, setTheme, theme } =
@@ -100,7 +99,7 @@ describe('ThemeProvider site default', () => {
   beforeEach(() => {
     setSiteSkin('classic')
     localStorage.removeItem(SYSTEM_CONFIG_STORAGE_KEY)
-    removeCookie(THEME_COOKIE)
+    localStorage.removeItem(THEME_STORAGE_KEY)
     document.documentElement.classList.remove('light', 'dark')
     stubPrefersColorScheme('dark')
   })
@@ -108,7 +107,7 @@ describe('ThemeProvider site default', () => {
   afterEach(() => {
     setSiteSkin('classic')
     localStorage.removeItem(SYSTEM_CONFIG_STORAGE_KEY)
-    removeCookie(THEME_COOKIE)
+    localStorage.removeItem(THEME_STORAGE_KEY)
     document.documentElement.classList.remove('light', 'dark')
     vi.unstubAllGlobals()
   })
@@ -121,7 +120,7 @@ describe('ThemeProvider site default', () => {
     expect(screen.getByText('preference system')).toBeInTheDocument()
     expect(screen.getByText('default system')).toBeInTheDocument()
     await expectHtmlTheme('dark')
-    expect(getCookie(THEME_COOKIE)).toBeUndefined()
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull()
   })
 
   test('uses light when the site is next even if the OS prefers dark', async () => {
@@ -132,12 +131,12 @@ describe('ThemeProvider site default', () => {
     expect(screen.getByText('preference light')).toBeInTheDocument()
     expect(screen.getByText('default light')).toBeInTheDocument()
     await expectHtmlTheme('light')
-    expect(getCookie(THEME_COOKIE)).toBeUndefined()
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull()
   })
 
   test('keeps a stored dark preference when the site is next', async () => {
     setSiteSkin('next')
-    setCookie(THEME_COOKIE, 'dark')
+    localStorage.setItem(THEME_STORAGE_KEY, 'dark')
 
     renderTheme()
 
@@ -147,7 +146,7 @@ describe('ThemeProvider site default', () => {
 
   test('keeps a stored system preference when the site is next', async () => {
     setSiteSkin('next')
-    setCookie(THEME_COOKIE, 'system')
+    localStorage.setItem(THEME_STORAGE_KEY, 'system')
 
     renderTheme()
 
@@ -167,12 +166,12 @@ describe('ThemeProvider site default', () => {
 
     expect(screen.getByText('preference light')).toBeInTheDocument()
     await expectHtmlTheme('light')
-    expect(getCookie(THEME_COOKIE)).toBeUndefined()
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull()
   })
 
   test('does not change a stored theme when the site skin changes', async () => {
     setSiteSkin('classic')
-    setCookie(THEME_COOKIE, 'dark')
+    localStorage.setItem(THEME_STORAGE_KEY, 'dark')
     renderTheme()
     expect(screen.getByText('preference dark')).toBeInTheDocument()
 
@@ -182,7 +181,7 @@ describe('ThemeProvider site default', () => {
 
     expect(screen.getByText('preference dark')).toBeInTheDocument()
     await expectHtmlTheme('dark')
-    expect(getCookie(THEME_COOKIE)).toBe('dark')
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark')
   })
 
   test('uses persisted next on the first paint while the live store is still classic', async () => {
@@ -193,13 +192,13 @@ describe('ThemeProvider site default', () => {
 
     expect(screen.getByText('preference light')).toBeInTheDocument()
     await expectHtmlTheme('light')
-    expect(getCookie(THEME_COOKIE)).toBeUndefined()
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull()
   })
 
-  test('reset on next returns to light and clears the theme cookie', async () => {
+  test('reset on next returns to light and clears the stored theme', async () => {
     const user = userEvent.setup()
     setSiteSkin('next')
-    setCookie(THEME_COOKIE, 'dark')
+    localStorage.setItem(THEME_STORAGE_KEY, 'dark')
     renderTheme()
     expect(screen.getByText('preference dark')).toBeInTheDocument()
 
@@ -207,6 +206,6 @@ describe('ThemeProvider site default', () => {
 
     expect(screen.getByText('preference light')).toBeInTheDocument()
     await expectHtmlTheme('light')
-    expect(getCookie(THEME_COOKIE)).toBeUndefined()
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull()
   })
 })

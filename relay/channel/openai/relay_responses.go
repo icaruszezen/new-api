@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -15,6 +15,8 @@ import (
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
@@ -34,19 +36,13 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
 
+	info.ObserveResponseModel(responsesResponse.Model)
+	responseBody = rewriteSGLangResponsesCreatedAt(info, responseBody, "created_at", responsesResponse.CreatedAt)
+
 	// compute usage
-	usage := dto.Usage{}
-	if responsesResponse.Usage != nil {
-		usage.PromptTokens = responsesResponse.Usage.InputTokens
-		usage.CompletionTokens = responsesResponse.Usage.OutputTokens
-		usage.TotalTokens = responsesResponse.Usage.TotalTokens
-		if responsesResponse.Usage.InputTokensDetails != nil {
-			usage.PromptTokensDetails.CachedTokens = responsesResponse.Usage.InputTokensDetails.CachedTokens
-			usage.PromptTokensDetails.CacheWriteTokens = responsesResponse.Usage.InputTokensDetails.CacheWriteTokens
-			usage.InputTokensDetails = responsesResponse.Usage.InputTokensDetails
-		}
-	}
-	service.ApplyChannelCacheReadBillingRatio(info, &usage, &responseBody)
+	usage := &dto.Usage{}
+	service.ApplyResponsesUsage(usage, responsesResponse.Usage)
+	service.ApplyChannelCacheReadBillingRatio(info, usage, &responseBody)
 
 	// 写入新的 response body
 	service.IOCopyBytesGracefully(c, resp, responseBody)
@@ -62,22 +58,20 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			info.CountBillableToolCall(dto.BuildInCallFunctionCall, output.Name)
 		}
 	}
+	info.ApplyVendorToolUsage(responseBody)
 
 	imageCounter := &relaycommon.ImageGenerationCallCounter{}
-	if !relaycommon.IsNonBillableResponsesStatus(responsesResponse.Status) {
-		for i := range responsesResponse.Output {
-			idx := i
-			imageCounter.Observe(&responsesResponse.Output[i], &idx)
-		}
+	for i := range responsesResponse.Output {
+		imageCounter.Observe(&responsesResponse.Output[i], &i)
 	}
 	imageCounter.Commit(info)
 
-	return &usage, nil
+	return usage, nil
 }
 
 func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
 	if resp == nil || resp.Body == nil {
-		logger.LogError(c, "invalid response or response body")
+		logger.LogError(c, common.LogText("invalid response or response body"))
 		return nil, types.NewError(fmt.Errorf("invalid response"), types.ErrorCodeBadResponse)
 	}
 
@@ -85,11 +79,10 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	info.ApplyResponsesClientDisconnectDrain()
 
-	var usage = &dto.Usage{}
-	var responseTextBuilder strings.Builder
-	cacheBillingApplied := false
-	imageCounter := &relaycommon.ImageGenerationCallCounter{}
-	imageCommitted := false
+	accumulator := service.NewResponsesUsageAccumulator(info)
+	// upstreamUsage keeps only the token counts upstream reported, so the
+	// first-token error handling below can tell them from Finish's estimates.
+	upstreamUsage := &dto.Usage{}
 	var firstTokenScan responsesFirstTokenScan
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
@@ -97,118 +90,80 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		// 检查当前数据是否包含 completed 状态和 usage 信息
 		var streamResponse dto.ResponsesStreamResponse
 		if err := common.UnmarshalJsonStr(data, &streamResponse); err != nil {
-			logger.LogError(c, "failed to unmarshal stream response: "+err.Error())
+			logger.LogError(c, common.LogText("failed to unmarshal stream response: %s", err.Error()))
 			sr.Error(err)
 			return
 		}
-		outboundData := data
 		observeResponsesFirstTokenEvent(&firstTokenScan, &streamResponse)
+		if streamResponse.Response != nil {
+			data = string(rewriteSGLangResponsesCreatedAt(info, []byte(data), "response.created_at", streamResponse.Response.CreatedAt))
+		}
 		switch streamResponse.Type {
 		case "response.completed", "response.done":
 			if streamResponse.Response != nil {
-				applyResponsesStreamUsage(usage, streamResponse.Response.Usage)
-				if !imageCommitted {
-					if relaycommon.IsNonBillableResponsesStatus(streamResponse.Response.Status) {
-						imageCounter.Reset()
-						imageCounter.Commit(info)
-						imageCommitted = true
-					} else {
-						for i := range streamResponse.Response.Output {
-							idx := i
-							imageCounter.Observe(&streamResponse.Response.Output[i], &idx)
-						}
-						imageCounter.Commit(info)
-						imageCommitted = true
-					}
-				}
-			} else if !imageCommitted {
-				imageCounter.Commit(info)
-				imageCommitted = true
+				service.ApplyResponsesUsage(upstreamUsage, streamResponse.Response.Usage)
 			}
-			bodyBytes := []byte(outboundData)
-			service.ApplyChannelCacheReadBillingRatio(info, usage, &bodyBytes)
-			outboundData = string(bodyBytes)
-			cacheBillingApplied = true
+			// Patch the client-visible cache-read usage with the channel billing
+			// ratio. The throwaway usage keeps the accumulator's settlement usage
+			// unscaled until it is scaled once after Finish with the same pinned ratio.
+			bodyBytes := []byte(data)
+			service.ApplyChannelCacheReadBillingRatio(info, &dto.Usage{}, &bodyBytes)
+			data = string(bodyBytes)
 		case "response.failed", "response.incomplete", "response.cancelled", "response.canceled":
 			if streamResponse.Response != nil {
-				applyResponsesStreamUsage(usage, streamResponse.Response.Usage)
-			}
-			if !imageCommitted {
-				imageCounter.Reset()
-				imageCounter.Commit(info)
-				imageCommitted = true
-			}
-		case "response.output_text.delta":
-			// 处理输出文本
-			responseTextBuilder.WriteString(streamResponse.Delta)
-		case dto.ResponsesOutputTypeItemDone:
-			if streamResponse.Item != nil {
-				switch streamResponse.Item.Type {
-				case dto.BuildInCallWebSearchCall:
-					info.CountBillableToolCall(dto.BuildInCallWebSearchCall, "")
-				case dto.BuildInCallFileSearchCall:
-					info.CountBillableToolCall(dto.BuildInCallFileSearchCall, "")
-				case dto.BuildInCallFunctionCall:
-					info.CountBillableToolCall(dto.BuildInCallFunctionCall, streamResponse.Item.Name)
-				case dto.ResponsesOutputTypeImageGenerationCall:
-					if !imageCommitted {
-						imageCounter.Observe(streamResponse.Item, streamResponse.OutputIndex)
-					}
-				}
+				service.ApplyResponsesUsage(upstreamUsage, streamResponse.Response.Usage)
 			}
 		}
-		sendResponsesStreamData(c, streamResponse, outboundData)
+		sendResponsesStreamData(c, streamResponse, data)
+		accumulator.Observe(&streamResponse, common.StringToByteSlice(data))
 	})
 
-	upstreamCompletion := usage.CompletionTokens
-	estimatedCompletion := 0
-	if upstreamCompletion == 0 {
-		tempStr := responseTextBuilder.String()
-		if len(tempStr) > 0 {
-			estimatedCompletion = service.CountTextToken(tempStr, info.UpstreamModelName)
+	common.SetContextKey(c, constant.ContextKeyResponseStreamStatus, info.StreamStatus)
+	info.StreamStatus.RequireTerminal()
+
+	usage := accumulator.Finish()
+	// After an actual upstream error, output estimated from streamed text is not
+	// billed unless it is exactly one token, which first-token error correction
+	// inspects below.
+	if upstreamUsage.CompletionTokens == 0 && firstTokenScan.actualError && usage.CompletionTokens != 1 {
+		usage.CompletionTokens = 0
+		// Without output, Finish's rule bills the estimated prompt only when
+		// upstream did not report an explicit failure.
+		if info.StreamStatus.ResponseFailed() {
+			usage.PromptTokens = upstreamUsage.PromptTokens
 		}
+		usage.TotalTokens = usage.PromptTokens
+		// Finish also copies the estimate into BillingUsage, which settlement prefers.
+		usage.BillingUsage = dto.CloneBillingUsage(upstreamUsage.BillingUsage)
 	}
+	service.ApplyChannelCacheReadBillingRatio(info, usage, nil)
 
-	dirty := cloneResponsesUsage(usage)
-	decisionTokens := upstreamCompletion
-	if upstreamCompletion == 0 && estimatedCompletion == 1 {
-		decisionTokens = 1
-		dirty.CompletionTokens = 1
-	}
-	if dirty.PromptTokens == 0 && dirty.CompletionTokens != 0 {
-		dirty.PromptTokens = info.GetEstimatePromptTokens()
-	}
-	dirty.TotalTokens = dirty.PromptTokens + dirty.CompletionTokens
-
-	endReason := relaycommon.StreamEndReasonNone
-	if info.StreamStatus != nil {
-		endReason = info.StreamStatus.EndReason
-	}
 	if common.FirstTokenErrorCorrectionEnabled {
-		decision := decideResponsesFirstTokenError(firstTokenScan, decisionTokens, endReason, common.FirstTokenErrorTreatAllOutputOneEnabled)
+		endReason := relaycommon.StreamEndReasonNone
+		if info.StreamStatus != nil {
+			endReason = info.StreamStatus.EndReason
+		}
+		decision := decideResponsesFirstTokenError(firstTokenScan, usage.CompletionTokens, endReason, common.FirstTokenErrorTreatAllOutputOneEnabled)
 		if decision.Hit {
-			if !cacheBillingApplied {
-				service.ApplyChannelCacheReadBillingRatio(info, dirty, nil)
-			}
-			service.HandleResponsesFirstTokenError(c, info, dirty, decision.ErrorMessage)
+			service.HandleResponsesFirstTokenError(c, info, cloneResponsesUsage(usage), decision.ErrorMessage)
 			resetResponsesUsage(usage)
 			return usage, types.NewError(fmt.Errorf("%s", decision.ErrorMessage), types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 		}
 	}
 
-	if usage.CompletionTokens == 0 && !(firstTokenScan.actualError && estimatedCompletion != 1) {
-		usage.CompletionTokens = estimatedCompletion
-	}
-
-	if usage.PromptTokens == 0 && usage.CompletionTokens != 0 {
-		usage.PromptTokens = info.GetEstimatePromptTokens()
-	}
-
-	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
-
-	if !cacheBillingApplied {
-		service.ApplyChannelCacheReadBillingRatio(info, usage, nil)
-	}
-
 	return usage, nil
+}
+
+func rewriteSGLangResponsesCreatedAt(info *relaycommon.RelayInfo, payload []byte, path string, createdAt dto.IntValue) []byte {
+	if info.GetChannelType() != constant.ChannelTypeSGLang {
+		return payload
+	}
+	if !gjson.GetBytes(payload, path).Exists() {
+		return payload
+	}
+	patched, err := sjson.SetBytes(payload, path, int(createdAt))
+	if err != nil {
+		return payload
+	}
+	return patched
 }

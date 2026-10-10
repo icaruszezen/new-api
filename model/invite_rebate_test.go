@@ -437,7 +437,7 @@ func TestInsertPersistsInviterId(t *testing.T) {
 	withInviteRebateSetting(t, 0, 0, 0)
 
 	inviter := createInviteTestUser(t, "inviter", 0)
-	user := &User{Username: "password-user", Password: "secret", DisplayName: "Password User"}
+	user := &User{Username: "password-user", Password: "secret-password", DisplayName: "Password User"}
 	require.NoError(t, user.Insert(inviter.Id))
 
 	var stored User

@@ -50,11 +50,14 @@ import { Route as AuthenticatedModelsSectionRouteImport } from './routes/_authen
 import { Route as AuthenticatedPlaygroundIndexRouteImport } from './routes/_authenticated/playground/index'
 import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authenticated/profile/index'
 import { Route as AuthenticatedRedemptionCodesIndexRouteImport } from './routes/_authenticated/redemption-codes/index'
+import { Route as AuthenticatedSecurityIndexRouteImport } from './routes/_authenticated/security/index'
 import { Route as AuthenticatedSubscriptionsIndexRouteImport } from './routes/_authenticated/subscriptions/index'
 import { Route as AuthenticatedSystemInfoIndexRouteImport } from './routes/_authenticated/system-info/index'
 import { Route as AuthenticatedSystemSettingsIndexRouteImport } from './routes/_authenticated/system-settings/index'
+import { Route as AuthenticatedTaskPluginsIndexRouteImport } from './routes/_authenticated/task-plugins/index'
 import { Route as AuthenticatedUsageLogsIndexRouteImport } from './routes/_authenticated/usage-logs/index'
 import { Route as AuthenticatedUsageLogsSectionRouteImport } from './routes/_authenticated/usage-logs/$section'
+import { Route as AuthenticatedUsageLogsAuditRouteImport } from './routes/_authenticated/usage-logs/audit'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedWalletIndexRouteImport } from './routes/_authenticated/wallet/index'
 import { Route as PricingModelIdIndexRouteImport } from './routes/pricing/$modelId/index'
@@ -68,6 +71,8 @@ import { Route as AuthenticatedSystemSettingsModelsIndexRouteImport } from './ro
 import { Route as AuthenticatedSystemSettingsModelsSectionRouteImport } from './routes/_authenticated/system-settings/models/$section'
 import { Route as AuthenticatedSystemSettingsOperationsIndexRouteImport } from './routes/_authenticated/system-settings/operations/index'
 import { Route as AuthenticatedSystemSettingsOperationsSectionRouteImport } from './routes/_authenticated/system-settings/operations/$section'
+import { Route as AuthenticatedSystemSettingsRequestPoliciesIndexRouteImport } from './routes/_authenticated/system-settings/request-policies/index'
+import { Route as AuthenticatedSystemSettingsRequestPoliciesSectionRouteImport } from './routes/_authenticated/system-settings/request-policies/$section'
 import { Route as AuthenticatedSystemSettingsSecurityIndexRouteImport } from './routes/_authenticated/system-settings/security/index'
 import { Route as AuthenticatedSystemSettingsSecuritySectionRouteImport } from './routes/_authenticated/system-settings/security/$section'
 import { Route as AuthenticatedSystemSettingsSiteIndexRouteImport } from './routes/_authenticated/system-settings/site/index'
@@ -290,6 +295,12 @@ const AuthenticatedRedemptionCodesIndexRoute =
     path: '/redemption-codes/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSecurityIndexRoute =
+  AuthenticatedSecurityIndexRouteImport.update({
+    id: '/security/',
+    path: '/security/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSubscriptionsIndexRoute =
   AuthenticatedSubscriptionsIndexRouteImport.update({
     id: '/subscriptions/',
@@ -308,6 +319,12 @@ const AuthenticatedSystemSettingsIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedSystemSettingsRouteRoute,
   } as any)
+const AuthenticatedTaskPluginsIndexRoute =
+  AuthenticatedTaskPluginsIndexRouteImport.update({
+    id: '/task-plugins/',
+    path: '/task-plugins/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedUsageLogsIndexRoute =
   AuthenticatedUsageLogsIndexRouteImport.update({
     id: '/usage-logs/',
@@ -318,6 +335,12 @@ const AuthenticatedUsageLogsSectionRoute =
   AuthenticatedUsageLogsSectionRouteImport.update({
     id: '/usage-logs/$section',
     path: '/usage-logs/$section',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedUsageLogsAuditRoute =
+  AuthenticatedUsageLogsAuditRouteImport.update({
+    id: '/usage-logs/audit',
+    path: '/usage-logs/audit',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
@@ -396,6 +419,18 @@ const AuthenticatedSystemSettingsOperationsSectionRoute =
     path: '/operations/$section',
     getParentRoute: () => AuthenticatedSystemSettingsRouteRoute,
   } as any)
+const AuthenticatedSystemSettingsRequestPoliciesIndexRoute =
+  AuthenticatedSystemSettingsRequestPoliciesIndexRouteImport.update({
+    id: '/request-policies/',
+    path: '/request-policies/',
+    getParentRoute: () => AuthenticatedSystemSettingsRouteRoute,
+  } as any)
+const AuthenticatedSystemSettingsRequestPoliciesSectionRoute =
+  AuthenticatedSystemSettingsRequestPoliciesSectionRouteImport.update({
+    id: '/request-policies/$section',
+    path: '/request-policies/$section',
+    getParentRoute: () => AuthenticatedSystemSettingsRouteRoute,
+  } as any)
 const AuthenticatedSystemSettingsSecurityIndexRoute =
   AuthenticatedSystemSettingsSecurityIndexRouteImport.update({
     id: '/security/',
@@ -451,6 +486,7 @@ export interface FileRoutesByFullPath {
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
+  '/usage-logs/audit': typeof AuthenticatedUsageLogsAuditRoute
   '/channel-monitoring-settings/': typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
@@ -462,9 +498,11 @@ export interface FileRoutesByFullPath {
   '/playground/': typeof AuthenticatedPlaygroundIndexRoute
   '/profile/': typeof AuthenticatedProfileIndexRoute
   '/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
+  '/security/': typeof AuthenticatedSecurityIndexRoute
   '/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-info/': typeof AuthenticatedSystemInfoIndexRoute
   '/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
+  '/task-plugins/': typeof AuthenticatedTaskPluginsIndexRoute
   '/usage-logs/': typeof AuthenticatedUsageLogsIndexRoute
   '/users/': typeof AuthenticatedUsersIndexRoute
   '/wallet/': typeof AuthenticatedWalletIndexRoute
@@ -474,6 +512,7 @@ export interface FileRoutesByFullPath {
   '/system-settings/content/$section': typeof AuthenticatedSystemSettingsContentSectionRoute
   '/system-settings/models/$section': typeof AuthenticatedSystemSettingsModelsSectionRoute
   '/system-settings/operations/$section': typeof AuthenticatedSystemSettingsOperationsSectionRoute
+  '/system-settings/request-policies/$section': typeof AuthenticatedSystemSettingsRequestPoliciesSectionRoute
   '/system-settings/security/$section': typeof AuthenticatedSystemSettingsSecuritySectionRoute
   '/system-settings/site/$section': typeof AuthenticatedSystemSettingsSiteSectionRoute
   '/system-settings/auth/': typeof AuthenticatedSystemSettingsAuthIndexRoute
@@ -481,6 +520,7 @@ export interface FileRoutesByFullPath {
   '/system-settings/content/': typeof AuthenticatedSystemSettingsContentIndexRoute
   '/system-settings/models/': typeof AuthenticatedSystemSettingsModelsIndexRoute
   '/system-settings/operations/': typeof AuthenticatedSystemSettingsOperationsIndexRoute
+  '/system-settings/request-policies/': typeof AuthenticatedSystemSettingsRequestPoliciesIndexRoute
   '/system-settings/security/': typeof AuthenticatedSystemSettingsSecurityIndexRoute
   '/system-settings/site/': typeof AuthenticatedSystemSettingsSiteIndexRoute
 }
@@ -513,6 +553,7 @@ export interface FileRoutesByTo {
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
+  '/usage-logs/audit': typeof AuthenticatedUsageLogsAuditRoute
   '/channel-monitoring-settings': typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
@@ -524,9 +565,11 @@ export interface FileRoutesByTo {
   '/playground': typeof AuthenticatedPlaygroundIndexRoute
   '/profile': typeof AuthenticatedProfileIndexRoute
   '/redemption-codes': typeof AuthenticatedRedemptionCodesIndexRoute
+  '/security': typeof AuthenticatedSecurityIndexRoute
   '/subscriptions': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-info': typeof AuthenticatedSystemInfoIndexRoute
   '/system-settings': typeof AuthenticatedSystemSettingsIndexRoute
+  '/task-plugins': typeof AuthenticatedTaskPluginsIndexRoute
   '/usage-logs': typeof AuthenticatedUsageLogsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/wallet': typeof AuthenticatedWalletIndexRoute
@@ -536,6 +579,7 @@ export interface FileRoutesByTo {
   '/system-settings/content/$section': typeof AuthenticatedSystemSettingsContentSectionRoute
   '/system-settings/models/$section': typeof AuthenticatedSystemSettingsModelsSectionRoute
   '/system-settings/operations/$section': typeof AuthenticatedSystemSettingsOperationsSectionRoute
+  '/system-settings/request-policies/$section': typeof AuthenticatedSystemSettingsRequestPoliciesSectionRoute
   '/system-settings/security/$section': typeof AuthenticatedSystemSettingsSecuritySectionRoute
   '/system-settings/site/$section': typeof AuthenticatedSystemSettingsSiteSectionRoute
   '/system-settings/auth': typeof AuthenticatedSystemSettingsAuthIndexRoute
@@ -543,6 +587,7 @@ export interface FileRoutesByTo {
   '/system-settings/content': typeof AuthenticatedSystemSettingsContentIndexRoute
   '/system-settings/models': typeof AuthenticatedSystemSettingsModelsIndexRoute
   '/system-settings/operations': typeof AuthenticatedSystemSettingsOperationsIndexRoute
+  '/system-settings/request-policies': typeof AuthenticatedSystemSettingsRequestPoliciesIndexRoute
   '/system-settings/security': typeof AuthenticatedSystemSettingsSecurityIndexRoute
   '/system-settings/site': typeof AuthenticatedSystemSettingsSiteIndexRoute
 }
@@ -579,6 +624,7 @@ export interface FileRoutesById {
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/models/$section': typeof AuthenticatedModelsSectionRoute
   '/_authenticated/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
+  '/_authenticated/usage-logs/audit': typeof AuthenticatedUsageLogsAuditRoute
   '/_authenticated/channel-monitoring-settings/': typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
@@ -590,9 +636,11 @@ export interface FileRoutesById {
   '/_authenticated/playground/': typeof AuthenticatedPlaygroundIndexRoute
   '/_authenticated/profile/': typeof AuthenticatedProfileIndexRoute
   '/_authenticated/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
+  '/_authenticated/security/': typeof AuthenticatedSecurityIndexRoute
   '/_authenticated/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/_authenticated/system-info/': typeof AuthenticatedSystemInfoIndexRoute
   '/_authenticated/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
+  '/_authenticated/task-plugins/': typeof AuthenticatedTaskPluginsIndexRoute
   '/_authenticated/usage-logs/': typeof AuthenticatedUsageLogsIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/wallet/': typeof AuthenticatedWalletIndexRoute
@@ -602,6 +650,7 @@ export interface FileRoutesById {
   '/_authenticated/system-settings/content/$section': typeof AuthenticatedSystemSettingsContentSectionRoute
   '/_authenticated/system-settings/models/$section': typeof AuthenticatedSystemSettingsModelsSectionRoute
   '/_authenticated/system-settings/operations/$section': typeof AuthenticatedSystemSettingsOperationsSectionRoute
+  '/_authenticated/system-settings/request-policies/$section': typeof AuthenticatedSystemSettingsRequestPoliciesSectionRoute
   '/_authenticated/system-settings/security/$section': typeof AuthenticatedSystemSettingsSecuritySectionRoute
   '/_authenticated/system-settings/site/$section': typeof AuthenticatedSystemSettingsSiteSectionRoute
   '/_authenticated/system-settings/auth/': typeof AuthenticatedSystemSettingsAuthIndexRoute
@@ -609,6 +658,7 @@ export interface FileRoutesById {
   '/_authenticated/system-settings/content/': typeof AuthenticatedSystemSettingsContentIndexRoute
   '/_authenticated/system-settings/models/': typeof AuthenticatedSystemSettingsModelsIndexRoute
   '/_authenticated/system-settings/operations/': typeof AuthenticatedSystemSettingsOperationsIndexRoute
+  '/_authenticated/system-settings/request-policies/': typeof AuthenticatedSystemSettingsRequestPoliciesIndexRoute
   '/_authenticated/system-settings/security/': typeof AuthenticatedSystemSettingsSecurityIndexRoute
   '/_authenticated/system-settings/site/': typeof AuthenticatedSystemSettingsSiteIndexRoute
 }
@@ -644,6 +694,7 @@ export interface FileRouteTypes {
     | '/errors/$error'
     | '/models/$section'
     | '/usage-logs/$section'
+    | '/usage-logs/audit'
     | '/channel-monitoring-settings/'
     | '/channels/'
     | '/dashboard/'
@@ -655,9 +706,11 @@ export interface FileRouteTypes {
     | '/playground/'
     | '/profile/'
     | '/redemption-codes/'
+    | '/security/'
     | '/subscriptions/'
     | '/system-info/'
     | '/system-settings/'
+    | '/task-plugins/'
     | '/usage-logs/'
     | '/users/'
     | '/wallet/'
@@ -667,6 +720,7 @@ export interface FileRouteTypes {
     | '/system-settings/content/$section'
     | '/system-settings/models/$section'
     | '/system-settings/operations/$section'
+    | '/system-settings/request-policies/$section'
     | '/system-settings/security/$section'
     | '/system-settings/site/$section'
     | '/system-settings/auth/'
@@ -674,6 +728,7 @@ export interface FileRouteTypes {
     | '/system-settings/content/'
     | '/system-settings/models/'
     | '/system-settings/operations/'
+    | '/system-settings/request-policies/'
     | '/system-settings/security/'
     | '/system-settings/site/'
   fileRoutesByTo: FileRoutesByTo
@@ -706,6 +761,7 @@ export interface FileRouteTypes {
     | '/errors/$error'
     | '/models/$section'
     | '/usage-logs/$section'
+    | '/usage-logs/audit'
     | '/channel-monitoring-settings'
     | '/channels'
     | '/dashboard'
@@ -717,9 +773,11 @@ export interface FileRouteTypes {
     | '/playground'
     | '/profile'
     | '/redemption-codes'
+    | '/security'
     | '/subscriptions'
     | '/system-info'
     | '/system-settings'
+    | '/task-plugins'
     | '/usage-logs'
     | '/users'
     | '/wallet'
@@ -729,6 +787,7 @@ export interface FileRouteTypes {
     | '/system-settings/content/$section'
     | '/system-settings/models/$section'
     | '/system-settings/operations/$section'
+    | '/system-settings/request-policies/$section'
     | '/system-settings/security/$section'
     | '/system-settings/site/$section'
     | '/system-settings/auth'
@@ -736,6 +795,7 @@ export interface FileRouteTypes {
     | '/system-settings/content'
     | '/system-settings/models'
     | '/system-settings/operations'
+    | '/system-settings/request-policies'
     | '/system-settings/security'
     | '/system-settings/site'
   id:
@@ -771,6 +831,7 @@ export interface FileRouteTypes {
     | '/_authenticated/errors/$error'
     | '/_authenticated/models/$section'
     | '/_authenticated/usage-logs/$section'
+    | '/_authenticated/usage-logs/audit'
     | '/_authenticated/channel-monitoring-settings/'
     | '/_authenticated/channels/'
     | '/_authenticated/dashboard/'
@@ -782,9 +843,11 @@ export interface FileRouteTypes {
     | '/_authenticated/playground/'
     | '/_authenticated/profile/'
     | '/_authenticated/redemption-codes/'
+    | '/_authenticated/security/'
     | '/_authenticated/subscriptions/'
     | '/_authenticated/system-info/'
     | '/_authenticated/system-settings/'
+    | '/_authenticated/task-plugins/'
     | '/_authenticated/usage-logs/'
     | '/_authenticated/users/'
     | '/_authenticated/wallet/'
@@ -794,6 +857,7 @@ export interface FileRouteTypes {
     | '/_authenticated/system-settings/content/$section'
     | '/_authenticated/system-settings/models/$section'
     | '/_authenticated/system-settings/operations/$section'
+    | '/_authenticated/system-settings/request-policies/$section'
     | '/_authenticated/system-settings/security/$section'
     | '/_authenticated/system-settings/site/$section'
     | '/_authenticated/system-settings/auth/'
@@ -801,6 +865,7 @@ export interface FileRouteTypes {
     | '/_authenticated/system-settings/content/'
     | '/_authenticated/system-settings/models/'
     | '/_authenticated/system-settings/operations/'
+    | '/_authenticated/system-settings/request-policies/'
     | '/_authenticated/system-settings/security/'
     | '/_authenticated/system-settings/site/'
   fileRoutesById: FileRoutesById
@@ -1114,6 +1179,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRedemptionCodesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/security/': {
+      id: '/_authenticated/security/'
+      path: '/security'
+      fullPath: '/security/'
+      preLoaderRoute: typeof AuthenticatedSecurityIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/subscriptions/': {
       id: '/_authenticated/subscriptions/'
       path: '/subscriptions'
@@ -1135,6 +1207,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemSettingsIndexRouteImport
       parentRoute: typeof AuthenticatedSystemSettingsRouteRoute
     }
+    '/_authenticated/task-plugins/': {
+      id: '/_authenticated/task-plugins/'
+      path: '/task-plugins'
+      fullPath: '/task-plugins/'
+      preLoaderRoute: typeof AuthenticatedTaskPluginsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/usage-logs/': {
       id: '/_authenticated/usage-logs/'
       path: '/usage-logs'
@@ -1147,6 +1226,13 @@ declare module '@tanstack/react-router' {
       path: '/usage-logs/$section'
       fullPath: '/usage-logs/$section'
       preLoaderRoute: typeof AuthenticatedUsageLogsSectionRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/usage-logs/audit': {
+      id: '/_authenticated/usage-logs/audit'
+      path: '/usage-logs/audit'
+      fullPath: '/usage-logs/audit'
+      preLoaderRoute: typeof AuthenticatedUsageLogsAuditRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/users/': {
@@ -1240,6 +1326,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemSettingsOperationsSectionRouteImport
       parentRoute: typeof AuthenticatedSystemSettingsRouteRoute
     }
+    '/_authenticated/system-settings/request-policies/': {
+      id: '/_authenticated/system-settings/request-policies/'
+      path: '/request-policies'
+      fullPath: '/system-settings/request-policies/'
+      preLoaderRoute: typeof AuthenticatedSystemSettingsRequestPoliciesIndexRouteImport
+      parentRoute: typeof AuthenticatedSystemSettingsRouteRoute
+    }
+    '/_authenticated/system-settings/request-policies/$section': {
+      id: '/_authenticated/system-settings/request-policies/$section'
+      path: '/request-policies/$section'
+      fullPath: '/system-settings/request-policies/$section'
+      preLoaderRoute: typeof AuthenticatedSystemSettingsRequestPoliciesSectionRouteImport
+      parentRoute: typeof AuthenticatedSystemSettingsRouteRoute
+    }
     '/_authenticated/system-settings/security/': {
       id: '/_authenticated/system-settings/security/'
       path: '/security'
@@ -1304,6 +1404,7 @@ interface AuthenticatedSystemSettingsRouteRouteChildren {
   AuthenticatedSystemSettingsContentSectionRoute: typeof AuthenticatedSystemSettingsContentSectionRoute
   AuthenticatedSystemSettingsModelsSectionRoute: typeof AuthenticatedSystemSettingsModelsSectionRoute
   AuthenticatedSystemSettingsOperationsSectionRoute: typeof AuthenticatedSystemSettingsOperationsSectionRoute
+  AuthenticatedSystemSettingsRequestPoliciesSectionRoute: typeof AuthenticatedSystemSettingsRequestPoliciesSectionRoute
   AuthenticatedSystemSettingsSecuritySectionRoute: typeof AuthenticatedSystemSettingsSecuritySectionRoute
   AuthenticatedSystemSettingsSiteSectionRoute: typeof AuthenticatedSystemSettingsSiteSectionRoute
   AuthenticatedSystemSettingsAuthIndexRoute: typeof AuthenticatedSystemSettingsAuthIndexRoute
@@ -1311,6 +1412,7 @@ interface AuthenticatedSystemSettingsRouteRouteChildren {
   AuthenticatedSystemSettingsContentIndexRoute: typeof AuthenticatedSystemSettingsContentIndexRoute
   AuthenticatedSystemSettingsModelsIndexRoute: typeof AuthenticatedSystemSettingsModelsIndexRoute
   AuthenticatedSystemSettingsOperationsIndexRoute: typeof AuthenticatedSystemSettingsOperationsIndexRoute
+  AuthenticatedSystemSettingsRequestPoliciesIndexRoute: typeof AuthenticatedSystemSettingsRequestPoliciesIndexRoute
   AuthenticatedSystemSettingsSecurityIndexRoute: typeof AuthenticatedSystemSettingsSecurityIndexRoute
   AuthenticatedSystemSettingsSiteIndexRoute: typeof AuthenticatedSystemSettingsSiteIndexRoute
 }
@@ -1329,6 +1431,8 @@ const AuthenticatedSystemSettingsRouteRouteChildren: AuthenticatedSystemSettings
       AuthenticatedSystemSettingsModelsSectionRoute,
     AuthenticatedSystemSettingsOperationsSectionRoute:
       AuthenticatedSystemSettingsOperationsSectionRoute,
+    AuthenticatedSystemSettingsRequestPoliciesSectionRoute:
+      AuthenticatedSystemSettingsRequestPoliciesSectionRoute,
     AuthenticatedSystemSettingsSecuritySectionRoute:
       AuthenticatedSystemSettingsSecuritySectionRoute,
     AuthenticatedSystemSettingsSiteSectionRoute:
@@ -1343,6 +1447,8 @@ const AuthenticatedSystemSettingsRouteRouteChildren: AuthenticatedSystemSettings
       AuthenticatedSystemSettingsModelsIndexRoute,
     AuthenticatedSystemSettingsOperationsIndexRoute:
       AuthenticatedSystemSettingsOperationsIndexRoute,
+    AuthenticatedSystemSettingsRequestPoliciesIndexRoute:
+      AuthenticatedSystemSettingsRequestPoliciesIndexRoute,
     AuthenticatedSystemSettingsSecurityIndexRoute:
       AuthenticatedSystemSettingsSecurityIndexRoute,
     AuthenticatedSystemSettingsSiteIndexRoute:
@@ -1362,6 +1468,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedModelsSectionRoute: typeof AuthenticatedModelsSectionRoute
   AuthenticatedUsageLogsSectionRoute: typeof AuthenticatedUsageLogsSectionRoute
+  AuthenticatedUsageLogsAuditRoute: typeof AuthenticatedUsageLogsAuditRoute
   AuthenticatedChannelMonitoringSettingsIndexRoute: typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
@@ -1373,8 +1480,10 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPlaygroundIndexRoute: typeof AuthenticatedPlaygroundIndexRoute
   AuthenticatedProfileIndexRoute: typeof AuthenticatedProfileIndexRoute
   AuthenticatedRedemptionCodesIndexRoute: typeof AuthenticatedRedemptionCodesIndexRoute
+  AuthenticatedSecurityIndexRoute: typeof AuthenticatedSecurityIndexRoute
   AuthenticatedSubscriptionsIndexRoute: typeof AuthenticatedSubscriptionsIndexRoute
   AuthenticatedSystemInfoIndexRoute: typeof AuthenticatedSystemInfoIndexRoute
+  AuthenticatedTaskPluginsIndexRoute: typeof AuthenticatedTaskPluginsIndexRoute
   AuthenticatedUsageLogsIndexRoute: typeof AuthenticatedUsageLogsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedWalletIndexRoute: typeof AuthenticatedWalletIndexRoute
@@ -1389,6 +1498,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedModelsSectionRoute: AuthenticatedModelsSectionRoute,
   AuthenticatedUsageLogsSectionRoute: AuthenticatedUsageLogsSectionRoute,
+  AuthenticatedUsageLogsAuditRoute: AuthenticatedUsageLogsAuditRoute,
   AuthenticatedChannelMonitoringSettingsIndexRoute:
     AuthenticatedChannelMonitoringSettingsIndexRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
@@ -1404,8 +1514,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProfileIndexRoute: AuthenticatedProfileIndexRoute,
   AuthenticatedRedemptionCodesIndexRoute:
     AuthenticatedRedemptionCodesIndexRoute,
+  AuthenticatedSecurityIndexRoute: AuthenticatedSecurityIndexRoute,
   AuthenticatedSubscriptionsIndexRoute: AuthenticatedSubscriptionsIndexRoute,
   AuthenticatedSystemInfoIndexRoute: AuthenticatedSystemInfoIndexRoute,
+  AuthenticatedTaskPluginsIndexRoute: AuthenticatedTaskPluginsIndexRoute,
   AuthenticatedUsageLogsIndexRoute: AuthenticatedUsageLogsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedWalletIndexRoute: AuthenticatedWalletIndexRoute,

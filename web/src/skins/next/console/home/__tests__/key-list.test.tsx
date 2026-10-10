@@ -215,7 +215,9 @@ describe('next console key list', () => {
     expect(screen.getByRole('columnheader', { name: 'Name' })).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'API Key' })).toBeVisible()
-    expect(screen.getByRole('columnheader', { name: 'Quota' })).toBeVisible()
+    expect(
+      screen.getByRole('columnheader', { name: 'Quota ($)' })
+    ).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'Group' })).toBeVisible()
     expect(screen.queryByRole('columnheader', { name: 'Models' })).toBeNull()
     expect(
@@ -236,6 +238,7 @@ describe('next console key list', () => {
     expect(ratio.className).toMatch(/bg-green-(500|400)\/15/)
     expect(screen.queryByRole('columnheader', { name: 'Created' })).toBeNull()
     expect(screen.queryByRole('columnheader', { name: 'Last Used' })).toBeNull()
+    expect(screen.queryByRole('columnheader', { name: 'Time' })).toBeNull()
     expect(screen.queryByRole('columnheader', { name: 'Platform' })).toBeNull()
     expect(screen.queryByRole('columnheader', { name: 'Usage' })).toBeNull()
     expect(

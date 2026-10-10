@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { render, screen } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { UserProfile } from '@/features/profile/types'
@@ -39,26 +40,41 @@ const profileFixture: UserProfile = {
   created_time: 1,
 }
 
+vi.mock('@tanstack/react-router', () => ({
+  Link: (props: { to: string; children: ReactNode; className?: string }) => (
+    <a href={props.to} className={props.className}>
+      {props.children}
+    </a>
+  ),
+}))
+
 vi.mock('@/features/profile/hooks', () => ({
   useProfile: () => ({
     profile: profileFixture,
     loading: false,
     refreshProfile: vi.fn(),
   }),
-  useTwoFA: () => ({
+}))
+
+vi.mock('@/features/security/hooks/use-two-fa', () => {
+  const twoFA = {
     status: {
       enabled: false,
       locked: false,
       backup_codes_remaining: 0,
     },
     loading: false,
+    error: undefined,
     refetch: vi.fn(),
-  }),
-}))
+  }
+  return { useTwoFA: () => twoFA }
+})
 
 vi.mock('@/features/auth/passkey', () => ({
   usePasskeyManagement: () => ({
     status: null,
+    statusError: null,
+    fetchStatus: vi.fn(),
     loading: false,
     registering: false,
     removing: false,
@@ -70,21 +86,19 @@ vi.mock('@/features/auth/passkey', () => ({
   }),
 }))
 
-vi.mock('@/features/auth/secure-verification', () => ({
-  useSecureVerification: () => ({
-    open: false,
-    setOpen: vi.fn(),
-    methods: { has2FA: false, hasPasskey: false, passkeySupported: true },
-    state: {},
-    startVerification: vi.fn(),
-    executeVerification: vi.fn(),
+vi.mock('@/features/auth/secure-verification', () => {
+  const verification = {
+    requestVerification: vi.fn(),
+    requestLoginVerification: vi.fn(),
     cancel: vi.fn(),
-    setCode: vi.fn(),
-    switchMethod: vi.fn(),
-    fetchVerificationMethods: vi.fn(),
-  }),
-  SecureVerificationDialog: () => null,
-}))
+    isActive: false,
+    dialogProps: {},
+  }
+  return {
+    useSecureVerification: () => verification,
+    SecureVerificationDialog: () => null,
+  }
+})
 
 vi.mock('@/hooks/use-status', () => ({
   useStatus: () => ({
@@ -93,8 +107,8 @@ vi.mock('@/hooks/use-status', () => ({
   }),
 }))
 
-vi.mock('@/features/profile/components/tabs/account-bindings-tab', () => ({
-  AccountBindingsTab: () => <div data-testid='account-bindings' />,
+vi.mock('@/features/security/components/account-bindings', () => ({
+  AccountBindings: () => <div data-testid='account-bindings' />,
 }))
 
 vi.mock('@/features/profile/components/tabs/notification-tab', () => ({
@@ -107,7 +121,7 @@ vi.mock('@/features/profile/components/language-select-row', () => ({
   ),
 }))
 
-vi.mock('@/features/profile/components/login-sessions-card', () => ({
+vi.mock('@/features/security/components/login-sessions-card', () => ({
   LoginSessionsCard: () => <div data-testid='login-sessions' />,
 }))
 
@@ -119,27 +133,26 @@ vi.mock('@/features/profile/components/sidebar-modules-card', () => ({
   SidebarModulesCard: () => <div data-testid='sidebar-modules' />,
 }))
 
-vi.mock('@/features/profile/components/dialogs/change-password-dialog', () => ({
-  ChangePasswordDialog: () => null,
-}))
+vi.mock(
+  '@/features/security/components/dialogs/change-password-dialog',
+  () => ({
+    ChangePasswordDialog: () => null,
+  })
+)
 
-vi.mock('@/features/profile/components/dialogs/access-token-dialog', () => ({
-  AccessTokenDialog: () => null,
-}))
-
-vi.mock('@/features/profile/components/dialogs/delete-account-dialog', () => ({
+vi.mock('@/features/security/components/dialogs/delete-account-dialog', () => ({
   DeleteAccountDialog: () => null,
 }))
 
-vi.mock('@/features/profile/components/dialogs/two-fa-setup-dialog', () => ({
+vi.mock('@/features/security/components/dialogs/two-fa-setup-dialog', () => ({
   TwoFASetupDialog: () => null,
 }))
 
-vi.mock('@/features/profile/components/dialogs/two-fa-disable-dialog', () => ({
+vi.mock('@/features/security/components/dialogs/two-fa-disable-dialog', () => ({
   TwoFADisableDialog: () => null,
 }))
 
-vi.mock('@/features/profile/components/dialogs/two-fa-backup-dialog', () => ({
+vi.mock('@/features/security/components/dialogs/two-fa-backup-dialog', () => ({
   TwoFABackupDialog: () => null,
 }))
 
@@ -225,7 +238,10 @@ describe('next profile layout', () => {
     expect(
       screen.getByRole('button', { name: /Change Password/ })
     ).toBeVisible()
-    expect(screen.getByRole('button', { name: /Access Token/ })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Access tokens/ })).toHaveAttribute(
+      'href',
+      '/security'
+    )
     expect(screen.getByRole('button', { name: /Delete Account/ })).toBeVisible()
 
     expect(screen.queryByTestId('checkin-calendar')).toBeNull()

@@ -20,8 +20,10 @@ import i18next from 'i18next'
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 
+import { handleServerError } from '@/lib/handle-server-error'
+
 import { requestWaffoPayment, isApiSuccess } from '../api'
-import { getPaymentErrorMessage } from '../lib'
+import { getPaymentErrorMessage, getPaymentErrorTranslation } from '../lib'
 
 function getPaymentUrl(data: unknown): string | null {
   if (!data || typeof data !== 'object') {
@@ -61,10 +63,14 @@ export function useWaffoPayment() {
           }
         }
 
-        toast.error(getPaymentErrorMessage(response.message, response.data))
+        handleServerError(response, undefined, {
+          title:
+            getPaymentErrorTranslation(response) ??
+            getPaymentErrorMessage(response.message, response.data),
+        })
         return false
-      } catch {
-        toast.error(i18next.t('Payment request failed'))
+      } catch (error) {
+        handleServerError(error, i18next.t('Payment request failed'))
         return false
       } finally {
         setProcessing(false)

@@ -144,26 +144,6 @@ func decideResponsesFirstTokenError(state responsesFirstTokenScan, completionTok
 	}
 }
 
-func applyResponsesStreamUsage(dst *dto.Usage, src *dto.Usage) {
-	if dst == nil || src == nil {
-		return
-	}
-	if src.InputTokens != 0 {
-		dst.PromptTokens = src.InputTokens
-	}
-	if src.OutputTokens != 0 {
-		dst.CompletionTokens = src.OutputTokens
-	}
-	if src.TotalTokens != 0 {
-		dst.TotalTokens = src.TotalTokens
-	}
-	if src.InputTokensDetails != nil {
-		dst.PromptTokensDetails.CachedTokens = src.InputTokensDetails.CachedTokens
-		dst.PromptTokensDetails.CacheWriteTokens = src.InputTokensDetails.CacheWriteTokens
-		dst.InputTokensDetails = src.InputTokensDetails
-	}
-}
-
 func cloneResponsesUsage(src *dto.Usage) *dto.Usage {
 	if src == nil {
 		return &dto.Usage{}

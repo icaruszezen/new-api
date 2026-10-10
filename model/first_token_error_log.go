@@ -392,9 +392,9 @@ func RecordFirstTokenUserErrorLog(c *gin.Context, userId int, channelId int, mod
 	if c == nil {
 		return
 	}
-	other := map[string]interface{}{}
+	other := NewLogOther()
 	if c.Request != nil && c.Request.URL != nil {
-		other["request_path"] = c.Request.URL.Path
+		other.SetPublic("request_path", c.Request.URL.Path)
 	}
 	RecordErrorLog(c, userId, channelId, modelName, tokenName, content, tokenId, useTimeSeconds, isStream, group, other)
 }

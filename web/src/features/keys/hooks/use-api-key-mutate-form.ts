@@ -26,6 +26,11 @@ import { toast } from 'sonner'
 import { useStatus } from '@/hooks/use-status'
 import { getUserGroups, getUserModels } from '@/lib/api'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
+import { handleServerError } from '@/lib/handle-server-error'
+import {
+  requireServerSuccess,
+  translateServerText,
+} from '@/lib/server-error-message'
 
 import {
   createApiKey,
@@ -65,7 +70,7 @@ export function useApiKeyMutateForm(params: UseApiKeyMutateFormParams) {
 
   const { data: modelsData } = useQuery({
     queryKey: ['user-models'],
-    queryFn: () => getUserModels(),
+    queryFn: async () => requireServerSuccess(await getUserModels()),
     enabled: params.open,
     staleTime: 0,
   })
@@ -76,7 +81,7 @@ export function useApiKeyMutateForm(params: UseApiKeyMutateFormParams) {
     isFetching: groupsFetching,
   } = useQuery({
     queryKey: ['user-groups'],
-    queryFn: getUserGroups,
+    queryFn: async () => requireServerSuccess(await getUserGroups()),
     enabled: params.open,
     staleTime: 0,
   })
@@ -87,7 +92,8 @@ export function useApiKeyMutateForm(params: UseApiKeyMutateFormParams) {
     isFetching: apiKeyFetching,
   } = useQuery({
     queryKey: ['api-key', currentRowId],
-    queryFn: () => getApiKey(currentRowId ?? 0),
+    queryFn: async () =>
+      requireServerSuccess(await getApiKey(currentRowId ?? 0)),
     enabled: params.open && isUpdate && currentRowId !== undefined,
     staleTime: 0,
   })
@@ -98,7 +104,7 @@ export function useApiKeyMutateForm(params: UseApiKeyMutateFormParams) {
     isFetching: autoGroupsFetching,
   } = useQuery({
     queryKey: ['token-auto-groups'],
-    queryFn: getTokenAutoGroups,
+    queryFn: async () => requireServerSuccess(await getTokenAutoGroups()),
     enabled: params.open,
     staleTime: 0,
   })
@@ -109,10 +115,10 @@ export function useApiKeyMutateForm(params: UseApiKeyMutateFormParams) {
       Object.entries(groupsData?.data || {}).map(([key, info]) => ({
         value: key,
         label: key,
-        desc: info.desc || key,
+        desc: info.desc ? translateServerText(t, info.desc) : key,
         ratio: info.ratio,
       })),
-    [groupsData]
+    [groupsData, t]
   )
   const backendHasAuto = groups.some((group) => group.value === 'auto')
   const availableAutoGroupNames = useMemo(
@@ -245,7 +251,7 @@ export function useApiKeyMutateForm(params: UseApiKeyMutateFormParams) {
           params.onOpenChange(false)
           triggerRefresh()
         } else {
-          toast.error(result.message || t(ERROR_MESSAGES.UPDATE_FAILED))
+          handleServerError(result, t(ERROR_MESSAGES.UPDATE_FAILED))
         }
       } else {
         const count = data.tokenCount || 1
@@ -262,7 +268,7 @@ export function useApiKeyMutateForm(params: UseApiKeyMutateFormParams) {
           if (result.success) {
             successCount++
           } else {
-            toast.error(result.message || t(ERROR_MESSAGES.CREATE_FAILED))
+            handleServerError(result, t(ERROR_MESSAGES.CREATE_FAILED))
             break
           }
         }
@@ -277,8 +283,8 @@ export function useApiKeyMutateForm(params: UseApiKeyMutateFormParams) {
           triggerRefresh()
         }
       }
-    } catch {
-      toast.error(t(ERROR_MESSAGES.UNEXPECTED))
+    } catch (error) {
+      handleServerError(error, t(ERROR_MESSAGES.UNEXPECTED))
     } finally {
       setIsSubmitting(false)
     }

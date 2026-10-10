@@ -54,15 +54,18 @@ describe('useSidebarData channel monitoring settings', () => {
     )
   })
 
-  test('lists first-token errors next to usage logs and requires admin', () => {
+  test('lists first-token errors right after usage and audit logs and requires admin', () => {
     const { result } = renderHook(() => useSidebarData())
-    const general = result.current.navGroups.find((group) => group.id === 'general')
+    const general = result.current.navGroups.find(
+      (group) => group.id === 'general'
+    )
     const items = general?.items ?? []
     const usageIndex = items.findIndex(
       (item) => 'url' in item && item.url === '/usage-logs/common'
     )
-    const firstToken = items[usageIndex + 1]
+    const firstToken = items[usageIndex + 2]
 
+    expect(items[usageIndex + 1]).toMatchObject({ url: '/usage-logs/audit' })
     expect(firstToken).toMatchObject({
       url: '/first-token-errors',
       requiredRole: ROLE.ADMIN,

@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -116,6 +118,19 @@ func TestDoRequest_ClientStreamStillSetsSSEHeaders(t *testing.T) {
 	_, hasSSEHeaders := ctx.Get("event_stream_headers_set")
 	require.True(t, hasSSEHeaders)
 	require.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
+}
+
+func TestNewTaskAPIRequestInheritsClientCancellation(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	requestContext, cancel := context.WithCancel(context.Background())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(requestContext)
+
+	upstream, err := newTaskAPIRequest(c, "https://provider.example/tasks", nil)
+	require.NoError(t, err)
+	cancel()
+
+	require.ErrorIs(t, upstream.Context().Err(), context.Canceled)
 }
 
 func TestProcessHeaderOverride_ChannelTestSkipsPassthroughRules(t *testing.T) {
@@ -298,4 +313,15 @@ func TestProcessHeaderOverride_PassHeadersTemplateSetsRuntimeHeaders(t *testing.
 	require.Equal(t, "Codex CLI", upstreamReq.Header.Get("Originator"))
 	require.Equal(t, "sess-123", upstreamReq.Header.Get("Session_id"))
 	require.Empty(t, upstreamReq.Header.Get("X-Codex-Beta-Features"))
+}
+
+func TestToWebSocketURL(t *testing.T) {
+	for input, want := range map[string]string{
+		"https://api.openai.com/v1/responses":             "wss://api.openai.com/v1/responses",
+		"http://127.0.0.1:3000/v1/responses":              "ws://127.0.0.1:3000/v1/responses",
+		"wss://chatgpt.com/backend-api/codex/responses":   "wss://chatgpt.com/backend-api/codex/responses",
+		"ws://127.0.0.1:3000/backend-api/codex/responses": "ws://127.0.0.1:3000/backend-api/codex/responses",
+	} {
+		assert.Equal(t, want, toWebSocketURL(input), input)
+	}
 }

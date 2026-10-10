@@ -17,9 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { CheckinCalendarCard } from '@/features/profile/components/checkin-calendar-card'
-import { LoginSessionsCard } from '@/features/profile/components/login-sessions-card'
 import { SidebarModulesCard } from '@/features/profile/components/sidebar-modules-card'
 import { useProfile } from '@/features/profile/hooks'
+import { LoginSessionsCard } from '@/features/security/components/login-sessions-card'
 import { useStatus } from '@/hooks/use-status'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -63,7 +63,11 @@ export function NextProfile() {
         <div className='flex flex-col gap-5 xl:sticky xl:top-6'>
           <NextProfilePasskeyCard loading={loading} />
           <NextProfileTwoFACard loading={loading} />
-          <NextProfileSecurityList profile={profile} loading={loading} />
+          <NextProfileSecurityList
+            profile={profile}
+            loading={loading}
+            onProfileUpdate={refreshProfile}
+          />
           {checkinEnabled && (
             <CheckinCalendarCard
               checkinEnabled={checkinEnabled}

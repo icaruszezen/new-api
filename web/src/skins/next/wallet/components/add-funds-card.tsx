@@ -206,7 +206,7 @@ export function NextWalletAddFundsCard(props: NextWalletAddFundsCardProps) {
                             >
                               Pay {formatCurrency(pricing.actualPrice)}
                               {pricing.hasDiscount
-                                ? ` · ${getDiscountLabel(discount)}`
+                                ? ` · ${getDiscountLabel(discount, t)}`
                                 : ''}
                             </span>
                           </button>

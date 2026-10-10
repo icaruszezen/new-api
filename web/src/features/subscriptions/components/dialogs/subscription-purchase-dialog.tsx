@@ -25,17 +25,11 @@ import { Dialog } from '@/components/dialog'
 import { GroupBadge } from '@/components/group-badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Combobox } from '@/components/ui/combobox'
 import { Separator } from '@/components/ui/separator'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { formatQuota } from '@/lib/format'
+import { handleServerError } from '@/lib/handle-server-error'
 import { DEFAULT_CURRENCY_CONFIG } from '@/stores/system-config-store'
 
 import {
@@ -103,10 +97,6 @@ export function SubscriptionPurchaseDialog(props: Props) {
   const selectedEpayMethod = (props.epayMethods || []).find(
     (m) => getEpayMethodKey(m) === selectedEpayMethodKey
   )
-  const selectedEpayMethodLabel =
-    selectedEpayMethod?.name ||
-    selectedEpayMethod?.type ||
-    t('Select payment method')
   const totalAmount = Number(plan.total_amount || 0)
   const price = Number(plan.price_amount || 0).toFixed(2)
   const quotaPerUnit =
@@ -133,14 +123,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
         toast.success(t('Payment page opened'))
         props.onOpenChange(false)
       } else {
-        toast.error(
-          res.message && res.message !== 'success'
-            ? res.message
-            : t('Payment request failed')
-        )
+        handleServerError(res, t('Payment request failed'))
       }
-    } catch {
-      toast.error(t('Payment request failed'))
+    } catch (error) {
+      handleServerError(error, t('Payment request failed'))
     } finally {
       setPaying(false)
     }
@@ -155,14 +141,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
         toast.success(t('Payment page opened'))
         props.onOpenChange(false)
       } else {
-        toast.error(
-          res.message && res.message !== 'success'
-            ? res.message
-            : t('Payment request failed')
-        )
+        handleServerError(res, t('Payment request failed'))
       }
-    } catch {
-      toast.error(t('Payment request failed'))
+    } catch (error) {
+      handleServerError(error, t('Payment request failed'))
     } finally {
       setPaying(false)
     }
@@ -178,14 +160,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
         toast.success(t('Redirecting to payment page...'))
         window.location.href = res.data.checkout_url
       } else {
-        toast.error(
-          res.message && res.message !== 'success'
-            ? res.message
-            : t('Payment request failed')
-        )
+        handleServerError(res, t('Payment request failed'))
       }
-    } catch {
-      toast.error(t('Payment request failed'))
+    } catch (error) {
+      handleServerError(error, t('Payment request failed'))
     } finally {
       setPaying(false)
     }
@@ -227,14 +205,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
         toast.success(t('Payment initiated'))
         props.onOpenChange(false)
       } else {
-        toast.error(
-          res.message && res.message !== 'success'
-            ? res.message
-            : t('Payment request failed')
-        )
+        handleServerError(res, t('Payment request failed'))
       }
-    } catch {
-      toast.error(t('Payment request failed'))
+    } catch (error) {
+      handleServerError(error, t('Payment request failed'))
     } finally {
       setPaying(false)
     }
@@ -253,14 +227,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
         void props.onPurchaseSuccess?.()
         props.onOpenChange(false)
       } else {
-        toast.error(
-          res.message && res.message !== 'success'
-            ? res.message
-            : t('Payment request failed')
-        )
+        handleServerError(res, t('Payment request failed'))
       }
-    } catch {
-      toast.error(t('Payment request failed'))
+    } catch (error) {
+      handleServerError(error, t('Payment request failed'))
     } finally {
       setPaying(false)
     }
@@ -415,8 +385,8 @@ export function SubscriptionPurchaseDialog(props: Props) {
             )}
             {hasEpay && (
               <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-2'>
-                <Select
-                  items={(props.epayMethods || []).map((m) => ({
+                <Combobox
+                  options={(props.epayMethods || []).map((m) => ({
                     value: getEpayMethodKey(m),
                     label: m.name || m.type,
                   }))}
@@ -425,23 +395,8 @@ export function SubscriptionPurchaseDialog(props: Props) {
                     v !== null && setSelectedEpayMethodKey(v)
                   }
                   disabled={limitReached}
-                >
-                  <SelectTrigger className='flex-1'>
-                    <SelectValue>{selectedEpayMethodLabel}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent alignItemWithTrigger={false}>
-                    <SelectGroup>
-                      {(props.epayMethods || []).map((m) => (
-                        <SelectItem
-                          key={getEpayMethodKey(m)}
-                          value={getEpayMethodKey(m)}
-                        >
-                          {m.name || m.type}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                  className='flex-1'
+                />
                 <Button
                   onClick={handlePayEpay}
                   disabled={paying || !selectedEpayMethod || limitReached}

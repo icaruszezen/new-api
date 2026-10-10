@@ -58,6 +58,7 @@ import {
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { RelatedPolicyLink } from '@/features/system-settings/request-policies/related-policy-link'
 import { cn } from '@/lib/utils'
 
 import { useApiKeyMutateForm } from '../hooks/use-api-key-mutate-form'
@@ -224,6 +225,7 @@ export function ApiKeysMutateDrawer({
                           {t(
                             'When enabled, if channels in the current group fail, it will try channels in the next group in order.'
                           )}
+                          <RelatedPolicyLink section='routing' />
                         </FormDescription>
                       </div>
                       <FormControl>

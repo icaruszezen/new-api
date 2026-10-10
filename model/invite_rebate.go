@@ -178,7 +178,7 @@ func creditInviteRebate(rebate *InviteRebate) error {
 		if err := tx.Create(rebate).Error; err != nil {
 			return err
 		}
-		return creditTopUpQuota(tx, rebate.InviterId, rebate.Quota, map[string]interface{}{
+		return creditTopUpQuota(tx, rebate.InviterId, rebate.Quota, map[string]any{
 			"aff_history": gorm.Expr("aff_history + ?", rebate.Quota),
 		})
 	})
@@ -187,9 +187,10 @@ func creditInviteRebate(rebate *InviteRebate) error {
 	}
 
 	syncCreditUserQuotaCache(rebate.InviterId, rebate.Quota, "invite rebate")
-	content := fmt.Sprintf("好友注册邀请返利 %s", logger.LogQuota(rebate.Quota))
+	quotaParams := map[string]any{"quota": logger.FormatQuota(rebate.Quota)}
+	content := common.NewMessage("Friend sign-up invitation rebate {{quota}}", quotaParams)
 	if rebate.Type == InviteRebateTypeTopup {
-		content = fmt.Sprintf("好友充值邀请返利 %s", logger.LogQuota(rebate.Quota))
+		content = common.NewMessage("Friend top-up invitation rebate {{quota}}", quotaParams)
 	}
 	RecordLog(rebate.InviterId, LogTypeSystem, content)
 	return nil

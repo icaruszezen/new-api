@@ -77,7 +77,7 @@ export function ErrorMessageOverrides() {
       setEditingOverride(null)
       void queryClient.invalidateQueries({ queryKey: OVERRIDES_QUERY_KEY })
     },
-    onError: handleServerError,
+    onError: (error) => handleServerError(error, t('Failed to save')),
   })
 
   const deleteMutation = useMutation({
@@ -91,7 +91,7 @@ export function ErrorMessageOverrides() {
       setDeletingOverride(null)
       void queryClient.invalidateQueries({ queryKey: OVERRIDES_QUERY_KEY })
     },
-    onError: handleServerError,
+    onError: (error) => handleServerError(error, t('Failed to delete')),
   })
 
   const openEditor = (override: ErrorMessageOverride | null) => {

@@ -150,9 +150,10 @@ func TestRecordConsumeLogCarriesCacheTokensIntoQuotaData(t *testing.T) {
 			ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
 			ctx.Set("username", "dana")
 
-			other := map[string]interface{}{"model_ratio": 1.0}
+			other := NewLogOther()
+			other.SetPublic("model_ratio", 1.0)
 			if tc.cacheTokens != nil {
-				other["cache_tokens"] = tc.cacheTokens
+				other.SetPublic("cache_tokens", tc.cacheTokens)
 			}
 			RecordConsumeLog(ctx, 21, RecordConsumeLogParams{
 				PromptTokens:     1000,

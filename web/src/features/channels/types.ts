@@ -80,11 +80,14 @@ export type Channel = z.infer<typeof channelSchema>
 // ============================================================================
 
 export interface ChannelSettings {
+  task_plugin_key?: string
+  task_extend_plugin_keys?: string[]
   force_format?: boolean
   thinking_to_content?: boolean
   auto_set_reasoning_effort_by_model?: boolean
   proxy?: string
   pass_through_body_enabled?: boolean
+  responses_websocket_enabled?: boolean
   system_prompt?: string
   system_prompt_override?: boolean
   cache_billing_ratio_enabled?: boolean
@@ -113,6 +116,7 @@ export interface ChannelOtherSettings {
   allow_inference_geo?: boolean
   allow_speed?: boolean
   claude_beta_query?: boolean
+  ollama_openai_chat?: boolean
   disable_task_polling_sleep?: boolean
   upstream_model_update_check_enabled?: boolean
   upstream_model_update_auto_sync_enabled?: boolean
@@ -132,6 +136,7 @@ export interface AdvancedCustomRoute {
   converter?: AdvancedCustomConverter
   models?: string[]
   auth?: AdvancedCustomRouteAuth
+  pass_through_body_enabled?: boolean
 }
 
 export interface AdvancedCustomRouteAuth {
@@ -149,6 +154,8 @@ export type AdvancedCustomConverter =
   | 'openai_responses_to_gemini_generate_content'
   | 'gemini_generate_content_to_openai_chat_completions'
   | 'openai_chat_completions_to_gemini_generate_content'
+  | 'claude_messages_to_openai_responses'
+  | 'gemini_generate_content_to_openai_responses'
 
 export type AdvancedCustomAuthType = 'none' | 'header' | 'query'
 
@@ -189,6 +196,10 @@ export interface ChannelOpsResponse {
   message?: string
   data?: {
     retry_times: number
+    request_policy?: {
+      automatic_disable: boolean
+      source: string
+    }
   }
 }
 

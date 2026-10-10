@@ -99,7 +99,7 @@ func TestValidateTopUpQuotaReturnsMaximumAmount(t *testing.T) {
 	_, err := validateTopUpQuota(maxAmount)
 	require.NoError(t, err)
 	_, err = validateTopUpQuota(maxAmount + 1)
-	require.EqualError(t, err, "单笔充值数量不能大于 18014398509")
+	require.EqualError(t, err, "Top-up amount cannot exceed 18014398509")
 }
 
 func TestRequestAmountRejectsTopUpThatCannotBeSettled(t *testing.T) {
@@ -125,7 +125,7 @@ func TestRequestAmountRejectsTopUpThatCannotBeSettled(t *testing.T) {
 	RequestAmount(ctx)
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.JSONEq(t, `{"message":"error","data":"单笔充值数量不能大于 18014398509"}`, recorder.Body.String())
+	assert.JSONEq(t, `{"message":"error","data":"Top-up amount cannot exceed 18014398509","message_key":"Top-up amount cannot exceed {{max}}","message_params":{"max":18014398509}}`, recorder.Body.String())
 }
 
 func TestRequestAmountRejectsTopUpThatWouldOverflowWallet(t *testing.T) {
@@ -217,12 +217,12 @@ func TestValidateCreditedQuotaRejectsOverflow(t *testing.T) {
 	_, err := validateCreditedQuota(decimal.NewFromInt(common.MaxWalletQuota))
 	require.NoError(t, err)
 	_, err = validateCreditedQuota(decimal.Zero)
-	require.EqualError(t, err, "充值额度必须大于 0")
+	require.EqualError(t, err, "Top-up quota must be greater than 0")
 	_, err = validateCreditedQuota(decimal.NewFromInt(common.MaxWalletQuota).Add(decimal.NewFromInt(1)))
 	require.EqualError(
 		t,
 		err,
-		"充值额度超出系统可表示范围",
+		"Top-up quota exceeds the range the system can represent",
 	)
 }
 

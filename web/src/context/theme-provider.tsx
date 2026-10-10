@@ -25,7 +25,11 @@ import {
   useState,
 } from 'react'
 
-import { getCookie, setCookie, removeCookie } from '@/lib/cookies'
+import {
+  readThemePreference,
+  THEME_STORAGE_KEYS,
+  writeThemePreference,
+} from '@/lib/theme-storage'
 import { parseUiSkin } from '@/skins/registry'
 import {
   readPersistedUiSkin,
@@ -41,8 +45,6 @@ import {
 type ResolvedTheme = Exclude<Theme, 'system'>
 
 const DEFAULT_THEME = 'system'
-const THEME_COOKIE_NAME = 'vite-ui-theme'
-const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365 // 1 year
 const THEMES = new Set<Theme>(['dark', 'light', 'system'])
 
 type ThemeProviderProps = {
@@ -81,19 +83,13 @@ function resolveTheme(theme: Theme): ResolvedTheme {
 }
 
 function hasStoredTheme(storageKey: string): boolean {
-  const storedTheme = getCookie(storageKey)
-  return Boolean(storedTheme && THEMES.has(storedTheme as Theme))
-}
-
-function getStoredTheme(storageKey: string, fallback: Theme): Theme {
-  const storedTheme = getCookie(storageKey) as Theme | undefined
-  return storedTheme && THEMES.has(storedTheme) ? storedTheme : fallback
+  return readThemePreference<Theme | ''>(storageKey, THEMES, '') !== ''
 }
 
 export function ThemeProvider({
   children,
   defaultTheme: defaultThemeProp,
-  storageKey = THEME_COOKIE_NAME,
+  storageKey = THEME_STORAGE_KEYS.mode,
   ...props
 }: ThemeProviderProps) {
   const uiSkin = useSystemConfigStore((state) =>
@@ -110,12 +106,14 @@ export function ThemeProvider({
     defaultThemeForUiSkin(uiSkin === 'next' ? uiSkin : persistedSkin)
 
   const [theme, _setTheme] = useState<Theme>(() =>
-    getStoredTheme(storageKey, getSiteDefaultTheme(defaultThemeProp))
+    readThemePreference(
+      storageKey,
+      THEMES,
+      getSiteDefaultTheme(defaultThemeProp)
+    )
   )
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
-    resolveTheme(
-      getStoredTheme(storageKey, getSiteDefaultTheme(defaultThemeProp))
-    )
+    resolveTheme(theme)
   )
 
   useEffect(() => {
@@ -143,14 +141,14 @@ export function ThemeProvider({
 
   const setTheme = useCallback(
     (theme: Theme) => {
-      setCookie(storageKey, theme, THEME_COOKIE_MAX_AGE)
+      writeThemePreference(storageKey, theme)
       _setTheme(theme)
     },
     [storageKey]
   )
 
   const resetTheme = useCallback(() => {
-    removeCookie(storageKey)
+    writeThemePreference(storageKey, null)
     _setTheme(defaultTheme)
   }, [defaultTheme, storageKey])
 

@@ -224,11 +224,14 @@ describe('next console homepage layout', () => {
     expect(screen.getByText('special')).toBeVisible()
     expect(screen.getByText('0.12x')).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeVisible()
-    expect(screen.getByRole('columnheader', { name: 'Quota' })).toBeVisible()
+    expect(
+      screen.getByRole('columnheader', { name: 'Quota ($)' })
+    ).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'Group' })).toBeVisible()
     expect(screen.getByRole('columnheader', { name: 'Expires' })).toBeVisible()
     expect(screen.queryByRole('columnheader', { name: 'Created' })).toBeNull()
     expect(screen.queryByRole('columnheader', { name: 'Last Used' })).toBeNull()
+    expect(screen.queryByRole('columnheader', { name: 'Time' })).toBeNull()
     expect(screen.queryByRole('columnheader', { name: 'Platform' })).toBeNull()
     expect(screen.queryByRole('columnheader', { name: 'Usage' })).toBeNull()
     expect(

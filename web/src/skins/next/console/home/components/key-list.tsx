@@ -147,8 +147,7 @@ export function ConsoleKeyList(props: ConsoleKeyListProps) {
             ('accessorKey' in column ? column.accessorKey : undefined)
           return (
             columnId !== 'select' &&
-            columnId !== 'created_time' &&
-            columnId !== 'accessed_time' &&
+            columnId !== 'activity_time' &&
             columnId !== 'model_limits' &&
             columnId !== 'allow_ips'
           )

@@ -22,9 +22,9 @@ import { useTranslation } from 'react-i18next'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LanguageSelectRow } from '@/features/profile/components/language-select-row'
-import { AccountBindingsTab } from '@/features/profile/components/tabs/account-bindings-tab'
 import { NotificationTab } from '@/features/profile/components/tabs/notification-tab'
 import type { UserProfile } from '@/features/profile/types'
+import { AccountBindings } from '@/features/security/components/account-bindings'
 
 type NextProfileSettingsCardProps = {
   profile: UserProfile | null
@@ -81,7 +81,7 @@ export function NextProfileSettingsCard(props: NextProfileSettingsCardProps) {
           </TabsList>
 
           <TabsContent value='bindings' className='mt-5'>
-            <AccountBindingsTab
+            <AccountBindings
               profile={props.profile}
               onUpdate={props.onProfileUpdate}
             />

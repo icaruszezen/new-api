@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Link } from '@tanstack/react-router'
 import {
   ChevronRight,
   Key,
@@ -26,19 +27,27 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import { Skeleton } from '@/components/ui/skeleton'
-import { AccessTokenDialog } from '@/features/profile/components/dialogs/access-token-dialog'
-import { ChangePasswordDialog } from '@/features/profile/components/dialogs/change-password-dialog'
-import { DeleteAccountDialog } from '@/features/profile/components/dialogs/delete-account-dialog'
 import type { UserProfile } from '@/features/profile/types'
+import { ChangePasswordDialog } from '@/features/security/components/dialogs/change-password-dialog'
+import { DeleteAccountDialog } from '@/features/security/components/dialogs/delete-account-dialog'
 import { useDialogs } from '@/hooks/use-dialog'
 import { cn } from '@/lib/utils'
 
 type NextProfileSecurityListProps = {
   profile: UserProfile | null
   loading: boolean
+  onProfileUpdate: () => void
 }
 
-type DialogKey = 'password' | 'token' | 'delete'
+type DialogKey = 'password' | 'delete'
+
+type SecurityAction = {
+  key: DialogKey | 'tokens'
+  icon: LucideIcon
+  title: string
+  description: string
+  destructive?: boolean
+}
 
 export function NextProfileSecurityList(props: NextProfileSecurityListProps) {
   const { t } = useTranslation()
@@ -64,24 +73,22 @@ export function NextProfileSecurityList(props: NextProfileSecurityListProps) {
 
   if (!props.profile) return null
 
-  const actions: {
-    key: DialogKey
-    icon: LucideIcon
-    title: string
-    description: string
-    destructive?: boolean
-  }[] = [
+  const hasPassword = props.profile.has_password !== false
+  const actions: SecurityAction[] = [
     {
       key: 'password',
       icon: Shield,
-      title: t('Change Password'),
-      description: t('Update your password to keep your account secure'),
+      title: hasPassword ? t('Change Password') : t('Set Password'),
+      description: hasPassword
+        ? t('Update your password to keep your account secure')
+        : t('Add a password after verifying your identity'),
     },
     {
-      key: 'token',
+      // Scoped access tokens are managed on the Security & Access page.
+      key: 'tokens',
       icon: Key,
-      title: t('Access Token'),
-      description: t('Generate and manage your API access token'),
+      title: t('Access tokens'),
+      description: t('Create and manage scoped access tokens'),
     },
     {
       key: 'delete',
@@ -109,16 +116,12 @@ export function NextProfileSecurityList(props: NextProfileSecurityListProps) {
         <div className='border-t'>
           {actions.map((item) => {
             const Icon = item.icon
-            return (
-              <button
-                key={item.key}
-                type='button'
-                onClick={() => dialogs.open(item.key)}
-                className={cn(
-                  'hover:bg-muted/40 flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors',
-                  item.destructive && 'text-destructive'
-                )}
-              >
+            const rowClassName = cn(
+              'hover:bg-muted/40 flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors',
+              item.destructive && 'text-destructive'
+            )
+            const content = (
+              <>
                 <span
                   className={cn(
                     'flex size-8 shrink-0 items-center justify-center rounded-lg',
@@ -148,6 +151,26 @@ export function NextProfileSecurityList(props: NextProfileSecurityListProps) {
                   className='text-muted-foreground size-4 shrink-0'
                   aria-hidden='true'
                 />
+              </>
+            )
+
+            if (item.key === 'tokens') {
+              return (
+                <Link key={item.key} to='/security' className={rowClassName}>
+                  {content}
+                </Link>
+              )
+            }
+
+            const dialogKey = item.key
+            return (
+              <button
+                key={item.key}
+                type='button'
+                onClick={() => dialogs.open(dialogKey)}
+                className={rowClassName}
+              >
+                {content}
               </button>
             )
           })}
@@ -160,12 +183,8 @@ export function NextProfileSecurityList(props: NextProfileSecurityListProps) {
           open ? dialogs.open('password') : dialogs.close('password')
         }
         username={props.profile.username}
-      />
-      <AccessTokenDialog
-        open={dialogs.isOpen('token')}
-        onOpenChange={(open) =>
-          open ? dialogs.open('token') : dialogs.close('token')
-        }
+        hasPassword={props.profile.has_password}
+        onSuccess={props.onProfileUpdate}
       />
       <DeleteAccountDialog
         open={dialogs.isOpen('delete')}

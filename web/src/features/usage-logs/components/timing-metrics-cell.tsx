@@ -33,7 +33,11 @@ import {
 import { formatUseTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-import { getFirstResponseTimeColor, getResponseTimeColor } from '../lib/format'
+import {
+  getFirstResponseTimeColor,
+  getResponseTimeColor,
+  getStreamEndReasonLabel,
+} from '../lib/format'
 import type { LogOtherData } from '../types'
 
 /**
@@ -191,7 +195,12 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
                   <p>
                     {t('Stream Status')}: {t('Error')}
                   </p>
-                  <p>{props.streamStatus?.end_reason || 'unknown'}</p>
+                  <p>
+                    {getStreamEndReasonLabel(
+                      props.streamStatus?.end_reason || 'unknown',
+                      t
+                    )}
+                  </p>
                   {(props.streamStatus?.error_count ?? 0) > 0 && (
                     <p>
                       {t('Soft Errors')}: {props.streamStatus?.error_count}

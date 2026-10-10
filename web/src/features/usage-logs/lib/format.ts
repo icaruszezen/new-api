@@ -66,6 +66,17 @@ export function getParamOverrideActionLabel(
 }
 
 /**
+ * Get localized label for a stream end reason; unmapped reasons stay raw
+ */
+export function getStreamEndReasonLabel(
+  reason: string,
+  t: (key: string) => string
+): string {
+  if (reason === 'client_gone') return t('Cancelled by client')
+  return reason
+}
+
+/**
  * Parse a param override audit line into action and content
  */
 export function parseAuditLine(

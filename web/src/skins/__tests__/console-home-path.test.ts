@@ -126,6 +126,7 @@ describe('isNextConsolePath', () => {
     '/channels',
     '/channel-monitoring-settings',
     '/error-message-overrides',
+    '/billing-corrections',
     '/models/deployments',
     '/users',
     '/redemption-codes',

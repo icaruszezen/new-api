@@ -500,6 +500,9 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const showAdminIp =
     !!props.log.ip && (showTiming || (props.isAdmin && isTopup))
   const adminInfo = other?.admin_info
+  const billingCorrection = props.isAdmin
+    ? adminInfo?.billing_correction
+    : undefined
   const topupAuditFields =
     isTopup && props.isAdmin && adminInfo
       ? ([
@@ -775,6 +778,51 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 </div>
               </div>
             </div>
+          </DetailSection>
+        )}
+
+        {/* Billing correction notice (visible to everyone who can see the log) */}
+        {other?.billing_corrected && (
+          <DetailSection
+            icon={<Info className='size-3.5' aria-hidden='true' />}
+            iconTone='info'
+            label={t('Charge waived')}
+          >
+            <p className='text-xs wrap-break-word'>
+              {t(
+                'Not charged: the upstream returned no output and no usage information.'
+              )}
+            </p>
+          </DetailSection>
+        )}
+
+        {/* Billing correction audit (admin only) */}
+        {billingCorrection && (
+          <DetailSection
+            icon={<ShieldCheck className='size-3.5' aria-hidden='true' />}
+            iconTone='info'
+            label={t('Billing Correction')}
+          >
+            <DetailRow
+              label={t('Threshold')}
+              value={billingCorrection.prompt_tokens_threshold.toLocaleString()}
+              mono
+            />
+            <DetailRow
+              label={t('Estimated input tokens')}
+              value={billingCorrection.prompt_tokens.toLocaleString()}
+              mono
+            />
+            <DetailRow
+              label={t('Original cost')}
+              value={formatLogQuota(billingCorrection.original_quota)}
+              mono
+            />
+            <DetailRow
+              label={t('Rule ID')}
+              value={`#${billingCorrection.rule_id}`}
+              mono
+            />
           </DetailSection>
         )}
 

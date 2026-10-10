@@ -75,14 +75,13 @@ var errChannelTestStreamUnsupported = errors.New("upstream streaming is not supp
 
 // channelTestResponseWriter 为测试链路的响应记录器补上 CloseNotify：部分渠道通过
 // gin 的 c.Stream 输出，它依赖 http.CloseNotifier，原生 ResponseRecorder 未实现时会 panic。
-// ctx 结束时通知关闭，与真实客户端断开的行为一致。
+// 测试请求没有会断开的客户端，返回永不关闭的通道，由适配器读完上游后自行结束。
 type channelTestResponseWriter struct {
 	*httptest.ResponseRecorder
-	closed chan bool
 }
 
-func (w channelTestResponseWriter) CloseNotify() <-chan bool {
-	return w.closed
+func (channelTestResponseWriter) CloseNotify() <-chan bool {
+	return nil
 }
 
 func normalizeChannelTestEndpoint(channel *model.Channel, endpointType string) string {
@@ -134,10 +133,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 	w := httptest.NewRecorder()
-	clientGone := make(chan bool)
-	stopClientGone := context.AfterFunc(ctx, func() { close(clientGone) })
-	defer stopClientGone()
-	c, _ := gin.CreateTestContext(channelTestResponseWriter{ResponseRecorder: w, closed: clientGone})
+	c, _ := gin.CreateTestContext(channelTestResponseWriter{ResponseRecorder: w})
 
 	testModel = strings.TrimSpace(testModel)
 	if testModel == "" {

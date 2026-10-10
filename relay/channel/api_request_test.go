@@ -8,8 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -157,6 +159,43 @@ func TestDoRequest_MinUpstreamTimeoutEndsWithCallerContext(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the upstream request did not end with the caller's context")
 	}
+}
+
+// RELAY_TIMEOUT bounds reading the whole response, so a request with a timeout
+// floor must be able to keep reading a slow stream past it.
+func TestDoRequest_MinUpstreamTimeoutRaisesRelayTimeout(t *testing.T) {
+	previousRelayTimeout := common.RelayTimeout
+	common.RelayTimeout = 1
+	// A non-default transport policy gets its own client built with the RELAY_TIMEOUT above.
+	service.ResetProxyClientCache()
+	t.Cleanup(func() {
+		common.RelayTimeout = previousRelayTimeout
+		service.ResetProxyClientCache()
+	})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		time.Sleep(2 * time.Second)
+		_, _ = io.WriteString(w, "late answer")
+	}))
+	t.Cleanup(upstream.Close)
+
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{
+		MinUpstreamTimeout: 10 * time.Minute,
+		ChannelMeta:        &relaycommon.ChannelMeta{ChannelSetting: dto.ChannelSettings{HTTPProtocol: dto.HTTPProtocolHTTP1}},
+	}
+	req, err := http.NewRequest(http.MethodPost, upstream.URL, http.NoBody)
+	require.NoError(t, err)
+
+	resp, err := doRequest(ctx, req, info)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, "late answer", string(body))
 }
 
 func TestProcessHeaderOverride_ChannelTestSkipsPassthroughRules(t *testing.T) {

@@ -318,20 +318,22 @@ func runWithLeaseHeartbeat(task *model.SystemTask, runnerID string, fn func(ctx 
 	done := make(chan struct{})
 
 	go func() {
-		lastRenewed := time.Now()
+		// 锁的到期时间按秒写入，并在发起续租前计算，因此按发起时刻少算一秒作为保守估计。
+		leaseEnd := time.Now().Add(systemTaskLockTTL - time.Second)
 		for {
 			select {
 			case <-done:
 				return
 			case <-ticker.C:
+				attempt := time.Now()
 				err := model.RenewSystemTaskLock(task.TaskID, runnerID, systemTaskLockUntil())
 				if err == nil {
-					lastRenewed = time.Now()
+					leaseEnd = attempt.Add(systemTaskLockTTL - time.Second)
 					continue
 				}
-				// 偶发的数据库错误不立刻放弃：只要等到下一次续租时锁仍未过期就继续重试，
-				// 避免长时间运行的任务因一次失败整体中断；锁已被他人接管或即将过期时才停止。
-				if errors.Is(err, model.ErrSystemTaskLockLost) || time.Since(lastRenewed)+interval >= systemTaskLockTTL {
+				// 偶发的数据库错误不立刻放弃，避免长时间运行的任务因一次失败整体中断。
+				// 锁已被他人接管，或剩余租约不足以再等一次续租并留出收尾时间时才停止。
+				if errors.Is(err, model.ErrSystemTaskLockLost) || time.Until(leaseEnd) < interval+interval/2 {
 					cancel()
 					return
 				}

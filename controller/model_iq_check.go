@@ -271,6 +271,10 @@ func executeModelIQCheck(ctx context.Context, check modeliqcheck.Check, channel 
 		}
 		result.ErrorType = modeliqcheck.ErrorTypeEmptyResponse
 		result.ErrorMessage = fmt.Sprintf("model returned no content (finish reason: %s)", finishReason)
+	case output.FinishReason == "":
+		// 只有模型给出结束原因才算答完：部分渠道在流中断后照常收尾，不带结束原因的回答可能只有一半。
+		result.ErrorType = modeliqcheck.ErrorTypeUpstream
+		result.ErrorMessage = "upstream stream ended without a finish reason, the answer may be incomplete"
 	default:
 		result.Status = model.ModelIQCheckStatusSuccess
 	}

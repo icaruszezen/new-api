@@ -457,66 +457,132 @@ func setupModelIQCheckChannel(t *testing.T, channelType int, baseURL string, mod
 	return channel
 }
 
-func iqCheckChunk(content string) string {
-	return `data: {"id":"c1","object":"chat.completion.chunk","created":1,"model":"gpt-5","choices":[{"index":0,"delta":{"content":` + strconv.Quote(content) + `}}]}` + "\n\n"
+// iqCheckChunk is one OpenAI chat completion stream event; a non-empty
+// finishReason marks the model's last chunk.
+func iqCheckChunk(content string, finishReason string) string {
+	finish := "null"
+	if finishReason != "" {
+		finish = strconv.Quote(finishReason)
+	}
+	return `data: {"id":"c1","object":"chat.completion.chunk","created":1,"model":"gpt-5","choices":[{"index":0,"delta":{"content":` + strconv.Quote(content) + `},"finish_reason":` + finish + `}]}` + "\n\n"
+}
+
+// writeChunkedThenDrop answers with a chunked 200 that carries body and then
+// drops the connection without the terminating chunk, like a reset mid-stream.
+func writeChunkedThenDrop(t *testing.T, w http.ResponseWriter, contentType string, body string) {
+	conn, buffered, err := w.(http.Hijacker).Hijack()
+	if !assert.NoError(t, err) {
+		return
+	}
+	defer conn.Close()
+	_, _ = io.WriteString(buffered, "HTTP/1.1 200 OK\r\nContent-Type: "+contentType+"\r\nTransfer-Encoding: chunked\r\n\r\n")
+	_, _ = io.WriteString(buffered, strconv.FormatInt(int64(len(body)), 16)+"\r\n"+body+"\r\n")
+	_ = buffered.Flush()
+}
+
+func runIQCheckAgainst(t *testing.T, channelType int, upstream http.HandlerFunc) model.ModelIQCheckResult {
+	t.Helper()
+	server := httptest.NewServer(upstream)
+	t.Cleanup(server.Close)
+	channel := setupModelIQCheckChannel(t, channelType, server.URL, "")
+	result := model.ModelIQCheckResult{Status: model.ModelIQCheckStatusFailed}
+	executeModelIQCheck(context.Background(), modeliqcheck.Check{Id: "c1", Group: "default", Model: "gpt-5", Prompt: "2+2?"}, channel, 1, 600, &result)
+	return result
+}
+
+func setStreamingTimeout(t *testing.T, seconds int) {
+	t.Helper()
+	previous := constant.StreamingTimeout
+	constant.StreamingTimeout = seconds
+	t.Cleanup(func() { constant.StreamingTimeout = previous })
 }
 
 // A reasoning model can stay silent far longer than STREAMING_TIMEOUT before it
 // answers; the check must keep waiting until its own timeout.
 func TestExecuteModelIQCheckOutlastsStreamingIdleTimeout(t *testing.T) {
-	previousStreamingTimeout := constant.StreamingTimeout
-	constant.StreamingTimeout = 1
-	t.Cleanup(func() { constant.StreamingTimeout = previousStreamingTimeout })
+	setStreamingTimeout(t, 1)
 
 	var streamed atomic.Bool
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	result := runIQCheckAgainst(t, constant.ChannelTypeOpenAI, func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
 		streamed.Store(strings.Contains(string(body), `"stream":true`))
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = io.WriteString(w, iqCheckChunk(""))
+		_, _ = io.WriteString(w, iqCheckChunk("", ""))
 		w.(http.Flusher).Flush()
 		time.Sleep(2 * time.Second)
-		_, _ = io.WriteString(w, iqCheckChunk("4"))
+		_, _ = io.WriteString(w, iqCheckChunk("4", "stop"))
 		_, _ = io.WriteString(w, "data: [DONE]\n\n")
-	}))
-	t.Cleanup(upstream.Close)
-	channel := setupModelIQCheckChannel(t, constant.ChannelTypeOpenAI, upstream.URL, "")
-
-	result := model.ModelIQCheckResult{Status: model.ModelIQCheckStatusFailed}
-	executeModelIQCheck(context.Background(), modeliqcheck.Check{Id: "c1", Group: "default", Model: "gpt-5", Prompt: "2+2?"}, channel, 1, 600, &result)
+	})
 
 	assert.True(t, streamed.Load(), "the upstream request must ask for a stream")
 	assert.Equal(t, model.ModelIQCheckStatusSuccess, result.Status, result.ErrorMessage)
 	assert.Equal(t, "4", result.Content)
+	assert.Equal(t, "stop", result.FinishReason)
 }
 
-// A stream cut before it finishes is a failed check that keeps the partial
-// answer, not a success with half an answer.
-func TestExecuteModelIQCheckFailsWhenUpstreamStreamBreaks(t *testing.T) {
-	previousStreamingTimeout := constant.StreamingTimeout
-	constant.StreamingTimeout = 300
-	t.Cleanup(func() { constant.StreamingTimeout = previousStreamingTimeout })
+// Channels that write through gin's c.Stream (Cohere, Zhipu, Xunfei) must run
+// on the channel test recorder instead of panicking.
+func TestExecuteModelIQCheckStreamsThroughGinStreamChannels(t *testing.T) {
+	setStreamingTimeout(t, 300)
 
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		conn, buffered, err := w.(http.Hijacker).Hijack()
-		require.NoError(t, err)
-		defer conn.Close()
-		chunk := iqCheckChunk("partial answer")
-		_, _ = io.WriteString(buffered, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n")
-		_, _ = io.WriteString(buffered, strconv.FormatInt(int64(len(chunk)), 16)+"\r\n"+chunk+"\r\n")
-		_ = buffered.Flush()
-	}))
-	t.Cleanup(upstream.Close)
-	channel := setupModelIQCheckChannel(t, constant.ChannelTypeOpenAI, upstream.URL, "")
+	result := runIQCheckAgainst(t, constant.ChannelTypeCohere, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"is_finished":false,"event_type":"text-generation","text":"4"}`+"\n")
+		_, _ = io.WriteString(w, `{"is_finished":true,"event_type":"stream-end","finish_reason":"COMPLETE","response":{"meta":{"billed_units":{"input_tokens":3,"output_tokens":1}}}}`+"\n")
+	})
 
-	result := model.ModelIQCheckResult{Status: model.ModelIQCheckStatusFailed}
-	executeModelIQCheck(context.Background(), modeliqcheck.Check{Id: "c1", Group: "default", Model: "gpt-5", Prompt: "2+2?"}, channel, 1, 600, &result)
+	assert.Equal(t, model.ModelIQCheckStatusSuccess, result.Status, result.ErrorMessage)
+	assert.Equal(t, "4", result.Content)
+}
 
-	assert.Equal(t, model.ModelIQCheckStatusFailed, result.Status)
-	assert.Equal(t, modeliqcheck.ErrorTypeUpstream, result.ErrorType)
-	assert.Contains(t, result.ErrorMessage, "stream ended before completion")
-	assert.Equal(t, "partial answer", result.Content)
+// A stream that ends before the model finished is a failed check that keeps
+// the partial answer, not a success with half an answer, whichever way the
+// channel's handler reports the end.
+func TestExecuteModelIQCheckFailsWhenUpstreamStreamEndsEarly(t *testing.T) {
+	setStreamingTimeout(t, 300)
+
+	tests := []struct {
+		name        string
+		channelType int
+		upstream    http.HandlerFunc
+		wantMessage string
+	}{
+		{
+			name:        "connection dropped",
+			channelType: constant.ChannelTypeOpenAI,
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				writeChunkedThenDrop(t, w, "text/event-stream", iqCheckChunk("partial answer", ""))
+			},
+			wantMessage: "stream ended before completion",
+		},
+		{
+			name:        "closed without a finish reason",
+			channelType: constant.ChannelTypeOpenAI,
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, iqCheckChunk("partial answer", ""))
+			},
+			wantMessage: "without a finish reason",
+		},
+		{
+			name:        "handler that synthesizes its own end",
+			channelType: constant.ChannelTypeCohere,
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				writeChunkedThenDrop(t, w, "application/json", `{"is_finished":false,"event_type":"text-generation","text":"partial answer"}`+"\n")
+			},
+			wantMessage: "without a finish reason",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := runIQCheckAgainst(t, test.channelType, test.upstream)
+
+			assert.Equal(t, model.ModelIQCheckStatusFailed, result.Status)
+			assert.Equal(t, modeliqcheck.ErrorTypeUpstream, result.ErrorType)
+			assert.Contains(t, result.ErrorMessage, test.wantMessage)
+			assert.Equal(t, "partial answer", result.Content)
+		})
+	}
 }
 
 // Channels that can only answer in one piece cannot be checked, since the check
@@ -548,27 +614,4 @@ func TestExecuteModelIQCheckRejectsChannelsThatCannotStream(t *testing.T) {
 			assert.Equal(t, modeliqcheck.ErrorTypeUnsupportedModel, result.ErrorType, result.ErrorMessage)
 		})
 	}
-}
-
-// Some channels write through gin's c.Stream, which needs a CloseNotifier; the
-// test recorder must provide one instead of panicking, and stop the stream
-// once the check's context ends.
-func TestChannelTestResponseWriterSupportsGinStream(t *testing.T) {
-	recorder := httptest.NewRecorder()
-	clientGone := make(chan bool)
-	c, _ := gin.CreateTestContext(channelTestResponseWriter{ResponseRecorder: recorder, closed: clientGone})
-
-	steps := 0
-	assert.False(t, c.Stream(func(w io.Writer) bool {
-		steps++
-		_, _ = io.WriteString(w, "data: x\n\n")
-		return steps < 2
-	}))
-	assert.Equal(t, "data: x\n\ndata: x\n\n", recorder.Body.String())
-
-	close(clientGone)
-	assert.True(t, c.Stream(func(io.Writer) bool {
-		t.Error("no step may run after the client is gone")
-		return false
-	}))
 }

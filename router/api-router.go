@@ -361,6 +361,9 @@ func SetApiRouter(router *gin.Engine) {
 		billingCorrectionRoute.Use(middleware.AdminAuth())
 		{
 			billingCorrectionRoute.GET("/", controller.GetBillingCorrectionRules)
+			billingCorrectionRoute.GET("/records", controller.GetBillingCorrectionRecords)
+			billingCorrectionRoute.POST("/records/refund", controller.MarkBillingCorrectionRecordsRefunded)
+			billingCorrectionRoute.POST("/records/unrefund", controller.UnmarkBillingCorrectionRecordsRefunded)
 			billingCorrectionRoute.POST("/", controller.CreateBillingCorrectionRule)
 			billingCorrectionRoute.PUT("/:id", controller.UpdateBillingCorrectionRule)
 			billingCorrectionRoute.DELETE("/:id", controller.DeleteBillingCorrectionRule)

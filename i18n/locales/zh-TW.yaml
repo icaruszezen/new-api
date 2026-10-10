@@ -176,6 +176,9 @@ billing_correction.id_format_error: "計費修正規則 ID 格式錯誤"
 billing_correction.channel_id_invalid: "管道無效，請重新選擇"
 billing_correction.channel_taken: "該管道已存在計費修正規則"
 billing_correction.threshold_invalid: "輸入 token 閾值必須是 {{.Min}} 到 {{.Max}} 之間的整數"
+billing_correction.records_too_many: "符合的記錄超過 {{.Limit}} 筆，請縮小時間範圍或增加篩選條件"
+billing_correction.records_no_selection: "請選擇要標記的記錄"
+billing_correction.records_selection_too_large: "一次最多選擇 {{.Limit}} 筆記錄"
 
 # Model messages
 model.name_empty: "模型名稱不能為空"

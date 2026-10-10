@@ -21,6 +21,10 @@ import { api, type ApiRequestConfig } from '@/lib/api'
 
 import type {
   ApiResponse,
+  BillingCorrectionRecordPage,
+  BillingCorrectionRecordQuery,
+  BillingCorrectionRefundPayload,
+  BillingCorrectionRefundResult,
   BillingCorrectionRule,
   BillingCorrectionRulePayload,
   ChannelOption,
@@ -73,6 +77,43 @@ export async function updateBillingCorrectionRule(
 export async function deleteBillingCorrectionRule(id: number) {
   const res = await api.delete<ApiResponse<null>>(
     `${BASE_URL}/${id}`,
+    WRITE_REQUEST_CONFIG
+  )
+  return res.data
+}
+
+/**
+ * The page shows a rejected query (for example too many matching records)
+ * inline, so it skips the global error toast too.
+ */
+export async function getBillingCorrectionRecords(
+  query: BillingCorrectionRecordQuery
+) {
+  const res = await api.get<ApiResponse<BillingCorrectionRecordPage>>(
+    `${BASE_URL}/records`,
+    { ...WRITE_REQUEST_CONFIG, params: query }
+  )
+  return res.data
+}
+
+/** Only records the refund; it never changes any balance. */
+export async function markBillingCorrectionRecordsRefunded(
+  payload: BillingCorrectionRefundPayload
+) {
+  const res = await api.post<ApiResponse<BillingCorrectionRefundResult>>(
+    `${BASE_URL}/records/refund`,
+    payload,
+    WRITE_REQUEST_CONFIG
+  )
+  return res.data
+}
+
+export async function unmarkBillingCorrectionRecordsRefunded(
+  requestIds: string[]
+) {
+  const res = await api.post<ApiResponse<{ unmarked: number }>>(
+    `${BASE_URL}/records/unrefund`,
+    { request_ids: requestIds },
     WRITE_REQUEST_CONFIG
   )
   return res.data

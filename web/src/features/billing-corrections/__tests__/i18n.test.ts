@@ -37,6 +37,19 @@ const BILLING_CORRECTION_KEYS = [
   'Estimated input tokens',
   'Original cost',
   'Rule ID',
+  'Correction rules',
+  'Mis-billed records',
+  'Wrongly charged',
+  'Pending refund',
+  'Refunded',
+  'Corrected',
+  'Not charged',
+  'Mark selected as refunded',
+  'Mark all pending as refunded',
+  'Remove refunded mark',
+  'This only records the refund; it does not return any quota to users.',
+  'Marking records as refunded only records it; refund the quota to users separately.',
+  '{{count}} charged record(s) under the current filters, {{quota}} in total, will be marked as refunded.',
 ] as const
 
 describe('billing correction Chinese locales', () => {
@@ -62,6 +75,16 @@ describe('billing correction Chinese locales', () => {
     for (const translation of [zh.translation[key], zhTW.translation[key]]) {
       expect(translation).toContain('{{min}}')
       expect(translation).toContain('{{max}}')
+    }
+  })
+
+  test('the refund confirmation keeps its count and quota placeholders in every Chinese locale', () => {
+    const key =
+      '{{count}} charged record(s) under the current filters, {{quota}} in total, will be marked as refunded.'
+
+    for (const translation of [zh.translation[key], zhTW.translation[key]]) {
+      expect(translation).toContain('{{count}}')
+      expect(translation).toContain('{{quota}}')
     }
   })
 

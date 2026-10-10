@@ -176,6 +176,9 @@ billing_correction.id_format_error: "计费修正规则 ID 格式错误"
 billing_correction.channel_id_invalid: "渠道无效，请重新选择"
 billing_correction.channel_taken: "该渠道已存在计费修正规则"
 billing_correction.threshold_invalid: "输入 token 阈值必须是 {{.Min}} 到 {{.Max}} 之间的整数"
+billing_correction.records_too_many: "匹配的记录超过 {{.Limit}} 条，请缩小时间范围或增加筛选条件"
+billing_correction.records_no_selection: "请选择要标记的记录"
+billing_correction.records_selection_too_large: "一次最多选择 {{.Limit}} 条记录"
 
 # Model messages
 model.name_empty: "模型名称不能为空"

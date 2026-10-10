@@ -34,6 +34,9 @@ const apiMocks = vi.hoisted(() => ({
   updateBillingCorrectionRule: vi.fn(),
   deleteBillingCorrectionRule: vi.fn(),
   getChannelOptions: vi.fn(),
+  getBillingCorrectionRecords: vi.fn(),
+  markBillingCorrectionRecordsRefunded: vi.fn(),
+  unmarkBillingCorrectionRecordsRefunded: vi.fn(),
 }))
 
 vi.mock('../api', () => apiMocks)
@@ -299,6 +302,47 @@ describe('billing correction page', () => {
     ).toBeInTheDocument()
     expect(thresholdInput).toHaveAttribute('aria-invalid', 'true')
     expect(apiMocks.updateBillingCorrectionRule).not.toHaveBeenCalled()
+  })
+
+  test('the records tab loads the mis-billed records and hides the add rule action', async () => {
+    const user = userEvent.setup()
+    apiMocks.getBillingCorrectionRules.mockResolvedValue([buildRule()])
+    apiMocks.getBillingCorrectionRecords.mockResolvedValue({
+      success: true,
+      message: '',
+      data: {
+        items: [],
+        total: 0,
+        page: 1,
+        page_size: 20,
+        stats: {
+          charged_count: 0,
+          charged_quota: 0,
+          pending_count: 0,
+          pending_quota: 0,
+          refunded_count: 0,
+          refunded_quota: 0,
+          corrected_count: 0,
+        },
+      },
+    })
+
+    renderPage()
+    await screen.findByText('heartbeat-upstream')
+    expect(apiMocks.getBillingCorrectionRecords).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('tab', { name: 'Mis-billed records' }))
+
+    expect(await screen.findByText('No matching records')).toBeInTheDocument()
+    expect(apiMocks.getBillingCorrectionRecords).toHaveBeenCalledWith(
+      expect.objectContaining({ p: 1, page_size: 20 })
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Add Correction Rule' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Mark all pending as refunded' })
+    ).toBeDisabled()
   })
 
   test('renders the Chinese page title when zh is active', async () => {

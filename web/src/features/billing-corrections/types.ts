@@ -44,3 +44,94 @@ export type ChannelOption = {
   id: number
   name: string
 }
+
+/**
+ * pending: charged and not yet marked as refunded.
+ * refunded: charged, and an admin marked it as refunded elsewhere.
+ * corrected: a rule already waived the charge at settlement.
+ */
+export type BillingCorrectionRecordStatus = 'pending' | 'refunded' | 'corrected'
+
+/** A consume log that matches the large-context mis-billing conditions. */
+export type BillingCorrectionRecord = {
+  /** Empty only for legacy logs, which cannot be marked. */
+  request_id: string
+  created_at: number
+  user_id: number
+  username: string
+  token_name: string
+  model_name: string
+  channel_id: number
+  channel_name: string
+  prompt_tokens: number
+  prompt_tokens_threshold: number
+  quota: number
+  /** What a corrected record would have cost without the rule. */
+  original_quota?: number
+  use_time: number
+  is_stream: boolean
+  status: BillingCorrectionRecordStatus
+  refunded_at?: number
+  refund_operator_id?: number
+}
+
+export type BillingCorrectionRecordStats = {
+  charged_count: number
+  charged_quota: number
+  pending_count: number
+  pending_quota: number
+  refunded_count: number
+  refunded_quota: number
+  corrected_count: number
+}
+
+export type BillingCorrectionRecordPage = {
+  items: BillingCorrectionRecord[]
+  total: number
+  page: number
+  page_size: number
+  stats: BillingCorrectionRecordStats
+}
+
+/** Filters applied to the records query; empty strings mean "any". */
+export type BillingCorrectionRecordFilters = {
+  /** The range is open on a side left unset. */
+  start?: Date
+  end?: Date
+  username: string
+  token: string
+  model: string
+  /** Channel id as a string, empty for every channel with an enabled rule. */
+  channel: string
+  status: '' | BillingCorrectionRecordStatus
+}
+
+export type BillingCorrectionRecordQuery = {
+  p: number
+  page_size: number
+  start_timestamp?: number
+  end_timestamp?: number
+  username?: string
+  token_name?: string
+  model_name?: string
+  channel?: number
+  status?: BillingCorrectionRecordStatus
+}
+
+/** Either the selected request ids, or `all` with the current filters. */
+export type BillingCorrectionRefundPayload = {
+  request_ids?: string[]
+  all?: boolean
+  start_timestamp?: number
+  end_timestamp?: number
+  username?: string
+  token_name?: string
+  model_name?: string
+  channel?: number
+}
+
+export type BillingCorrectionRefundResult = {
+  marked: number
+  quota: number
+  skipped: number
+}

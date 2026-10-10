@@ -25,7 +25,10 @@ import { api } from '@/lib/api'
 import {
   createBillingCorrectionRule,
   deleteBillingCorrectionRule,
+  getBillingCorrectionRecords,
   getBillingCorrectionRules,
+  markBillingCorrectionRecordsRefunded,
+  unmarkBillingCorrectionRecordsRefunded,
   updateBillingCorrectionRule,
 } from '../api'
 
@@ -100,6 +103,24 @@ describe('billing correction api', () => {
       send: () => deleteBillingCorrectionRule(3),
       method: 'delete',
       url: '/api/billing-correction/3',
+    },
+    {
+      action: 'records query',
+      send: () => getBillingCorrectionRecords({ p: 1, page_size: 20 }),
+      method: 'get',
+      url: '/api/billing-correction/records',
+    },
+    {
+      action: 'refund mark',
+      send: () => markBillingCorrectionRecordsRefunded({ request_ids: ['r'] }),
+      method: 'post',
+      url: '/api/billing-correction/records/refund',
+    },
+    {
+      action: 'refund unmark',
+      send: () => unmarkBillingCorrectionRecordsRefunded(['r']),
+      method: 'post',
+      url: '/api/billing-correction/records/unrefund',
     },
   ])(
     'a rejected $action hands the server message to the page without a second global toast',

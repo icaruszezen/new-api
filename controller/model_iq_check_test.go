@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -423,4 +425,150 @@ func TestUpdateOptionStoresNormalizedModelIQChecks(t *testing.T) {
 	assert.NotEmpty(t, checks[0].Id)
 	assert.Equal(t, "Pro", checks[0].Name)
 	assert.Equal(t, modeliqcheck.DefaultIntervalMinutes, checks[0].IntervalMinutes)
+}
+
+// setupModelIQCheckChannel stores a root user and a channel serving gpt-5 in
+// the default group, so executeModelIQCheck runs the real channel test path.
+func setupModelIQCheckChannel(t *testing.T, channelType int, baseURL string, modelMapping string) *model.Channel {
+	t.Helper()
+	db := setupModelIQCheckConfigTest(t)
+	require.NoError(t, db.Create(&model.User{
+		Id:       1,
+		Username: "root",
+		Role:     common.RoleRootUser,
+		Status:   common.UserStatusEnabled,
+		Group:    "default",
+		Setting:  `{"accept_unset_model_ratio_model":true}`,
+	}).Error)
+	channel := &model.Channel{
+		Id:      1,
+		Type:    channelType,
+		Key:     "sk-test",
+		Name:    "iq",
+		Status:  common.ChannelStatusEnabled,
+		Models:  "gpt-5",
+		Group:   "default",
+		BaseURL: &baseURL,
+	}
+	if modelMapping != "" {
+		channel.ModelMapping = &modelMapping
+	}
+	require.NoError(t, db.Create(channel).Error)
+	return channel
+}
+
+func iqCheckChunk(content string) string {
+	return `data: {"id":"c1","object":"chat.completion.chunk","created":1,"model":"gpt-5","choices":[{"index":0,"delta":{"content":` + strconv.Quote(content) + `}}]}` + "\n\n"
+}
+
+// A reasoning model can stay silent far longer than STREAMING_TIMEOUT before it
+// answers; the check must keep waiting until its own timeout.
+func TestExecuteModelIQCheckOutlastsStreamingIdleTimeout(t *testing.T) {
+	previousStreamingTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 1
+	t.Cleanup(func() { constant.StreamingTimeout = previousStreamingTimeout })
+
+	var streamed atomic.Bool
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+		streamed.Store(strings.Contains(string(body), `"stream":true`))
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, iqCheckChunk(""))
+		w.(http.Flusher).Flush()
+		time.Sleep(2 * time.Second)
+		_, _ = io.WriteString(w, iqCheckChunk("4"))
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(upstream.Close)
+	channel := setupModelIQCheckChannel(t, constant.ChannelTypeOpenAI, upstream.URL, "")
+
+	result := model.ModelIQCheckResult{Status: model.ModelIQCheckStatusFailed}
+	executeModelIQCheck(context.Background(), modeliqcheck.Check{Id: "c1", Group: "default", Model: "gpt-5", Prompt: "2+2?"}, channel, 1, 600, &result)
+
+	assert.True(t, streamed.Load(), "the upstream request must ask for a stream")
+	assert.Equal(t, model.ModelIQCheckStatusSuccess, result.Status, result.ErrorMessage)
+	assert.Equal(t, "4", result.Content)
+}
+
+// A stream cut before it finishes is a failed check that keeps the partial
+// answer, not a success with half an answer.
+func TestExecuteModelIQCheckFailsWhenUpstreamStreamBreaks(t *testing.T) {
+	previousStreamingTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 300
+	t.Cleanup(func() { constant.StreamingTimeout = previousStreamingTimeout })
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		conn, buffered, err := w.(http.Hijacker).Hijack()
+		require.NoError(t, err)
+		defer conn.Close()
+		chunk := iqCheckChunk("partial answer")
+		_, _ = io.WriteString(buffered, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n")
+		_, _ = io.WriteString(buffered, strconv.FormatInt(int64(len(chunk)), 16)+"\r\n"+chunk+"\r\n")
+		_ = buffered.Flush()
+	}))
+	t.Cleanup(upstream.Close)
+	channel := setupModelIQCheckChannel(t, constant.ChannelTypeOpenAI, upstream.URL, "")
+
+	result := model.ModelIQCheckResult{Status: model.ModelIQCheckStatusFailed}
+	executeModelIQCheck(context.Background(), modeliqcheck.Check{Id: "c1", Group: "default", Model: "gpt-5", Prompt: "2+2?"}, channel, 1, 600, &result)
+
+	assert.Equal(t, model.ModelIQCheckStatusFailed, result.Status)
+	assert.Equal(t, modeliqcheck.ErrorTypeUpstream, result.ErrorType)
+	assert.Contains(t, result.ErrorMessage, "stream ended before completion")
+	assert.Equal(t, "partial answer", result.Content)
+}
+
+// Channels that can only answer in one piece cannot be checked, since the check
+// must stream from the upstream model.
+func TestExecuteModelIQCheckRejectsChannelsThatCannotStream(t *testing.T) {
+	tests := []struct {
+		name         string
+		channelType  int
+		modelMapping string
+	}{
+		{name: "PaLM", channelType: constant.ChannelTypePaLM},
+		{name: "AWS Nova", channelType: constant.ChannelTypeAws, modelMapping: `{"gpt-5":"amazon.nova-pro-v1:0"}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				t.Error("the upstream must not be called")
+			}))
+			t.Cleanup(upstream.Close)
+			channel := setupModelIQCheckChannel(t, test.channelType, upstream.URL, test.modelMapping)
+			if test.channelType == constant.ChannelTypeAws {
+				channel.Key = "ak|sk|us-east-1"
+			}
+
+			result := model.ModelIQCheckResult{Status: model.ModelIQCheckStatusFailed}
+			executeModelIQCheck(context.Background(), modeliqcheck.Check{Id: "c1", Group: "default", Model: "gpt-5", Prompt: "2+2?"}, channel, 1, 600, &result)
+
+			assert.Equal(t, model.ModelIQCheckStatusFailed, result.Status)
+			assert.Equal(t, modeliqcheck.ErrorTypeUnsupportedModel, result.ErrorType, result.ErrorMessage)
+		})
+	}
+}
+
+// Some channels write through gin's c.Stream, which needs a CloseNotifier; the
+// test recorder must provide one instead of panicking, and stop the stream
+// once the check's context ends.
+func TestChannelTestResponseWriterSupportsGinStream(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	clientGone := make(chan bool)
+	c, _ := gin.CreateTestContext(channelTestResponseWriter{ResponseRecorder: recorder, closed: clientGone})
+
+	steps := 0
+	assert.False(t, c.Stream(func(w io.Writer) bool {
+		steps++
+		_, _ = io.WriteString(w, "data: x\n\n")
+		return steps < 2
+	}))
+	assert.Equal(t, "data: x\n\ndata: x\n\n", recorder.Body.String())
+
+	close(clientGone)
+	assert.True(t, c.Stream(func(io.Writer) bool {
+		t.Error("no step may run after the client is gone")
+		return false
+	}))
 }

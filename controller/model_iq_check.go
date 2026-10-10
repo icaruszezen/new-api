@@ -2,7 +2,9 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -17,7 +19,7 @@ const (
 	// modelIQCheckWorkers 限制同时进行的检查数：每次检查可能持续数分钟并占用上游并发。
 	modelIQCheckWorkers = 3
 	// modelIQCheckTimeoutGrace 是超时后等待测试链路交回部分输出的时间。
-	// 中转只把流读取绑定到 context，上游请求本身不受其约束，因此不能无限等待。
+	// 走 HTTP 的上游请求随 context 结束，但个别渠道（如 WebSocket）不受其约束，因此不能无限等待。
 	modelIQCheckTimeoutGrace = 5 * time.Second
 )
 
@@ -198,6 +200,9 @@ func executeModelIQCheck(ctx context.Context, check modeliqcheck.Check, channel 
 		prompt:          check.Prompt,
 		captureResponse: true,
 		omitMaxTokens:   check.MaxTokens <= 0,
+		requireStream:   true,
+		// 推理模型可能静默思考很久：在检查超时之前，中转层的空闲超时与请求超时都不应先触发。
+		minUpstreamTimeout: time.Duration(timeoutSeconds)*time.Second + modelIQCheckTimeoutGrace,
 	}
 	if check.MaxTokens > 0 {
 		opts.maxTokens = common.GetPointer(uint(check.MaxTokens))
@@ -207,6 +212,13 @@ func executeModelIQCheck(ctx context.Context, check modeliqcheck.Check, channel 
 	defer cancel()
 	done := make(chan testResult, 1)
 	go func() {
+		// 检查在后台任务中运行，没有请求级的 recover：渠道适配器的 panic 不能拖垮整个进程。
+		defer func() {
+			if r := recover(); r != nil {
+				common.SysError(fmt.Sprintf("model iq check %s panicked: %v\n%s", check.Id, r, debug.Stack()))
+				done <- testResult{localErr: fmt.Errorf("check panicked: %v", r)}
+			}
+		}()
 		done <- testChannel(checkCtx, channel, userID, check.Model, "", true, opts)
 	}()
 
@@ -214,6 +226,8 @@ func executeModelIQCheck(ctx context.Context, check modeliqcheck.Check, channel 
 	timedOut := false
 	select {
 	case testRes = <-done:
+		// 截止时刻到达时测试链路可能先一步返回被截断的输出，同样按超时处理。
+		timedOut = checkCtx.Err() != nil
 	case <-checkCtx.Done():
 		timedOut = true
 		select {
@@ -238,6 +252,9 @@ func executeModelIQCheck(ctx context.Context, check modeliqcheck.Check, channel 
 	case timedOut:
 		result.ErrorType = modeliqcheck.ErrorTypeTimeout
 		result.ErrorMessage = fmt.Sprintf("timed out after %d seconds", timeoutSeconds)
+	case errors.Is(testRes.localErr, errChannelTestStreamUnsupported):
+		result.ErrorType = modeliqcheck.ErrorTypeUnsupportedModel
+		result.ErrorMessage = testRes.localErr.Error()
 	case testRes.localErr != nil:
 		result.ErrorType = modeliqcheck.ErrorTypeUpstream
 		result.ErrorMessage = testRes.localErr.Error()

@@ -318,15 +318,24 @@ func runWithLeaseHeartbeat(task *model.SystemTask, runnerID string, fn func(ctx 
 	done := make(chan struct{})
 
 	go func() {
+		lastRenewed := time.Now()
 		for {
 			select {
 			case <-done:
 				return
 			case <-ticker.C:
-				if err := model.RenewSystemTaskLock(task.TaskID, runnerID, systemTaskLockUntil()); err != nil {
+				err := model.RenewSystemTaskLock(task.TaskID, runnerID, systemTaskLockUntil())
+				if err == nil {
+					lastRenewed = time.Now()
+					continue
+				}
+				// 偶发的数据库错误不立刻放弃：只要等到下一次续租时锁仍未过期就继续重试，
+				// 避免长时间运行的任务因一次失败整体中断；锁已被他人接管或即将过期时才停止。
+				if errors.Is(err, model.ErrSystemTaskLockLost) || time.Since(lastRenewed)+interval >= systemTaskLockTTL {
 					cancel()
 					return
 				}
+				logger.LogWarn(context.Background(), fmt.Sprintf("system task lock renewal failed, retrying: type=%s task=%s err=%v", task.Type, task.TaskID, err))
 			}
 		}
 	}()

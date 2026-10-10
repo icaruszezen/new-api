@@ -21,6 +21,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relay"
+	"github.com/QuantumNous/new-api/relay/channel/aws"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -61,6 +62,27 @@ type channelTestOptions struct {
 	omitMaxTokens bool
 	// captureResponse 读取完整的中转响应到 testResult.responseBody，且不把响应内容写入系统日志。
 	captureResponse bool
+	// minUpstreamTimeout 大于 0 时，RELAY_TIMEOUT 与流式空闲超时都不早于它触发，
+	// 上游请求随 ctx 结束；用于需要长时间运行的检查。
+	minUpstreamTimeout time.Duration
+	// requireStream 要求上游以流式返回：只能整段返回的组合直接报错，
+	// 流在正常结束前中断（空闲超时、连接断开等）也按失败处理，而不是把半截输出当成功。
+	requireStream bool
+}
+
+// errChannelTestStreamUnsupported 表示该渠道与模型的组合无法以流式请求上游。
+var errChannelTestStreamUnsupported = errors.New("upstream streaming is not supported")
+
+// channelTestResponseWriter 为测试链路的响应记录器补上 CloseNotify：部分渠道通过
+// gin 的 c.Stream 输出，它依赖 http.CloseNotifier，原生 ResponseRecorder 未实现时会 panic。
+// ctx 结束时通知关闭，与真实客户端断开的行为一致。
+type channelTestResponseWriter struct {
+	*httptest.ResponseRecorder
+	closed chan bool
+}
+
+func (w channelTestResponseWriter) CloseNotify() <-chan bool {
+	return w.closed
 }
 
 func normalizeChannelTestEndpoint(channel *model.Channel, endpointType string) string {
@@ -112,7 +134,10 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
+	clientGone := make(chan bool)
+	stopClientGone := context.AfterFunc(ctx, func() { close(clientGone) })
+	defer stopClientGone()
+	c, _ := gin.CreateTestContext(channelTestResponseWriter{ResponseRecorder: w, closed: clientGone})
 
 	testModel = strings.TrimSpace(testModel)
 	if testModel == "" {
@@ -275,6 +300,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	}
 
 	info.IsChannelTest = true
+	info.MinUpstreamTimeout = opts.minUpstreamTimeout
 	info.InitChannelMeta(c)
 
 	err = attachTestBillingRequestInput(info, request)
@@ -459,6 +485,19 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 
+	if opts.requireStream {
+		// PaLM 与 AWS Nova 只能整段请求，再在本地拼成流。
+		awsAdaptor, isAws := adaptor.(*aws.Adaptor)
+		if channel.Type == constant.ChannelTypePaLM || (isAws && awsAdaptor.IsNova) {
+			err := fmt.Errorf("%w: model %s on %s channel", errChannelTestStreamUnsupported, testModel, constant.GetChannelTypeName(channel.Type))
+			return testResult{
+				context:     c,
+				localErr:    err,
+				newAPIError: types.NewError(err, types.ErrorCodeInvalidRequest),
+			}
+		}
+	}
+
 	requestBody := bytes.NewBuffer(jsonData)
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
 	resp, err := adaptor.DoRequest(c, info, requestBody)
@@ -519,6 +558,16 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	var capturedBody []byte
 	if opts.captureResponse {
 		capturedBody = respBody
+	}
+	if opts.requireStream && !info.StreamStatus.IsNormalEnd() {
+		streamErr := fmt.Errorf("upstream stream ended before completion (%s)", info.StreamStatus.Summary())
+		return testResult{
+			context:      c,
+			localErr:     streamErr,
+			newAPIError:  types.NewOpenAIError(streamErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			responseBody: capturedBody,
+			usage:        usage,
+		}
 	}
 	if bodyErr := validateTestResponseBody(respBody, isStream); bodyErr != nil {
 		return testResult{

@@ -1,10 +1,12 @@
 package channel
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -116,6 +118,45 @@ func TestDoRequest_ClientStreamStillSetsSSEHeaders(t *testing.T) {
 	_, hasSSEHeaders := ctx.Get("event_stream_headers_set")
 	require.True(t, hasSSEHeaders)
 	require.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
+}
+
+// A request with a timeout floor relaxes the client timeout, so the caller's
+// context must be what ends it: an upstream that never answers cannot hold the
+// request after the caller has given up.
+func TestDoRequest_MinUpstreamTimeoutEndsWithCallerContext(t *testing.T) {
+	release := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		<-release
+	}))
+	t.Cleanup(func() {
+		close(release)
+		upstream.Close()
+	})
+
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	callerContext, cancel := context.WithCancel(context.Background())
+	ctx.Request = httptest.NewRequestWithContext(callerContext, http.MethodPost, "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{
+		MinUpstreamTimeout: 10 * time.Minute,
+		ChannelMeta:        &relaycommon.ChannelMeta{},
+	}
+	req, err := http.NewRequest(http.MethodPost, upstream.URL, http.NoBody)
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := doRequest(ctx, req, info)
+		done <- err
+	}()
+	cancel()
+
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the upstream request did not end with the caller's context")
+	}
 }
 
 func TestProcessHeaderOverride_ChannelTestSkipsPassthroughRules(t *testing.T) {

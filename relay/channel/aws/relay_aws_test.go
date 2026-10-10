@@ -189,23 +189,32 @@ func TestNewAwsInvokeContextInheritsParent(t *testing.T) {
 	})
 
 	tests := []struct {
-		name         string
-		relayTimeout int
-		wantDeadline bool
+		name               string
+		relayTimeout       int
+		minUpstreamTimeout time.Duration
+		wantTimeout        time.Duration
 	}{
-		{name: "without relay timeout", relayTimeout: 0, wantDeadline: false},
-		{name: "with relay timeout", relayTimeout: 30, wantDeadline: true},
+		{name: "without relay timeout", relayTimeout: 0, minUpstreamTimeout: 10 * time.Minute},
+		{name: "with relay timeout", relayTimeout: 30, wantTimeout: 30 * time.Second},
+		{name: "relay timeout raised to the request minimum", relayTimeout: 30, minUpstreamTimeout: 10 * time.Minute, wantTimeout: 10 * time.Minute},
+		{name: "longer relay timeout kept", relayTimeout: 1200, minUpstreamTimeout: 10 * time.Minute, wantTimeout: 20 * time.Minute},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			common.RelayTimeout = test.relayTimeout
+			info := &relaycommon.RelayInfo{MinUpstreamTimeout: test.minUpstreamTimeout}
 			parent, cancelParent := context.WithCancel(context.Background())
-			invokeContext, cancelInvoke := newAwsInvokeContext(parent)
+			invokeContext, cancelInvoke := newAwsInvokeContext(parent, info)
 			defer cancelInvoke()
 
-			_, hasDeadline := invokeContext.Deadline()
-			assert.Equal(t, test.wantDeadline, hasDeadline)
+			deadline, hasDeadline := invokeContext.Deadline()
+			if test.wantTimeout == 0 {
+				assert.False(t, hasDeadline)
+			} else {
+				require.True(t, hasDeadline)
+				assert.InDelta(t, test.wantTimeout.Seconds(), time.Until(deadline).Seconds(), 5)
+			}
 
 			cancelParent()
 			require.ErrorIs(t, invokeContext.Err(), context.Canceled)

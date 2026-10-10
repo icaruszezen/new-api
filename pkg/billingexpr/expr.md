@@ -69,7 +69,7 @@ Powered by [expr-lang/expr](https://github.com/expr-lang/expr). Expressions are 
 | `p * 3 + c * 15` | 500 | 没用 `ao`，音频输出包含在 `c` 里按 $15 计费 |
 | `p * 3 + c * 15 + ao * 50` | 400 | 用了 `ao`，音频 100 从 `c` 中扣除按 $50 计费 |
 
-> **注意：** 这个自动排除仅针对 GPT/OpenAI 格式的 API（prompt_tokens 包含所有子类别）。Claude 格式的 API（input_tokens 本身就只包含纯文本）不做任何减法。系统根据上游返回格式自动判断，表达式作者无需关心。
+> **注意：** 这个自动排除仅针对 GPT/OpenAI 格式的 API（prompt_tokens 包含所有子类别）。Claude 格式的 API（input_tokens 本身就只包含纯文本）不做任何减法；表达式未单独使用 `cr` 时，单独报告的缓存读取 token 会加回 `p` 按输入价计费，`len` 保持完整上下文长度。系统根据上游返回格式自动判断，表达式作者无需关心。
 
 ### Built-in Functions
 
@@ -194,7 +194,7 @@ After the upstream response returns with actual token usage:
 1. `BuildTieredTokenParams(usage, isClaudeUsageSemantic, usedVars)`:
    - Reads actual token counts from `dto.Usage`
    - For GPT-format APIs (prompt_tokens includes everything): subtracts sub-categories from P/C **only when** the expression uses their variables (detected via AST introspection of the compiled expression)
-   - For Claude-format APIs (input_tokens is text-only): no adjustment needed
+   - For Claude-format APIs (input_tokens is text-only): nothing is subtracted; cache reads omitted from the expression (no `cr`) are added to P, and separately priced cache remains separate
 
 2. `TryTieredSettle(relayInfo, params)`:
    - Uses the captured `BillingSnapshot`, whose group-dependent fields have been refreshed from the final selected group

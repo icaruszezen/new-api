@@ -225,6 +225,34 @@ describe('parseOutputSegments', () => {
     ])
   })
 
+  test('starts an indented <html> document at the tag', () => {
+    const content = 'Page:\n  <html><body>ok</body></html>'
+
+    expect(parseOutputSegments(content)).toEqual([
+      { type: 'text', text: 'Page:' },
+      { type: 'html', html: '<html><body>ok</body></html>', complete: true },
+    ])
+  })
+
+  // Model output is untrusted: a degraded model can emit huge whitespace runs,
+  // and a backtracking pattern would freeze every visitor's tab.
+  test('handles huge whitespace runs in linear time', () => {
+    const blankLines = `a${'\n'.repeat(200_000)}b`
+    expect(parseOutputSegments(blankLines)).toEqual([
+      { type: 'text', text: blankLines },
+    ])
+
+    const spaces = `x${' '.repeat(200_000)}y`
+    expect(parseOutputSegments(spaces)).toEqual([
+      { type: 'text', text: spaces },
+    ])
+
+    const trailing = `Answer${'\n \t'.repeat(100_000)}`
+    expect(parseOutputSegments(trailing)).toEqual([
+      { type: 'text', text: 'Answer' },
+    ])
+  }, 2_000)
+
   test('normalizes Windows line endings before scanning', () => {
     const content = 'Intro\r\n```html\r\n<p>x</p>\r\n```\r\nOutro'
 

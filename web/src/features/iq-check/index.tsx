@@ -36,9 +36,9 @@ const SKELETON_KEYS = ['a', 'b', 'c', 'd']
  * Ticks every second on its own so the cards do not re-render with it; their
  * relative times only need refreshing when new data arrives.
  */
-function RefreshCountdown(props: { dataUpdatedAt: number }) {
+function RefreshCountdown(props: { lastFetchedAt: number }) {
   const { t } = useTranslation()
-  const seconds = useRefreshCountdown(props.dataUpdatedAt)
+  const seconds = useRefreshCountdown(props.lastFetchedAt)
 
   return (
     <p className='text-muted-foreground text-xs tabular-nums'>
@@ -47,7 +47,7 @@ function RefreshCountdown(props: { dataUpdatedAt: number }) {
   )
 }
 
-function PageShell(props: { children: ReactNode; dataUpdatedAt?: number }) {
+function PageShell(props: { children: ReactNode; lastFetchedAt?: number }) {
   const { t } = useTranslation()
 
   return (
@@ -63,8 +63,8 @@ function PageShell(props: { children: ReactNode; dataUpdatedAt?: number }) {
             )}
           </p>
         </div>
-        {props.dataUpdatedAt !== undefined && (
-          <RefreshCountdown dataUpdatedAt={props.dataUpdatedAt} />
+        {props.lastFetchedAt !== undefined && (
+          <RefreshCountdown lastFetchedAt={props.lastFetchedAt} />
         )}
       </div>
       {props.children}
@@ -74,7 +74,7 @@ function PageShell(props: { children: ReactNode; dataUpdatedAt?: number }) {
 
 export function IqCheck() {
   const { t } = useTranslation()
-  const { data, isLoading, isError, refetch, dataUpdatedAt, backoffSeconds } =
+  const { data, isLoading, isError, refetch, lastFetchedAt, backoffSeconds } =
     useIqCheckStatus()
   // Run picked per check; checks without an entry follow their newest run.
   const [selectedRuns, setSelectedRuns] = useState<Record<string, number>>({})
@@ -137,7 +137,7 @@ export function IqCheck() {
 
   if (checks.length === 0) {
     return (
-      <PageShell dataUpdatedAt={dataUpdatedAt}>
+      <PageShell lastFetchedAt={lastFetchedAt}>
         <p className='text-muted-foreground text-center text-sm'>
           {t('No IQ checks have been configured yet.')}
         </p>
@@ -146,7 +146,7 @@ export function IqCheck() {
   }
 
   return (
-    <PageShell dataUpdatedAt={dataUpdatedAt}>
+    <PageShell lastFetchedAt={lastFetchedAt}>
       <div className='grid gap-4 lg:grid-cols-2'>
         {checks.map((check, index) => {
           const run = displayedRuns[index]

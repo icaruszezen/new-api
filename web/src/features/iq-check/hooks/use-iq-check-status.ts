@@ -96,15 +96,11 @@ export function useIqCheckStatus() {
       }
       return failureCount < 3
     },
-    refetchInterval: (current) => {
+    refetchInterval: () => {
       const remaining = backoffUntilRef.current - Date.now()
       if (remaining > 0) return remaining
-      if (
-        current.state.status === 'error' &&
-        !isRateLimitedError(current.state.error)
-      ) {
-        return false
-      }
+      // Keep polling after a failed refresh: the page is meant to stay open,
+      // and a backend restart must not freeze it on stale results.
       return IQ_CHECK_REFRESH_MS
     },
     refetchOnWindowFocus: false,
@@ -122,18 +118,19 @@ export function useIqCheckStatus() {
     data: query.data,
     isLoading: query.isLoading,
     isError: query.isError,
-    dataUpdatedAt: query.dataUpdatedAt,
+    /** When the last poll finished, whether it succeeded or failed. */
+    lastFetchedAt: Math.max(query.dataUpdatedAt, query.errorUpdatedAt),
     backoffSeconds,
     refetch,
   }
 }
 
 /**
- * Seconds remaining until the next poll, derived from the last successful
- * fetch so the countdown stays in sync with actual polling.
+ * Seconds remaining until the next poll, derived from when the last poll
+ * finished so the countdown stays in sync with actual polling.
  */
-export function useRefreshCountdown(dataUpdatedAt: number | undefined) {
+export function useRefreshCountdown(lastFetchedAt: number | undefined) {
   return useSecondsUntil(
-    dataUpdatedAt ? dataUpdatedAt + IQ_CHECK_REFRESH_MS : undefined
+    lastFetchedAt ? lastFetchedAt + IQ_CHECK_REFRESH_MS : undefined
   )
 }

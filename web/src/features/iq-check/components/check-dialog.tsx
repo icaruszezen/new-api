@@ -64,7 +64,8 @@ type CheckDialogProps = {
   /** Check being edited, or undefined when adding a new one. */
   editData?: IqCheck
   groups: string[]
-  onSave: (values: CheckFormValues) => void
+  /** Resolves to whether the server accepted the save. */
+  onSave: (values: CheckFormValues) => Promise<boolean>
 }
 
 export function CheckDialog(props: CheckDialogProps) {
@@ -81,6 +82,10 @@ export function CheckDialog(props: CheckDialogProps) {
   const promptLength = countCharacters(form.watch('prompt'))
   const iconPreview = form.watch('icon')
 
+  // Reset only when the dialog opens or moves to another check. A config
+  // refetch or a rolled-back save replaces the row object, and must not wipe
+  // what the admin has typed.
+  const editId = props.editData?.id
   useEffect(() => {
     if (!props.open) return
     form.reset(
@@ -88,7 +93,8 @@ export function CheckDialog(props: CheckDialogProps) {
         ? checkToFormValues(props.editData)
         : CHECK_FORM_DEFAULT_VALUES
     )
-  }, [props.editData, props.open, form])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId, props.open, form])
 
   const groupModelsQuery = useQuery({
     queryKey: ['group-models', selectedGroup],
@@ -111,9 +117,10 @@ export function CheckDialog(props: CheckDialogProps) {
     [groupModelsQuery.data]
   )
 
-  const handleSubmit = (values: CheckFormValues) => {
-    props.onSave(values)
-    props.onOpenChange(false)
+  // The dialog stays open when the server rejects the save, so the admin can
+  // fix the problem without retyping a long prompt.
+  const handleSubmit = async (values: CheckFormValues) => {
+    if (await props.onSave(values)) props.onOpenChange(false)
   }
 
   return (
@@ -135,7 +142,11 @@ export function CheckDialog(props: CheckDialogProps) {
           >
             {t('Cancel')}
           </Button>
-          <Button type='submit' form={CHECK_FORM_ID}>
+          <Button
+            type='submit'
+            form={CHECK_FORM_ID}
+            disabled={form.formState.isSubmitting}
+          >
             {isEditMode ? t('Update') : t('Add')}
           </Button>
         </>

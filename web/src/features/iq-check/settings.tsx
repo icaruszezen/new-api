@@ -81,7 +81,9 @@ export function IqCheckSettings() {
 
   const persistInFlight = useRef(false)
   const persist = async (next: AdminIqCheck[]) => {
-    if (persistInFlight.current) return false
+    // The server treats the list as complete and deletes the history of every
+    // check missing from it, so nothing is saved until the real list is loaded.
+    if (!configQuery.data || persistInFlight.current) return false
     persistInFlight.current = true
     const previous = checks
     setChecks(next)
@@ -123,7 +125,7 @@ export function IqCheckSettings() {
       editIndex === null
         ? [...checks, saved]
         : checks.map((check, index) => (index === editIndex ? saved : check))
-    void persist(next)
+    return persist(next)
   }
 
   const handleMove = (index: number, direction: -1 | 1) => {
@@ -135,6 +137,7 @@ export function IqCheckSettings() {
   }
 
   const openAddDialog = () => {
+    if (!configQuery.data) return
     if (checks.length >= MAX_CHECKS) {
       toast.error(
         t('At most {{count}} IQ checks can be configured.', {
@@ -213,7 +216,11 @@ export function IqCheckSettings() {
         {t('IQ Check Settings')}
       </SectionPageLayout.Title>
       <SectionPageLayout.Actions>
-        <Button type='button' onClick={openAddDialog} disabled={isSaving}>
+        <Button
+          type='button'
+          onClick={openAddDialog}
+          disabled={isSaving || !configQuery.data}
+        >
           <Plus className='size-4' />
           {t('Add check')}
         </Button>

@@ -54,26 +54,32 @@ function savedCheck(overrides: Partial<IqCheck> = {}): IqCheck {
   }
 }
 
-function renderDialog(editData?: IqCheck) {
+function renderDialog(editData?: IqCheck, saveAccepted = true) {
   apiMocks.getGroupModels.mockResolvedValue(['gpt-5'])
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
-  const onSave = vi.fn()
-
-  render(
+  const onSave = vi.fn().mockResolvedValue(saveAccepted)
+  const onOpenChange = vi.fn()
+  const ui = (data?: IqCheck) => (
     <QueryClientProvider client={client}>
       <CheckDialog
         open
-        onOpenChange={vi.fn()}
-        editData={editData}
+        onOpenChange={onOpenChange}
+        editData={data}
         groups={['default', 'vip']}
         onSave={onSave}
       />
     </QueryClientProvider>
   )
 
-  return { onSave }
+  const { rerender } = render(ui(editData))
+
+  return {
+    onSave,
+    onOpenChange,
+    rerenderWith: (data?: IqCheck) => rerender(ui(data)),
+  }
 }
 
 describe('CheckDialog', () => {
@@ -157,6 +163,46 @@ describe('CheckDialog', () => {
         enabled: true,
       })
     })
+  })
+
+  test('closes once the server accepts the save', async () => {
+    const user = userEvent.setup()
+    const { onOpenChange } = renderDialog(savedCheck())
+
+    await user.click(screen.getByRole('button', { name: 'Update' }))
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+    })
+  })
+
+  test('stays open with the typed prompt when the server rejects the save', async () => {
+    const user = userEvent.setup()
+    const { onSave, onOpenChange } = renderDialog(savedCheck(), false)
+
+    const prompt = screen.getByLabelText('Prompt')
+    await user.clear(prompt)
+    await user.type(prompt, 'Write a page with a working calculator.')
+    await user.click(screen.getByRole('button', { name: 'Update' }))
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalled()
+    })
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(prompt).toHaveValue('Write a page with a working calculator.')
+  })
+
+  test('keeps typed edits when the edited row is refreshed while open', async () => {
+    const user = userEvent.setup()
+    const { rerenderWith } = renderDialog(savedCheck())
+
+    const prompt = screen.getByLabelText('Prompt')
+    await user.clear(prompt)
+    await user.type(prompt, 'Unsaved prompt')
+    // A refetch after the check ran replaces the row with a new object.
+    rerenderWith(savedCheck({ prompt: 'How many r are in strawberry?' }))
+
+    expect(screen.getByLabelText('Prompt')).toHaveValue('Unsaved prompt')
   })
 
   test('counts prompt characters against the limit', () => {

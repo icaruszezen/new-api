@@ -37,8 +37,9 @@ const HTML_FENCE_LANGUAGES = new Set(['html', 'htm', 'xhtml'])
 const HTML_DOCUMENT_PREFIX_PATTERN = /^(?:<!doctype\s+html|<html(?=[\s>/]|$))/i
 // A doctype is specific enough to start a document anywhere, but `<html>` only
 // counts at the start of a line: mid-sentence it is prose about the element.
-const RAW_DOCUMENT_START_PATTERN =
-  /<!doctype\s+html|(?<=^[ \t]*)<html(?=[\s>/])/gim
+// The `<html>` match includes the line's indentation. Every pattern here must
+// stay linear: model output is untrusted and can hold huge whitespace runs.
+const RAW_DOCUMENT_START_PATTERN = /<!doctype\s+html|^[ \t]*<html(?=[\s>/])/gim
 const RAW_DOCUMENT_END_PATTERN = /<\/html\s*>/i
 const WHITESPACE_ONLY_PATTERN = /^\s*$/
 
@@ -87,11 +88,13 @@ function appendText(segments: OutputSegment[], text: string) {
 function appendProse(segments: OutputSegment[], prose: string) {
   let cursor = 0
   for (const start of prose.matchAll(RAW_DOCUMENT_START_PATTERN)) {
-    if (start.index < cursor) continue
-    if (start.index > 0 && prose[start.index - 1] === '`') continue
+    const startIndex =
+      start.index + start[0].length - start[0].trimStart().length
+    if (startIndex < cursor) continue
+    if (startIndex > 0 && prose[startIndex - 1] === '`') continue
 
-    appendText(segments, prose.slice(cursor, start.index))
-    const document = prose.slice(start.index)
+    appendText(segments, prose.slice(cursor, startIndex))
+    const document = prose.slice(startIndex)
     const end = RAW_DOCUMENT_END_PATTERN.exec(document)
     if (!end) {
       segments.push({ type: 'html', html: document, complete: false })
@@ -103,7 +106,7 @@ function appendProse(segments: OutputSegment[], prose: string) {
       html: document.slice(0, documentEnd),
       complete: true,
     })
-    cursor = start.index + documentEnd
+    cursor = startIndex + documentEnd
   }
   appendText(segments, prose.slice(cursor))
 }
@@ -167,10 +170,16 @@ export function parseOutputSegments(content: string): OutputSegment[] {
   return segments.flatMap((segment): OutputSegment[] => {
     if (segment.type === 'html') return [segment]
     if (WHITESPACE_ONLY_PATTERN.test(segment.text)) return []
-    // Blank lines around a block only separated it from its neighbours.
-    const text = segment.text
-      .replace(/^(?:[ \t]*\n)+/, '')
-      .replace(/(?:\n[ \t]*)+$/, '')
-    return [{ type: 'text', text }]
+    // Blank lines around a block only separated it from its neighbours. The
+    // trailing ones are cut with a backward scan: an end-anchored regex would
+    // retry from every newline of a long run and freeze the page.
+    const text = segment.text.replace(/^(?:[ \t]*\n)+/, '')
+    let end = text.length
+    for (let index = text.length - 1; index >= 0; index -= 1) {
+      const char = text[index]
+      if (char === '\n') end = index
+      else if (char !== ' ' && char !== '\t') break
+    }
+    return [{ type: 'text', text: text.slice(0, end) }]
   })
 }

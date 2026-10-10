@@ -267,7 +267,9 @@ describe('IqCheckSettings', () => {
     })
   })
 
-  test('shows an error instead of an empty list when the config fails to load', async () => {
+  // Saving replaces the whole list and deletes the history of missing checks,
+  // so adding one before the real list is loaded would wipe every other check.
+  test('shows an error and blocks adding checks when the config fails to load', async () => {
     apiMocks.getIqCheckConfig.mockRejectedValue(new Error('network'))
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -284,5 +286,6 @@ describe('IqCheckSettings', () => {
     expect(
       screen.queryByText('No IQ checks have been configured yet.')
     ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add check' })).toBeDisabled()
   })
 })

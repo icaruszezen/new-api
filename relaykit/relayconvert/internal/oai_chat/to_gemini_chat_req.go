@@ -192,6 +192,8 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 				}
 			}
 			tool.Function.Parameters = sharedgemini.CleanFunctionParameters(tool.Function.Parameters)
+			// Gemini function declarations have no strict field and reject unknown fields.
+			tool.Function.Strict = nil
 			functions = append(functions, tool.Function)
 		}
 		geminiTools := geminiRequest.GetTools()

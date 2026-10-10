@@ -77,7 +77,7 @@ function resultFor(
     reasoning: '',
     reasoning_truncated: false,
     finish_reason: 'stop',
-    error_message: '',
+    error_type: '',
     duration_ms: 1000,
     prompt_tokens: 10,
     completion_tokens: 20,

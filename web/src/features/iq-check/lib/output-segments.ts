@@ -35,7 +35,10 @@ const FENCE_OPEN_PATTERN = /^ {0,3}(`{3,}|~{3,})(.*)$/
 const FENCE_CLOSE_PATTERN = /^ {0,3}(`{3,}|~{3,})[ \t]*$/
 const HTML_FENCE_LANGUAGES = new Set(['html', 'htm', 'xhtml'])
 const HTML_DOCUMENT_PREFIX_PATTERN = /^(?:<!doctype\s+html|<html(?=[\s>/]|$))/i
-const RAW_DOCUMENT_START_PATTERN = /<!doctype\s+html|<html(?=[\s>/])/gi
+// A doctype is specific enough to start a document anywhere, but `<html>` only
+// counts at the start of a line: mid-sentence it is prose about the element.
+const RAW_DOCUMENT_START_PATTERN =
+  /<!doctype\s+html|(?<=^[ \t]*)<html(?=[\s>/])/gim
 const RAW_DOCUMENT_END_PATTERN = /<\/html\s*>/i
 const WHITESPACE_ONLY_PATTERN = /^\s*$/
 
@@ -77,9 +80,9 @@ function appendText(segments: OutputSegment[], text: string) {
 
 /**
  * Splits prose into text and raw HTML documents. A document starts at a
- * doctype or an `<html>` tag and ends after the first `</html>`; without one it
- * runs to the end of the prose. Tags quoted in inline code (`<html>`) are
- * explanations, not documents, so they are left in the text.
+ * doctype or at an `<html>` tag opening a line, and ends after the first
+ * `</html>`; without one it runs to the end of the prose. A doctype quoted in
+ * inline code is an explanation, not a document, so it is left in the text.
  */
 function appendProse(segments: OutputSegment[], prose: string) {
   let cursor = 0

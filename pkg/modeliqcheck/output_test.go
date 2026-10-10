@@ -190,6 +190,54 @@ func TestExtractOutputReportsUpstreamErrors(t *testing.T) {
 	}
 }
 
+// Some reasoning models write their thinking inline as <think>…</think> at the
+// start of the answer instead of in reasoning_content.
+func TestExtractOutputMovesLeadingThinkBlockToReasoning(t *testing.T) {
+	testCases := []struct {
+		name          string
+		body          string
+		wantContent   string
+		wantReasoning string
+	}{
+		{
+			name: "streamed think block becomes the reasoning",
+			body: strings.Join([]string{
+				`data: {"choices":[{"delta":{"content":"<think>\nThe page needs"}}]}`,
+				`data: {"choices":[{"delta":{"content":" a <html> root.\n</think>\n\n<!DOCTYPE html><html></html>"}}]}`,
+				`data: {"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+			}, "\n"),
+			wantContent:   "<!DOCTYPE html><html></html>",
+			wantReasoning: "The page needs a <html> root.",
+		},
+		{
+			name:          "separate reasoning wins over the inline copy",
+			body:          `{"choices":[{"message":{"content":"<think>copy</think>42","reasoning_content":"original"},"finish_reason":"stop"}]}`,
+			wantContent:   "42",
+			wantReasoning: "original",
+		},
+		{
+			name:          "unclosed think block means the answer never started",
+			body:          `{"choices":[{"message":{"content":"<think>still thinking"},"finish_reason":"length"}]}`,
+			wantContent:   "",
+			wantReasoning: "still thinking",
+		},
+		{
+			name:          "think tags later in the answer are content",
+			body:          `{"choices":[{"message":{"content":"Use <think>tags</think> like this."},"finish_reason":"stop"}]}`,
+			wantContent:   "Use <think>tags</think> like this.",
+			wantReasoning: "",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			output := ExtractOutput([]byte(testCase.body))
+			assert.Equal(t, testCase.wantContent, output.Content)
+			assert.Equal(t, testCase.wantReasoning, output.Reasoning)
+		})
+	}
+}
+
 func TestExtractOutputIgnoresEmptyAndNonJSONBodies(t *testing.T) {
 	for _, body := range []string{"", "   ", ": PING\n\n", "data: [DONE]\n", "data: not-json\n", "<html>502 Bad Gateway</html>"} {
 		output := ExtractOutput([]byte(body))

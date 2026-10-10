@@ -78,7 +78,7 @@ function result(overrides: Partial<IqCheckResult> = {}): IqCheckResult {
     reasoning: '',
     reasoning_truncated: false,
     finish_reason: 'stop',
-    error_message: '',
+    error_type: '',
     duration_ms: NEWEST.duration_ms,
     prompt_tokens: 20,
     completion_tokens: NEWEST.completion_tokens,
@@ -149,17 +149,36 @@ describe('CheckCard', () => {
         id: OLDER.id,
         status: 'failed',
         content: 'Partial answer',
-        error_message: 'timed out after 300 seconds',
+        error_type: 'timeout',
       }),
     })
 
     const alert = screen.getByRole('alert')
     expect(within(alert).getByText('Check failed')).toBeInTheDocument()
     expect(
-      within(alert).getByText('timed out after 300 seconds')
+      within(alert).getByText('The model did not finish within the time limit.')
     ).toBeInTheDocument()
     expect(screen.getByText('Partial answer')).toBeInTheDocument()
     expect(screen.getByText('Failed')).toBeInTheDocument()
+  })
+
+  test('explains an empty answer cut off by the output token limit', () => {
+    renderCard({
+      check: check({ history: [OLDER] }),
+      result: result({
+        id: OLDER.id,
+        status: 'failed',
+        content: '',
+        finish_reason: 'length',
+        error_type: 'empty_response',
+      }),
+    })
+
+    expect(
+      within(screen.getByRole('alert')).getByText(
+        'The model used up its output tokens before answering.'
+      )
+    ).toBeInTheDocument()
   })
 
   test('explains a check that has never run', () => {

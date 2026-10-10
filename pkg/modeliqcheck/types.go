@@ -30,6 +30,15 @@ const (
 	ResultStatusFailed  = "failed"
 )
 
+// 失败结果的分类。公开页面只展示分类（由前端翻译），原始错误只给管理端。
+const (
+	ErrorTypeNoChannel        = "no_channel"
+	ErrorTypeUnsupportedModel = "unsupported_model"
+	ErrorTypeTimeout          = "timeout"
+	ErrorTypeUpstream         = "upstream_error"
+	ErrorTypeEmptyResponse    = "empty_response"
+)
+
 // Check 是管理员配置的一条智商检查：定期用 Prompt 调用 Group 分组下的 Model。
 // 同一分组同一模型可以配置多条（不同提示词）。Group 属于内部信息，公开接口不会返回。
 type Check struct {
@@ -91,7 +100,7 @@ type HistoryItemView struct {
 }
 
 // ResultView 是 GET /api/iq-check/results 返回的单条完整结果。
-// Model / Prompt 是该次运行的快照；ErrorMessage 已脱敏。
+// Model / Prompt 是该次运行的快照；失败原因只给 ErrorType 分类，不含原始错误。
 type ResultView struct {
 	Id                 int64  `json:"id"`
 	CheckId            string `json:"check_id"`
@@ -104,7 +113,7 @@ type ResultView struct {
 	Reasoning          string `json:"reasoning"`
 	ReasoningTruncated bool   `json:"reasoning_truncated"`
 	FinishReason       string `json:"finish_reason"`
-	ErrorMessage       string `json:"error_message"`
+	ErrorType          string `json:"error_type"`
 	DurationMs         int64  `json:"duration_ms"`
 	PromptTokens       int    `json:"prompt_tokens"`
 	CompletionTokens   int    `json:"completion_tokens"`

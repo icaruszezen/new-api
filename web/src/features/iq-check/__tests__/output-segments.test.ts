@@ -127,6 +127,23 @@ describe('parseOutputSegments', () => {
     ])
   })
 
+  test('keeps <html> mentioned mid-sentence as text', () => {
+    const content =
+      'Every page needs one <html> element.\nIt wraps <head> and <body>.'
+
+    expect(parseOutputSegments(content)).toEqual([
+      { type: 'text', text: content },
+    ])
+  })
+
+  test('keeps a doctype quoted in inline code as text', () => {
+    const content = 'Start the file with `<!DOCTYPE html>` and nothing else.'
+
+    expect(parseOutputSegments(content)).toEqual([
+      { type: 'text', text: content },
+    ])
+  })
+
   test('marks an unclosed html fence as incomplete and keeps the rest as its body', () => {
     const content = 'Page:\n```html\n<html><body>\n<p>cut off'
 

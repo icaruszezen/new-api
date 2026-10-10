@@ -27,8 +27,10 @@ type ModelIQCheckResult struct {
 	Reasoning          string `json:"reasoning"`
 	ReasoningTruncated bool   `json:"reasoning_truncated"`
 	FinishReason       string `json:"finish_reason" gorm:"size:64"`
-	// ErrorMessage 保存原始错误，仅管理端可见；公开视图会先脱敏。
+	// ErrorMessage 保存原始错误，仅管理端可见：上游错误可能带组织 ID、密钥尾号或内网地址，
+	// 公开视图只返回 ErrorType 分类。
 	ErrorMessage     string `json:"error_message"`
+	ErrorType        string `json:"error_type" gorm:"size:32"`
 	DurationMs       int64  `json:"duration_ms"`
 	PromptTokens     int    `json:"prompt_tokens"`
 	CompletionTokens int    `json:"completion_tokens"`

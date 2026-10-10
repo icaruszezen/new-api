@@ -96,3 +96,32 @@ func TestCheckViewJSONOmitsInternalRoutingAndErrors(t *testing.T) {
 	assert.NotContains(t, body, `"channel`)
 	assert.NotContains(t, body, `"error_message"`)
 }
+
+// Result details are public too: a failure is reported by category only, so
+// organisation ids, key tails, or internal hosts in upstream errors stay private.
+func TestPublicResultViewReportsErrorCategoryOnly(t *testing.T) {
+	view := publicResultView(model.ModelIQCheckResult{
+		Id:           7,
+		CheckId:      "c1",
+		CheckedAt:    200,
+		Status:       model.ModelIQCheckStatusFailed,
+		ModelName:    "gpt-5",
+		Prompt:       "p",
+		FinishReason: "length",
+		ErrorMessage: "org-secret: invalid key sk-...abcd at http://10.0.0.5",
+		ErrorType:    ErrorTypeUpstream,
+		ChannelId:    42,
+	})
+
+	assert.Equal(t, ResultStatusFailed, view.Status)
+	assert.Equal(t, ErrorTypeUpstream, view.ErrorType)
+	assert.Equal(t, "gpt-5", view.Model)
+
+	payload, err := common.Marshal(view)
+	require.NoError(t, err)
+	body := string(payload)
+	assert.Contains(t, body, `"error_type":"upstream_error"`)
+	assert.NotContains(t, body, "org-secret")
+	assert.NotContains(t, body, `"error_message"`)
+	assert.NotContains(t, body, `"channel`)
+}

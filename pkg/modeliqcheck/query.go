@@ -4,7 +4,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/model_iq_check_setting"
 )
@@ -141,26 +140,31 @@ func ResultDetails(ids []int64) ([]ResultView, error) {
 		return nil, err
 	}
 	for _, row := range rows {
-		views = append(views, ResultView{
-			Id:                 row.Id,
-			CheckId:            row.CheckId,
-			CheckedAt:          row.CheckedAt,
-			Status:             ResultStatusName(row.Status),
-			Model:              row.ModelName,
-			Prompt:             row.Prompt,
-			Content:            row.Content,
-			ContentTruncated:   row.ContentTruncated,
-			Reasoning:          row.Reasoning,
-			ReasoningTruncated: row.ReasoningTruncated,
-			FinishReason:       row.FinishReason,
-			ErrorMessage:       common.MaskSensitiveInfo(row.ErrorMessage),
-			DurationMs:         row.DurationMs,
-			PromptTokens:       row.PromptTokens,
-			CompletionTokens:   row.CompletionTokens,
-			ReasoningTokens:    row.ReasoningTokens,
-		})
+		views = append(views, publicResultView(row))
 	}
 	return views, nil
+}
+
+// publicResultView 把结果行转换为公开视图：不含渠道与原始错误，失败原因只给分类。
+func publicResultView(row model.ModelIQCheckResult) ResultView {
+	return ResultView{
+		Id:                 row.Id,
+		CheckId:            row.CheckId,
+		CheckedAt:          row.CheckedAt,
+		Status:             ResultStatusName(row.Status),
+		Model:              row.ModelName,
+		Prompt:             row.Prompt,
+		Content:            row.Content,
+		ContentTruncated:   row.ContentTruncated,
+		Reasoning:          row.Reasoning,
+		ReasoningTruncated: row.ReasoningTruncated,
+		FinishReason:       row.FinishReason,
+		ErrorType:          row.ErrorType,
+		DurationMs:         row.DurationMs,
+		PromptTokens:       row.PromptTokens,
+		CompletionTokens:   row.CompletionTokens,
+		ReasoningTokens:    row.ReasoningTokens,
+	}
 }
 
 // ResultStatusName 把落库状态映射为接口中的状态字符串，未知值返回空串。

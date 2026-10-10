@@ -124,11 +124,11 @@ func runModelIQCheck(ctx context.Context, check modeliqcheck.Check, userID int, 
 	channel, err := selectChannelForGroupModel(ctx, check.Group, check.Model)
 	switch {
 	case err != nil:
-		// 选渠错误会带上分组名，而结果的错误信息会出现在公开页面，详细原因只写系统日志。
-		common.SysError(fmt.Sprintf("model iq check %s has no available channel: %s", check.Id, err.Error()))
-		result.ErrorMessage = fmt.Sprintf("no available channel for model %s", check.Model)
+		result.ErrorType = modeliqcheck.ErrorTypeNoChannel
+		result.ErrorMessage = err.Error()
 	case shouldSkipChannelMonitorSyntheticProbe(channel, check.Model):
 		result.ChannelId = channel.Id
+		result.ErrorType = modeliqcheck.ErrorTypeUnsupportedModel
 		result.ErrorMessage = fmt.Sprintf("model %s is not a chat model and cannot answer a text prompt", check.Model)
 	default:
 		result.ChannelId = channel.Id
@@ -202,18 +202,23 @@ func executeModelIQCheck(ctx context.Context, check modeliqcheck.Check, channel 
 
 	switch {
 	case timedOut:
+		result.ErrorType = modeliqcheck.ErrorTypeTimeout
 		result.ErrorMessage = fmt.Sprintf("timed out after %d seconds", timeoutSeconds)
 	case testRes.localErr != nil:
+		result.ErrorType = modeliqcheck.ErrorTypeUpstream
 		result.ErrorMessage = testRes.localErr.Error()
 	case testRes.newAPIError != nil:
+		result.ErrorType = modeliqcheck.ErrorTypeUpstream
 		result.ErrorMessage = testRes.newAPIError.Error()
 	case output.ErrorMessage != "":
+		result.ErrorType = modeliqcheck.ErrorTypeUpstream
 		result.ErrorMessage = output.ErrorMessage
 	case strings.TrimSpace(output.Content) == "":
 		finishReason := output.FinishReason
 		if finishReason == "" {
 			finishReason = "unknown"
 		}
+		result.ErrorType = modeliqcheck.ErrorTypeEmptyResponse
 		result.ErrorMessage = fmt.Sprintf("model returned no content (finish reason: %s)", finishReason)
 	default:
 		result.Status = model.ModelIQCheckStatusSuccess

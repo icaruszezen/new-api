@@ -31,7 +31,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
 import type { ResultDetailState } from '../hooks/use-result-details'
-import type { IqCheckResult } from '../types'
+import type { IqCheckErrorType, IqCheckResult } from '../types'
 import { OutputView } from './output-view'
 
 function ReasoningSection(props: { reasoning: string; truncated: boolean }) {
@@ -120,6 +120,19 @@ export function ResultBody(props: ResultBodyProps) {
   }
 
   const failed = result.status === 'failed'
+  const failureMessages: Record<IqCheckErrorType, string> = {
+    no_channel: t('No channel is currently available for this model.'),
+    unsupported_model: t('This model cannot answer a text prompt.'),
+    timeout: t('The model did not finish within the time limit.'),
+    upstream_error: t('The upstream service returned an error.'),
+    empty_response:
+      result.finish_reason === 'length'
+        ? t('The model used up its output tokens before answering.')
+        : t('The model returned an empty answer.'),
+  }
+  const failureMessage = result.error_type
+    ? failureMessages[result.error_type]
+    : undefined
   // A failed run without any partial answer is fully explained by its error.
   const showOutput = !failed || result.content !== ''
 
@@ -129,10 +142,8 @@ export function ResultBody(props: ResultBodyProps) {
         <Alert variant='destructive'>
           <CircleAlert aria-hidden='true' />
           <AlertTitle>{t('Check failed')}</AlertTitle>
-          {result.error_message && (
-            <AlertDescription className='break-words whitespace-pre-wrap'>
-              {result.error_message}
-            </AlertDescription>
+          {failureMessage && (
+            <AlertDescription>{failureMessage}</AlertDescription>
           )}
         </Alert>
       )}

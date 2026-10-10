@@ -55,6 +55,13 @@ export type IqCheckStatus = {
   checks: IqCheckView[]
 }
 
+export type IqCheckErrorType =
+  | 'no_channel'
+  | 'unsupported_model'
+  | 'timeout'
+  | 'upstream_error'
+  | 'empty_response'
+
 /** Full output of one run. Results are immutable once written. */
 export type IqCheckResult = {
   id: number
@@ -70,7 +77,8 @@ export type IqCheckResult = {
   reasoning: string
   reasoning_truncated: boolean
   finish_reason: string
-  error_message: string
+  /** Category of a failed run; raw upstream errors are only shown to admins. */
+  error_type: IqCheckErrorType | ''
   duration_ms: number
   prompt_tokens: number
   completion_tokens: number

@@ -35,9 +35,30 @@ func ExtractOutput(body []byte) Output {
 		FinishReason: collector.finishReason,
 		ErrorMessage: collector.errorMessage,
 	}
-	output.Content, output.ContentTruncated = truncateUTF8(collector.content.String(), MaxResultContentBytes)
-	output.Reasoning, output.ReasoningTruncated = truncateUTF8(collector.reasoning.String(), MaxResultReasoningBytes)
+	content, reasoning := separateInlineThinking(collector.content.String(), collector.reasoning.String())
+	output.Content, output.ContentTruncated = truncateUTF8(content, MaxResultContentBytes)
+	output.Reasoning, output.ReasoningTruncated = truncateUTF8(reasoning, MaxResultReasoningBytes)
 	return output
+}
+
+// separateInlineThinking 把正文开头的 <think>…</think> 思考块移出正文。
+// 部分推理模型（及其兼容中转）不用 reasoning_content 字段，而是把思考过程写在正文里；
+// 不移出会让页面把思考当成回答展示，思考中出现的 HTML 片段也会被当成网页渲染。
+// 已有独立思考内容时只去掉正文中的重复部分；思考块未闭合说明模型在思考中途被截断，正文为空。
+func separateInlineThinking(content string, reasoning string) (string, string) {
+	const openTag, closeTag = "<think>", "</think>"
+	body := strings.TrimLeft(content, " \t\r\n")
+	if !strings.HasPrefix(body, openTag) {
+		return content, reasoning
+	}
+	thinking, answer, closed := strings.Cut(body[len(openTag):], closeTag)
+	if !closed {
+		answer = ""
+	}
+	if reasoning == "" {
+		reasoning = strings.TrimSpace(thinking)
+	}
+	return strings.TrimLeft(answer, " \t\r\n"), reasoning
 }
 
 // TruncateErrorMessage 把错误信息裁剪到 MaxErrorMessageLength 个字符，

@@ -42,7 +42,7 @@ type testResult struct {
 	newAPIError *types.NewAPIError
 	// ttftMs 仅在流式测试收到首字后有值，供渠道监控记录首字延迟。
 	ttftMs int
-	// responseBody 仅在 captureResponse 时有值：中转写给合成客户端的完整响应（有上限）。
+	// responseBody 仅在 captureResponse 时有值：中转写给合成客户端的完整响应。
 	responseBody []byte
 	// usage 是本次测试归一化后的用量，供模型智商检查记录 token 数。
 	usage *dto.Usage
@@ -59,14 +59,9 @@ type channelTestOptions struct {
 	// omitMaxTokens 去掉 buildTestRequest 写入的 max tokens 字段（OpenAI chat / Gemini），
 	// 由上游使用默认输出上限；Claude 原生请求必须携带该字段，保留原值。
 	omitMaxTokens bool
-	// captureResponse 读取完整的中转响应（上限 maxCapturedTestResponseBytes）到
-	// testResult.responseBody，且不把响应内容写入系统日志。
+	// captureResponse 读取完整的中转响应到 testResult.responseBody，且不把响应内容写入系统日志。
 	captureResponse bool
 }
-
-// maxCapturedTestResponseBytes 限制 captureResponse 读取的响应体积。
-// 流式响应每个增量都带 JSON 包装，实际正文远小于该值。
-const maxCapturedTestResponseBytes = 8 << 20
 
 func normalizeChannelTestEndpoint(channel *model.Channel, endpointType string) string {
 	normalized := strings.TrimSpace(endpointType)
@@ -654,11 +649,13 @@ func coerceTestUsage(usageAny any, isStream bool, estimatePromptTokens int) (*dt
 }
 
 // readTestResponseBody 默认只为日志读取流式响应的前 8KB；capture 时读取完整响应供调用方解析。
+// 完整响应此时已在 ResponseRecorder 的内存中，限制读取量省不下内存，只会截掉长回答的结尾
+// （流式响应每个增量约 250 字节包装，长思考的模型可达数十 MB）；落库大小由调用方按字段截断。
 func readTestResponseBody(body io.ReadCloser, isStream bool, capture bool) ([]byte, error) {
 	defer func() { _ = body.Close() }()
 	const maxStreamLogBytes = 8 << 10
 	if capture {
-		return io.ReadAll(io.LimitReader(body, maxCapturedTestResponseBytes))
+		return io.ReadAll(body)
 	}
 	if isStream {
 		return io.ReadAll(io.LimitReader(body, maxStreamLogBytes))
@@ -913,11 +910,14 @@ func channelTestMaxTokens(fallback uint, override *uint) *uint {
 
 // applyChannelTestOptions 按选项改写 buildTestRequest 生成的合成请求：
 // 用自定义提示词替换 "hi"，并按需去掉 max tokens 字段。
+// 自定义提示词的回答很长，指定的 max tokens 对所有文本请求生效：合成探测为避免报错
+// 而不写该字段的请求（Responses、claude thinking 模型）也会补上。
 // 只有文本对话类请求能承载提示词，embedding / rerank / 出图等请求返回错误。
 func applyChannelTestOptions(request dto.Request, opts channelTestOptions) error {
 	if opts.prompt == "" && !opts.omitMaxTokens {
 		return nil
 	}
+	explicitMaxTokens := opts.prompt != "" && !opts.omitMaxTokens && opts.maxTokens != nil
 	switch req := request.(type) {
 	case *dto.GeneralOpenAIRequest:
 		if opts.prompt != "" {
@@ -927,6 +927,9 @@ func applyChannelTestOptions(request dto.Request, opts channelTestOptions) error
 			req.MaxTokens = nil
 			req.MaxCompletionTokens = nil
 		}
+		if explicitMaxTokens && req.MaxTokens == nil && req.MaxCompletionTokens == nil {
+			req.MaxTokens = opts.maxTokens
+		}
 	case *dto.OpenAIResponsesRequest:
 		if opts.prompt != "" {
 			input, err := common.Marshal([]map[string]string{{"role": "user", "content": opts.prompt}})
@@ -934,6 +937,9 @@ func applyChannelTestOptions(request dto.Request, opts channelTestOptions) error
 				return err
 			}
 			req.Input = input
+		}
+		if explicitMaxTokens {
+			req.MaxOutputTokens = opts.maxTokens
 		}
 	case *dto.ClaudeRequest:
 		if opts.prompt != "" {

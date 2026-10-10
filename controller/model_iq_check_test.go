@@ -100,6 +100,36 @@ func TestApplyChannelTestOptionsOmitsMaxTokens(t *testing.T) {
 	assert.Nil(t, geminiReq.GenerationConfig.MaxOutputTokens)
 }
 
+// A configured max tokens must reach the upstream for every text format, also
+// where the synthetic probe leaves the field out: an HTML answer cut at the
+// upstream default reads as a dumber model.
+func TestApplyChannelTestOptionsSendsConfiguredMaxTokens(t *testing.T) {
+	maxTokens := common.GetPointer(uint(32000))
+
+	thinking := buildTestRequest("claude-sonnet-4-5-thinking", "", nil, true, maxTokens)
+	require.NoError(t, applyChannelTestOptions(thinking, channelTestOptions{prompt: iqCheckPrompt, maxTokens: maxTokens}))
+	chat, ok := thinking.(*dto.GeneralOpenAIRequest)
+	require.True(t, ok)
+	require.NotNil(t, chat.MaxTokens)
+	assert.Equal(t, uint(32000), *chat.MaxTokens)
+
+	responses := buildTestRequest("gpt-5-codex", "", nil, true, maxTokens)
+	require.NoError(t, applyChannelTestOptions(responses, channelTestOptions{prompt: iqCheckPrompt, maxTokens: maxTokens}))
+	responsesReq, ok := responses.(*dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	require.NotNil(t, responsesReq.MaxOutputTokens)
+	assert.Equal(t, uint(32000), *responsesReq.MaxOutputTokens)
+
+	// The channel monitor probe sends no prompt: a 16-token cap would be
+	// rejected by claude thinking models, so the probe keeps leaving it out.
+	probeTokens := common.GetPointer(uint(16))
+	probe := buildTestRequest("claude-sonnet-4-5-thinking", "", nil, true, probeTokens)
+	require.NoError(t, applyChannelTestOptions(probe, channelTestOptions{maxTokens: probeTokens}))
+	probeReq, ok := probe.(*dto.GeneralOpenAIRequest)
+	require.True(t, ok)
+	assert.Nil(t, probeReq.MaxTokens)
+}
+
 func TestApplyChannelTestOptionsRejectsPromptForNonChatRequests(t *testing.T) {
 	for _, testCase := range []struct {
 		model        string

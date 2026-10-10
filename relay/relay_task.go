@@ -228,7 +228,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		}
 		return nil, taskErr
 	}
-	if resp != nil && resp.StatusCode != http.StatusOK {
+	// Any 2xx is a successful submission: task APIs commonly answer 201 Created
+	// or 202 Accepted, and the adaptor's DoResponse validates the task id.
+	if resp != nil && resp.StatusCode/100 != 2 {
 		responseBody, _ := io.ReadAll(resp.Body)
 		service.CloseResponseBodyGracefully(resp)
 		taskErr := service.TaskErrorWrapper(fmt.Errorf("%s", string(responseBody)), "fail_to_fetch_task", resp.StatusCode)

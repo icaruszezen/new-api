@@ -206,3 +206,24 @@ func TestGeneralOpenAIRequestGetSystemRoleName(t *testing.T) {
 		})
 	}
 }
+
+func TestGeneralOpenAIRequestPreservesFunctionStrict(t *testing.T) {
+	raw := []byte(`{
+		"model":"gpt-4.1",
+		"tools":[
+			{"type":"function","function":{"name":"strict_on","parameters":{"type":"object"},"strict":true}},
+			{"type":"function","function":{"name":"strict_off","parameters":{"type":"object"},"strict":false}},
+			{"type":"function","function":{"name":"unset","parameters":{"type":"object"}}}
+		]
+	}`)
+
+	var req GeneralOpenAIRequest
+	require.NoError(t, kitutil.Unmarshal(raw, &req))
+
+	encoded, err := kitutil.Marshal(req)
+	require.NoError(t, err)
+
+	assert.Equal(t, "true", gjson.GetBytes(encoded, "tools.0.function.strict").Raw)
+	assert.Equal(t, "false", gjson.GetBytes(encoded, "tools.1.function.strict").Raw)
+	assert.False(t, gjson.GetBytes(encoded, "tools.2.function.strict").Exists())
+}

@@ -1,0 +1,326 @@
+package controller
+
+import (
+	"bytes"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/modeliqcheck"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/QuantumNous/new-api/setting/model_iq_check_setting"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+)
+
+const iqCheckPrompt = "Write a landing page as a single HTML file."
+
+func TestApplyChannelTestOptionsReplacesChatPrompt(t *testing.T) {
+	request := buildTestRequest("gpt-5", "", nil, true, common.GetPointer(uint(8192)))
+
+	require.NoError(t, applyChannelTestOptions(request, channelTestOptions{prompt: iqCheckPrompt}))
+
+	chat, ok := request.(*dto.GeneralOpenAIRequest)
+	require.True(t, ok)
+	require.Len(t, chat.Messages, 1)
+	assert.Equal(t, "user", chat.Messages[0].Role)
+	assert.Equal(t, iqCheckPrompt, chat.Messages[0].Content)
+	require.NotNil(t, chat.MaxTokens, "a configured output budget is kept")
+	assert.Equal(t, uint(8192), *chat.MaxTokens)
+	assert.True(t, *chat.Stream)
+	require.NotNil(t, chat.StreamOptions, "streamed checks still ask for usage")
+}
+
+func TestApplyChannelTestOptionsReplacesResponsesInput(t *testing.T) {
+	request := buildTestRequest("gpt-5-codex", "", nil, true, nil)
+
+	require.NoError(t, applyChannelTestOptions(request, channelTestOptions{prompt: "say \"hi\"\nthen stop"}))
+
+	responses, ok := request.(*dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	var input []map[string]string
+	require.NoError(t, common.Unmarshal(responses.Input, &input))
+	assert.Equal(t, []map[string]string{{"role": "user", "content": "say \"hi\"\nthen stop"}}, input)
+}
+
+func TestApplyChannelTestOptionsReplacesNativePrompts(t *testing.T) {
+	gemini := buildTestRequest("gemini-2.5-pro", string(constant.EndpointTypeGemini), nil, true, nil)
+	require.NoError(t, applyChannelTestOptions(gemini, channelTestOptions{prompt: iqCheckPrompt}))
+	geminiReq, ok := gemini.(*dto.GeminiChatRequest)
+	require.True(t, ok)
+	require.Len(t, geminiReq.Contents, 1)
+	assert.Equal(t, "user", geminiReq.Contents[0].Role)
+	require.Len(t, geminiReq.Contents[0].Parts, 1)
+	assert.Equal(t, iqCheckPrompt, geminiReq.Contents[0].Parts[0].Text)
+
+	claude := buildTestRequest("claude-sonnet-4", string(constant.EndpointTypeAnthropic), nil, true, nil)
+	require.NoError(t, applyChannelTestOptions(claude, channelTestOptions{prompt: iqCheckPrompt, omitMaxTokens: true}))
+	claudeReq, ok := claude.(*dto.ClaudeRequest)
+	require.True(t, ok)
+	require.Len(t, claudeReq.Messages, 1)
+	assert.Equal(t, iqCheckPrompt, claudeReq.Messages[0].Content)
+	require.NotNil(t, claudeReq.MaxTokens, "the Anthropic API requires max_tokens, so it is never dropped")
+}
+
+func TestApplyChannelTestOptionsOmitsMaxTokens(t *testing.T) {
+	cases := []struct {
+		name  string
+		model string
+	}{
+		{name: "max_tokens model", model: "gpt-4o"},
+		{name: "reasoning model uses max_completion_tokens", model: "o3-mini"},
+		{name: "gemini via openai format", model: "gemini-2.5-pro"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			request := buildTestRequest(testCase.model, "", nil, true, nil)
+			require.NoError(t, applyChannelTestOptions(request, channelTestOptions{prompt: iqCheckPrompt, omitMaxTokens: true}))
+			chat, ok := request.(*dto.GeneralOpenAIRequest)
+			require.True(t, ok)
+			assert.Nil(t, chat.MaxTokens)
+			assert.Nil(t, chat.MaxCompletionTokens)
+		})
+	}
+
+	native := buildTestRequest("gemini-2.5-pro", string(constant.EndpointTypeGemini), nil, true, nil)
+	require.NoError(t, applyChannelTestOptions(native, channelTestOptions{omitMaxTokens: true}))
+	geminiReq, ok := native.(*dto.GeminiChatRequest)
+	require.True(t, ok)
+	assert.Nil(t, geminiReq.GenerationConfig.MaxOutputTokens)
+}
+
+func TestApplyChannelTestOptionsRejectsPromptForNonChatRequests(t *testing.T) {
+	for _, testCase := range []struct {
+		model        string
+		endpointType string
+	}{
+		{model: "text-embedding-3-large"},
+		{model: "jina-rerank-v2"},
+		{model: "gpt-image-1", endpointType: string(constant.EndpointTypeImageGeneration)},
+	} {
+		request := buildTestRequest(testCase.model, testCase.endpointType, nil, true, nil)
+		err := applyChannelTestOptions(request, channelTestOptions{prompt: iqCheckPrompt})
+		require.Error(t, err, "model %s", testCase.model)
+		assert.Contains(t, err.Error(), "does not accept a text prompt")
+	}
+}
+
+func TestApplyChannelTestOptionsWithoutOptionsKeepsSyntheticProbe(t *testing.T) {
+	request := buildTestRequest("gpt-4o", "", nil, true, nil)
+	require.NoError(t, applyChannelTestOptions(request, channelTestOptions{group: "vip", skipConsumeLog: true}))
+
+	chat, ok := request.(*dto.GeneralOpenAIRequest)
+	require.True(t, ok)
+	require.Len(t, chat.Messages, 1)
+	assert.Equal(t, "hi", chat.Messages[0].Content)
+	require.NotNil(t, chat.MaxTokens)
+	assert.Equal(t, uint(16), *chat.MaxTokens)
+
+	embedding := buildTestRequest("text-embedding-3-large", "", nil, false, nil)
+	assert.NoError(t, applyChannelTestOptions(embedding, channelTestOptions{}), "plain channel tests of non-chat models must keep working")
+}
+
+func TestReadTestResponseBodyCapturesWholeStream(t *testing.T) {
+	stream := strings.Repeat("data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n", 1000)
+	require.Greater(t, len(stream), 8<<10)
+
+	logged, err := readTestResponseBody(io.NopCloser(strings.NewReader(stream)), true, false)
+	require.NoError(t, err)
+	assert.Len(t, logged, 8<<10, "plain channel tests only keep a log-sized prefix")
+
+	captured, err := readTestResponseBody(io.NopCloser(strings.NewReader(stream)), true, true)
+	require.NoError(t, err)
+	assert.Equal(t, stream, string(captured))
+}
+
+func TestGetModelIQCheckResultsValidatesIds(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	saved := config.GlobalConfig.ExportAllConfigs()
+	t.Cleanup(func() {
+		_ = config.GlobalConfig.LoadFromDB(saved)
+	})
+	// With the feature disabled, valid requests return an empty list without
+	// reading the database, which isolates the id parsing contract.
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		model_iq_check_setting.EnabledOptionKey: "false",
+	}))
+
+	atCap := make([]string, 0, maxModelIQCheckResultIds*2)
+	overCap := make([]string, 0, maxModelIQCheckResultIds+1)
+	for id := 1; id <= maxModelIQCheckResultIds; id++ {
+		atCap = append(atCap, strconv.Itoa(id), strconv.Itoa(id))
+		overCap = append(overCap, strconv.Itoa(id))
+	}
+	overCap = append(overCap, strconv.Itoa(maxModelIQCheckResultIds+1))
+
+	cases := []struct {
+		name        string
+		query       string
+		wantSuccess bool
+	}{
+		{name: "missing ids", query: "", wantSuccess: true},
+		{name: "blank segments", query: "ids=,%20,", wantSuccess: true},
+		{name: "valid ids", query: "ids=1,2,3", wantSuccess: true},
+		{name: "duplicates collapse to the cap", query: "ids=" + strings.Join(atCap, ","), wantSuccess: true},
+		{name: "malformed id", query: "ids=1,abc", wantSuccess: false},
+		{name: "zero id", query: "ids=0", wantSuccess: false},
+		{name: "negative id", query: "ids=-5", wantSuccess: false},
+		{name: "too many ids", query: "ids=" + strings.Join(overCap, ","), wantSuccess: false},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodGet, "/api/iq-check/results?"+testCase.query, nil)
+
+			GetModelIQCheckResults(c)
+
+			var response struct {
+				Success bool             `json:"success"`
+				Message string           `json:"message"`
+				Data    []map[string]any `json:"data"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			assert.Equal(t, testCase.wantSuccess, response.Success, response.Message)
+			if testCase.wantSuccess {
+				assert.NotNil(t, response.Data, "an empty result must serialize as []")
+				assert.Empty(t, response.Data)
+			} else {
+				assert.NotEmpty(t, response.Message)
+			}
+		})
+	}
+}
+
+func setupModelIQCheckConfigTest(t *testing.T) *gorm.DB {
+	t.Helper()
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.Log{}, &model.ModelIQCheckResult{}, &model.ModelIQCheckState{}, &model.SystemTask{}))
+	require.NoError(t, db.Create(&model.Ability{Group: "default", Model: "gpt-5", ChannelId: 1, Enabled: true}).Error)
+
+	previousOptionMap := common.OptionMap
+	common.OptionMap = map[string]string{}
+	saved := config.GlobalConfig.ExportAllConfigs()
+	t.Cleanup(func() {
+		common.OptionMap = previousOptionMap
+		_ = config.GlobalConfig.LoadFromDB(saved)
+		modeliqcheck.InvalidateStatusCache()
+	})
+	return db
+}
+
+func putModelIQCheckConfig(t *testing.T, body any) (bool, string) {
+	t.Helper()
+	payload, err := common.Marshal(body)
+	require.NoError(t, err)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/iq-check/config", bytes.NewReader(payload))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	UpdateModelIQCheckConfig(c)
+
+	var response struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	return response.Success, response.Message
+}
+
+// Saving the config must queue a fresh run only for checks whose answer would
+// change, drop the history of removed checks, and wake the scheduler.
+func TestUpdateModelIQCheckConfigQueuesChangedChecksAndDropsRemovedData(t *testing.T) {
+	db := setupModelIQCheckConfigTest(t)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		model_iq_check_setting.EnabledOptionKey: "true",
+		model_iq_check_setting.ChecksOptionKey: `[
+			{"id":"edited","name":"Edited","group":"default","model":"gpt-5","prompt":"old prompt","interval_minutes":60,"icon":"OpenAI","enabled":true,"sort":0},
+			{"id":"same","name":"Same","group":"default","model":"gpt-5","prompt":"1+1=?","interval_minutes":60,"icon":"OpenAI","enabled":true,"sort":1},
+			{"id":"removed","name":"Removed","group":"default","model":"gpt-5","prompt":"p","interval_minutes":60,"icon":"OpenAI","enabled":true,"sort":2}
+		]`,
+	}))
+	for _, checkId := range []string{"edited", "same", "removed"} {
+		require.NoError(t, model.MarkModelIQCheckStarted(checkId, 100))
+		require.NoError(t, model.SaveModelIQCheckResult(&model.ModelIQCheckResult{CheckId: checkId, CheckedAt: 160, Status: model.ModelIQCheckStatusSuccess}, 10))
+	}
+
+	success, message := putModelIQCheckConfig(t, map[string]any{
+		"checks": []modeliqcheck.Check{
+			{Id: "edited", Name: "Edited", Group: "default", Model: "gpt-5", Prompt: "new prompt", IntervalMinutes: 60, Icon: "OpenAI", Enabled: true},
+			{Id: "same", Name: "Same renamed", Group: "default", Model: "gpt-5", Prompt: "1+1=?", IntervalMinutes: 30, Icon: "OpenAI", Enabled: true},
+			{Name: "Added", Group: "default", Model: "gpt-5", Prompt: "Write a page", Enabled: true},
+		},
+	})
+	require.True(t, success, message)
+
+	checks := modeliqcheck.Checks()
+	require.Len(t, checks, 3)
+	added := checks[2]
+	assert.NotEmpty(t, added.Id)
+	assert.Equal(t, modeliqcheck.DefaultIntervalMinutes, added.IntervalMinutes)
+
+	states, err := model.GetModelIQCheckStates([]string{"edited", "same", "removed", added.Id})
+	require.NoError(t, err)
+	stateById := make(map[string]model.ModelIQCheckState, len(states))
+	for _, state := range states {
+		stateById[state.CheckId] = state
+	}
+	assert.Greater(t, stateById["edited"].RunRequestedAt, int64(100), "a changed prompt queues a fresh answer")
+	assert.Zero(t, stateById["same"].RunRequestedAt, "renaming or retiming does not change the answer")
+	assert.Greater(t, stateById[added.Id].RunRequestedAt, int64(0), "a new check is queued")
+	_, removedStateLeft := stateById["removed"]
+	assert.False(t, removedStateLeft)
+
+	history, err := model.GetModelIQCheckHistory([]string{"edited", "same", "removed"})
+	require.NoError(t, err)
+	require.Len(t, history, 2)
+	for _, row := range history {
+		assert.NotEqual(t, "removed", row.CheckId)
+	}
+
+	var tasks int64
+	require.NoError(t, db.Model(&model.SystemTask{}).Where("type = ?", model.SystemTaskTypeModelIQCheck).Count(&tasks).Error)
+	assert.Equal(t, int64(1), tasks, "queued runs wake the scheduler")
+}
+
+func TestUpdateModelIQCheckConfigRejectsInvalidInputWithoutSaving(t *testing.T) {
+	setupModelIQCheckConfigTest(t)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		model_iq_check_setting.EnabledOptionKey:      "false",
+		model_iq_check_setting.HistoryLimitOptionKey: "10",
+		model_iq_check_setting.ChecksOptionKey:       `[]`,
+	}))
+
+	cases := []struct {
+		name string
+		body map[string]any
+	}{
+		{name: "history limit below range", body: map[string]any{"enabled": true, "history_limit": 0}},
+		{name: "history limit above range", body: map[string]any{"enabled": true, "history_limit": model_iq_check_setting.MaxHistoryLimit + 1}},
+		{name: "timeout below range", body: map[string]any{"enabled": true, "request_timeout_seconds": model_iq_check_setting.MinRequestTimeoutSeconds - 1}},
+		{name: "model not in group", body: map[string]any{"enabled": true, "checks": []modeliqcheck.Check{{Name: "Pro", Group: "default", Model: "unknown-model", Prompt: "p"}}}},
+		{name: "unknown group", body: map[string]any{"enabled": true, "checks": []modeliqcheck.Check{{Name: "Pro", Group: "ghost", Model: "gpt-5", Prompt: "p"}}}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			success, message := putModelIQCheckConfig(t, testCase.body)
+			assert.False(t, success)
+			assert.NotEmpty(t, message)
+			assert.False(t, model_iq_check_setting.IsEnabled(), "a rejected request must not apply any part of the update")
+			assert.Equal(t, 10, model_iq_check_setting.GetSetting().HistoryLimit)
+			assert.Empty(t, modeliqcheck.Checks())
+		})
+	}
+}

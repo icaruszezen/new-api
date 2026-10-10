@@ -41,6 +41,9 @@ func SetApiRouter(router *gin.Engine) {
 		// 渠道监控状态页对未登录访客公开。游客走 CM（IP）桶，登录用户走 CMU（user）桶，
 		// 避免和登录 / 刷新会话共用 CriticalRateLimit。
 		apiRouter.GET("/channel-monitoring/status", middleware.ChannelMonitoringStatusRateLimit(), controller.GetChannelMonitoringStatus)
+		// 模型智商检查页同样对未登录访客公开，状态与结果详情共用独立的 IQ / IQU 限流桶。
+		apiRouter.GET("/iq-check/status", middleware.ModelIQCheckRateLimit(), controller.GetModelIQCheckStatus)
+		apiRouter.GET("/iq-check/results", middleware.ModelIQCheckRateLimit(), controller.GetModelIQCheckResults)
 		apiRouter.GET("/rankings", middleware.HeaderNavModuleAuth("rankings"), controller.GetRankings)
 		apiRouter.GET("/verification", middleware.EmailVerificationRateLimit(), middleware.TurnstileCheck(), controller.SendEmailVerification)
 		apiRouter.GET("/reset_password", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendPasswordResetEmail)
@@ -254,6 +257,7 @@ func SetApiRouter(router *gin.Engine) {
 		}
 		registerChannelRoutes(apiRouter)
 		registerChannelMonitoringRoutes(apiRouter)
+		registerModelIQCheckRoutes(apiRouter)
 		registerAuthzRoutes(apiRouter)
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())

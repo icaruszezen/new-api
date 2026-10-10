@@ -523,6 +523,11 @@ export const STATIC_I18N_KEYS = [
   // Channel monitoring audit
   'Reset channel monitor history {{monitor_id}}',
 
+  // Model IQ check audit and system task labels
+  'Updated model IQ check settings',
+  'Triggered model IQ check {{check_id}}',
+  'Model IQ check',
+
   // Channel upstream updates
   'No processable upstream model updates for this channel',
   'Upstream model updates applied: {{added}} added, {{removed}} removed, {{ignored}} ignored this time, {{totalIgnored}} total ignored models',

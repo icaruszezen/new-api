@@ -438,6 +438,8 @@ const AUDIT_TEMPLATES: Record<string, string> = {
   'channel.upstream_apply_all':
     'Applied upstream model changes to {{count}} channels',
   'channel_monitoring.reset': 'Reset channel monitor history {{monitor_id}}',
+  'model_iq_check.update': 'Updated model IQ check settings',
+  'model_iq_check.run': 'Triggered model IQ check {{check_id}}',
   // Redemption codes
   'redemption.create':
     'Created {{count}} redemption codes named {{name}} ({{quota}} each)',

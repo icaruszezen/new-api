@@ -28,6 +28,7 @@ describe('isAdminConsolePath', () => {
     '/channels',
     '/channels/12',
     '/channel-monitoring-settings',
+    '/iq-check-settings',
     '/error-message-overrides',
     '/models',
     '/models/metadata',
@@ -55,6 +56,7 @@ describe('isAdminConsolePath', () => {
     '/playground',
     '/pricing',
     '/channel-monitoring',
+    '/iq-check',
     '/users-extra',
   ])('leaves shared or public path %s alone', (pathname) => {
     expect(isAdminConsolePath(pathname)).toBe(false)

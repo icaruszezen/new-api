@@ -100,6 +100,12 @@ export function useTopNavLinks(): TopNavLink[] {
     })
   }
 
+  // IQ check follows the same rule: next skin only, once an admin has
+  // published the page.
+  if (uiSkin === 'next' && status?.model_iq_check_enabled === true) {
+    links.push({ title: t('IQ Check'), href: '/iq-check' })
+  }
+
   // Docs (supports external links)
   if (modules?.docs !== false) {
     if (docsLink) {

@@ -242,6 +242,14 @@ var (
 	ChannelMonitoringStatusRateLimitNum            = 10
 	ChannelMonitoringStatusUserRateLimitNum        = 30
 	ChannelMonitoringStatusRateLimitDuration int64 = 60
+
+	// Public model IQ check page (status + result details). Isolated from the
+	// channel-monitoring buckets; guests use ModelIQCheckRateLimitNum (IP) and
+	// signed-in users use ModelIQCheckUserRateLimitNum (user ID).
+	ModelIQCheckRateLimitEnable         = true
+	ModelIQCheckRateLimitNum            = 30
+	ModelIQCheckUserRateLimitNum        = 60
+	ModelIQCheckRateLimitDuration int64 = 60
 )
 
 var RateLimitKeyExpirationDuration = 20 * time.Minute

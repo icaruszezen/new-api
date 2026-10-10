@@ -42,15 +42,31 @@ type testResult struct {
 	newAPIError *types.NewAPIError
 	// ttftMs 仅在流式测试收到首字后有值，供渠道监控记录首字延迟。
 	ttftMs int
+	// responseBody 仅在 captureResponse 时有值：中转写给合成客户端的完整响应（有上限）。
+	responseBody []byte
+	// usage 是本次测试归一化后的用量，供模型智商检查记录 token 数。
+	usage *dto.Usage
 }
 
-// channelTestOptions 让渠道监控探测复用同一条测试链路：
-// 探测需要按指定分组选渠（而不是测试用户自己的分组），且不应产生消费日志。
+// channelTestOptions 让渠道监控探测与模型智商检查复用同一条测试链路：
+// 二者需要按指定分组选渠（而不是测试用户自己的分组），且不应产生消费日志。
 type channelTestOptions struct {
 	group          string
 	skipConsumeLog bool
 	maxTokens      *uint
+	// prompt 非空时替换合成的 "hi" 用户消息。
+	prompt string
+	// omitMaxTokens 去掉 buildTestRequest 写入的 max tokens 字段（OpenAI chat / Gemini），
+	// 由上游使用默认输出上限；Claude 原生请求必须携带该字段，保留原值。
+	omitMaxTokens bool
+	// captureResponse 读取完整的中转响应（上限 maxCapturedTestResponseBytes）到
+	// testResult.responseBody，且不把响应内容写入系统日志。
+	captureResponse bool
 }
+
+// maxCapturedTestResponseBytes 限制 captureResponse 读取的响应体积。
+// 流式响应每个增量都带 JSON 包装，实际正文远小于该值。
+const maxCapturedTestResponseBytes = 8 << 20
 
 func normalizeChannelTestEndpoint(channel *model.Channel, endpointType string) string {
 	normalized := strings.TrimSpace(endpointType)
@@ -244,6 +260,14 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	}
 
 	request := buildTestRequest(testModel, endpointType, channel, isStream, opts.maxTokens)
+	// 自定义提示词必须在计费输入与价格预估之前替换，token 预估才反映真实请求。
+	if err := applyChannelTestOptions(request, opts); err != nil {
+		return testResult{
+			context:     c,
+			localErr:    fmt.Errorf("model %s: %w", testModel, err),
+			newAPIError: types.NewError(err, types.ErrorCodeInvalidRequest),
+		}
+	}
 
 	info, err := relaycommon.GenRelayInfo(c, relayFormat, request, nil)
 
@@ -489,7 +513,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 	result := w.Result()
-	respBody, err := readTestResponseBody(result.Body, isStream)
+	respBody, err := readTestResponseBody(result.Body, isStream, opts.captureResponse)
 	if err != nil {
 		return testResult{
 			context:     c,
@@ -497,11 +521,18 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 			newAPIError: types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError),
 		}
 	}
+	var capturedBody []byte
+	if opts.captureResponse {
+		capturedBody = respBody
+	}
 	if bodyErr := validateTestResponseBody(respBody, isStream); bodyErr != nil {
 		return testResult{
 			context:     c,
 			localErr:    bodyErr,
 			newAPIError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			// 上游中途报错时保留已生成的部分输出，便于对照错误排查。
+			responseBody: capturedBody,
+			usage:        usage,
 		}
 	}
 	info.SetEstimatePromptTokens(usage.PromptTokens)
@@ -526,12 +557,16 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 			Other:            other,
 		})
 	}
-	common.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
+	if !opts.captureResponse {
+		common.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
+	}
 	return testResult{
-		context:     c,
-		localErr:    nil,
-		newAPIError: nil,
-		ttftMs:      testTtftMs(info),
+		context:      c,
+		localErr:     nil,
+		newAPIError:  nil,
+		ttftMs:       testTtftMs(info),
+		responseBody: capturedBody,
+		usage:        usage,
 	}
 }
 
@@ -618,9 +653,13 @@ func coerceTestUsage(usageAny any, isStream bool, estimatePromptTokens int) (*dt
 	}
 }
 
-func readTestResponseBody(body io.ReadCloser, isStream bool) ([]byte, error) {
+// readTestResponseBody 默认只为日志读取流式响应的前 8KB；capture 时读取完整响应供调用方解析。
+func readTestResponseBody(body io.ReadCloser, isStream bool, capture bool) ([]byte, error) {
 	defer func() { _ = body.Close() }()
 	const maxStreamLogBytes = 8 << 10
+	if capture {
+		return io.ReadAll(io.LimitReader(body, maxCapturedTestResponseBytes))
+	}
 	if isStream {
 		return io.ReadAll(io.LimitReader(body, maxStreamLogBytes))
 	}
@@ -870,6 +909,49 @@ func channelTestMaxTokens(fallback uint, override *uint) *uint {
 		return override
 	}
 	return lo.ToPtr(fallback)
+}
+
+// applyChannelTestOptions 按选项改写 buildTestRequest 生成的合成请求：
+// 用自定义提示词替换 "hi"，并按需去掉 max tokens 字段。
+// 只有文本对话类请求能承载提示词，embedding / rerank / 出图等请求返回错误。
+func applyChannelTestOptions(request dto.Request, opts channelTestOptions) error {
+	if opts.prompt == "" && !opts.omitMaxTokens {
+		return nil
+	}
+	switch req := request.(type) {
+	case *dto.GeneralOpenAIRequest:
+		if opts.prompt != "" {
+			req.Messages = []dto.Message{{Role: "user", Content: opts.prompt}}
+		}
+		if opts.omitMaxTokens {
+			req.MaxTokens = nil
+			req.MaxCompletionTokens = nil
+		}
+	case *dto.OpenAIResponsesRequest:
+		if opts.prompt != "" {
+			input, err := common.Marshal([]map[string]string{{"role": "user", "content": opts.prompt}})
+			if err != nil {
+				return err
+			}
+			req.Input = input
+		}
+	case *dto.ClaudeRequest:
+		if opts.prompt != "" {
+			req.Messages = []dto.ClaudeMessage{{Role: "user", Content: opts.prompt}}
+		}
+	case *dto.GeminiChatRequest:
+		if opts.prompt != "" {
+			req.Contents = []dto.GeminiChatContent{{Role: "user", Parts: []dto.GeminiPart{{Text: opts.prompt}}}}
+		}
+		if opts.omitMaxTokens {
+			req.GenerationConfig.MaxOutputTokens = nil
+		}
+	default:
+		if opts.prompt != "" {
+			return errors.New("does not accept a text prompt")
+		}
+	}
+	return nil
 }
 
 func TestChannel(c *gin.Context) {

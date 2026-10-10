@@ -171,6 +171,11 @@ error_message_override.match_required: "匹配文字不能為空"
 error_message_override.match_too_long: "匹配文字不能超過 {{.Max}} 個字元"
 error_message_override.replacement_required: "替換文案不能為空"
 error_message_override.channel_id_invalid: "管道無效，請重新選擇"
+billing_correction.not_exists: "計費修正規則不存在"
+billing_correction.id_format_error: "計費修正規則 ID 格式錯誤"
+billing_correction.channel_id_invalid: "管道無效，請重新選擇"
+billing_correction.channel_taken: "該管道已存在計費修正規則"
+billing_correction.threshold_invalid: "輸入 token 閾值必須是 {{.Min}} 到 {{.Max}} 之間的整數"
 
 # Model messages
 model.name_empty: "模型名稱不能為空"

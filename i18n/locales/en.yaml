@@ -170,6 +170,11 @@ error_message_override.match_required: "Match text cannot be empty"
 error_message_override.match_too_long: "Match text cannot exceed {{.Max}} characters"
 error_message_override.replacement_required: "Replacement message cannot be empty"
 error_message_override.channel_id_invalid: "Invalid channel, please select again"
+billing_correction.not_exists: "Billing correction rule does not exist"
+billing_correction.id_format_error: "Billing correction rule ID format error"
+billing_correction.channel_id_invalid: "Invalid channel, please select again"
+billing_correction.channel_taken: "This channel already has a billing correction rule"
+billing_correction.threshold_invalid: "Input token threshold must be an integer between {{.Min}} and {{.Max}}"
 
 # Model messages
 model.name_empty: "Model name cannot be empty"

@@ -112,6 +112,12 @@ func main() {
 	}
 	go service.SyncErrorMessageOverrides(common.SyncFrequency)
 
+	// 超大上下文错误计费修正规则同样走内存缓存，结算时按渠道直接查表
+	if err := service.ReloadBillingCorrectionRules(); err != nil {
+		common.SysError("failed to load billing correction rules: " + err.Error())
+	}
+	go service.SyncBillingCorrectionRules(common.SyncFrequency)
+
 	// 热更新配置
 	go model.SyncOptions(common.SyncFrequency)
 

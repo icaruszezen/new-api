@@ -169,10 +169,13 @@ func PruneFirstTokenErrorLogs() error {
 		return nil
 	}
 	extra := int(total) - maxKeep
+	// Skip the newest maxKeep rows instead of taking the oldest extra rows,
+	// so a prune that overlaps another one never deletes rows it should keep.
 	var stale []FirstTokenErrorLog
 	if err := DB.Model(&FirstTokenErrorLog{}).
 		Select("id").
-		Order("created_at asc, id asc").
+		Order("created_at desc, id desc").
+		Offset(maxKeep).
 		Limit(extra).
 		Find(&stale).Error; err != nil {
 		return err

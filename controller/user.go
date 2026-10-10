@@ -1117,6 +1117,10 @@ func ManageUser(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
+	if req.Action == "add_quota" {
+		manageUserQuota(c, req)
+		return
+	}
 	user := model.User{
 		Id: req.Id,
 	}
@@ -1191,60 +1195,6 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 		user.Role = common.RoleCommonUser
-	case "add_quota":
-		switch req.Mode {
-		case "add":
-			if req.Value <= 0 {
-				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
-				return
-			}
-			// Compared as a remaining headroom so a huge req.Value cannot overflow the sum.
-			if req.Value > common.MaxWalletQuota-user.Quota {
-				common.ApiErrorI18n(c, i18n.MsgUserQuotaExceedWalletMax, map[string]any{"Max": common.MaxWalletQuota})
-				return
-			}
-			if err := model.IncreaseUserQuota(user.Id, req.Value, true); err != nil {
-				common.ApiError(c, err)
-				return
-			}
-			recordManageAuditFor(c, user.Id, "user.quota_add", map[string]any{
-				"quota": logger.LogQuota(req.Value),
-			})
-		case "subtract":
-			if req.Value <= 0 {
-				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
-				return
-			}
-			if err := model.DecreaseUserQuota(user.Id, req.Value, true); err != nil {
-				common.ApiError(c, err)
-				return
-			}
-			recordManageAuditFor(c, user.Id, "user.quota_subtract", map[string]any{
-				"quota": logger.LogQuota(req.Value),
-			})
-		case "override":
-			if req.Value > common.MaxWalletQuota || req.Value < common.MinWalletQuota {
-				common.ApiErrorI18n(c, i18n.MsgUserQuotaExceedWalletMax, map[string]any{"Max": common.MaxWalletQuota})
-				return
-			}
-			oldQuota := user.Quota
-			if err := model.DB.Model(&model.User{}).Where("id = ?", user.Id).Update("quota", req.Value).Error; err != nil {
-				common.ApiError(c, err)
-				return
-			}
-			recordManageAuditFor(c, user.Id, "user.quota_override", map[string]any{
-				"from": logger.LogQuota(oldQuota),
-				"to":   logger.LogQuota(req.Value),
-			})
-		default:
-			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "",
-		})
-		return
 	default:
 		common.ApiErrorT(c, "Invalid parameters")
 		return

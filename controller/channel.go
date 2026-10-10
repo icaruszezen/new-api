@@ -731,6 +731,9 @@ func DeleteChannel(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	if err := service.ReloadBillingCorrectionRules(); err != nil {
+		common.SysError("failed to reload billing correction rules: " + err.Error())
+	}
 	if channelLookupFailed {
 		service.ResetProxyClientCache()
 	} else {
@@ -754,6 +757,9 @@ func DeleteDisabledChannel(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	if err := service.ReloadBillingCorrectionRules(); err != nil {
+		common.SysError("failed to reload billing correction rules: " + err.Error())
+	}
 	if rows > 0 {
 		service.ResetProxyClientCache()
 	}
@@ -913,6 +919,9 @@ func DeleteChannelBatch(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	if err := service.ReloadBillingCorrectionRules(); err != nil {
+		common.SysError("failed to reload billing correction rules: " + err.Error())
+	}
 	if deletedCount > 0 {
 		service.ResetProxyClientCache()
 	}

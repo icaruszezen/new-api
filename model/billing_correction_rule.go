@@ -2,6 +2,8 @@ package model
 
 import (
 	"github.com/QuantumNous/new-api/common"
+
+	"gorm.io/gorm"
 )
 
 // BillingCorrectionRule 是按渠道配置的超大上下文错误计费修正规则。
@@ -67,6 +69,14 @@ func (r *BillingCorrectionRule) Update() error {
 
 func DeleteBillingCorrectionRuleById(id int) error {
 	return DB.Delete(&BillingCorrectionRule{}, "id = ?", id).Error
+}
+
+// DeleteOrphanBillingCorrectionRules 删除渠道已不存在的规则。删除渠道后必须调用：
+// 渠道 ID 可能被新建的渠道复用（例如 SQLite 的 rowid），残留规则会让新渠道
+// 平白继承一条免扣费规则。
+func DeleteOrphanBillingCorrectionRules(db *gorm.DB) error {
+	return db.Where("channel_id NOT IN (?)", db.Model(&Channel{}).Select("id")).
+		Delete(&BillingCorrectionRule{}).Error
 }
 
 // FillBillingCorrectionRuleChannelNames 为规则补上渠道名，供管理页展示。

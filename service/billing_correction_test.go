@@ -295,3 +295,56 @@ func TestPostTextConsumeQuotaBillingCorrection(t *testing.T) {
 		})
 	}
 }
+
+// 渠道 ID 可能被新建渠道复用，删除渠道的每条路径都必须连带删掉它的修正规则，
+// 否则新渠道会平白继承一条免扣费规则。
+func TestChannelDeletionRemovesBillingCorrectionRules(t *testing.T) {
+	tests := []struct {
+		name          string
+		deleteChannel func(t *testing.T)
+	}{
+		{
+			name: "single channel delete",
+			deleteChannel: func(t *testing.T) {
+				require.NoError(t, (&model.Channel{Id: correctedChannelId}).Delete())
+			},
+		},
+		{
+			name: "batch channel delete",
+			deleteChannel: func(t *testing.T) {
+				deleted, err := model.BatchDeleteChannels([]int{correctedChannelId})
+				require.NoError(t, err)
+				require.EqualValues(t, 1, deleted)
+			},
+		},
+		{
+			name: "delete disabled channels",
+			deleteChannel: func(t *testing.T) {
+				require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", correctedChannelId).
+					Update("status", common.ChannelStatusManuallyDisabled).Error)
+				deleted, err := model.DeleteDisabledChannel()
+				require.NoError(t, err)
+				require.EqualValues(t, 1, deleted)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			truncate(t)
+			seedChannel(t, correctedChannelId)
+			seedChannel(t, disabledRuleChannelId)
+			seedBillingCorrectionRules(t,
+				&model.BillingCorrectionRule{ChannelId: correctedChannelId, PromptTokensThreshold: billingCorrectionTrigger, Enabled: true},
+				&model.BillingCorrectionRule{ChannelId: disabledRuleChannelId, PromptTokensThreshold: billingCorrectionTrigger, Enabled: true},
+			)
+
+			tt.deleteChannel(t)
+
+			rules, err := model.GetAllBillingCorrectionRules()
+			require.NoError(t, err)
+			require.Len(t, rules, 1)
+			assert.Equal(t, disabledRuleChannelId, rules[0].ChannelId)
+		})
+	}
+}

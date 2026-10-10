@@ -280,9 +280,14 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		common.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
 		completionTokens := simpleResponse.Usage.CompletionTokens
 		if completionTokens == 0 {
+			// 与流式兜底保持一致：工具调用的函数名和参数也算输出，每次调用另加 7 个 token
 			for _, choice := range simpleResponse.Choices {
-				ctkm := service.CountTextToken(choice.Message.StringContent()+choice.Message.GetReasoningContent(), info.UpstreamModelName)
-				completionTokens += ctkm
+				responseText := choice.Message.StringContent() + choice.Message.GetReasoningContent()
+				toolCalls := choice.Message.ParseToolCalls()
+				for _, tc := range toolCalls {
+					responseText += tc.Function.Name + tc.Function.Arguments
+				}
+				completionTokens += service.CountTextToken(responseText, info.UpstreamModelName) + len(toolCalls)*7
 			}
 		}
 		simpleResponse.Usage = dto.Usage{

@@ -52,6 +52,7 @@ func TestMain(m *testing.M) {
 		&model.SystemTaskLock{},
 		&model.ErrorMessageOverride{},
 		&model.BillingCorrectionRule{},
+		&model.Ability{},
 	); err != nil {
 		panic("failed to migrate: " + err.Error())
 	}

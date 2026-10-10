@@ -2,6 +2,7 @@ package oairesponses
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"context"
@@ -115,6 +116,11 @@ func OpenAIResponsesRequestToClaudeMessages(c context.Context, info convmeta.Met
 			})
 		}
 	}
+	claudeRequest.Messages = omitTrailingAssistantText(claudeRequest.Messages,
+		func(message dto.ClaudeMessage) bool { return message.Role == "user" },
+		func(message dto.ClaudeMessage) bool {
+			return message.Role == "assistant" && !slices.ContainsFunc(claudeMessageContentParts(message.Content), func(part dto.ClaudeMediaMessage) bool { return part.Type == "tool_use" })
+		})
 
 	if len(systemMessages) > 0 {
 		claudeRequest.System = systemMessages

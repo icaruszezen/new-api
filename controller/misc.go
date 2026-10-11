@@ -112,8 +112,8 @@ func GetStatus(c *gin.Context) {
 
 		// 渠道监控状态页开关，前端据此决定是否展示导航入口
 		"channel_monitoring_enabled": channel_monitoring_setting.IsEnabled(),
-		// 模型智商检查页开关，同样用于决定是否展示导航入口
-		"model_iq_check_enabled": model_iq_check_setting.IsEnabled(),
+		// 智商检查入口跳转的外部网站，为空时前端不展示导航入口
+		"model_iq_check_url": model_iq_check_setting.EntryURL(),
 
 		// 模块管理配置
 		"HeaderNavModules":    common.OptionMap["HeaderNavModules"],

@@ -86,54 +86,64 @@ describe('useTopNavLinks channel monitoring', () => {
 })
 
 describe('useTopNavLinks IQ check', () => {
+  const iqCheckUrl = 'https://iq.example.com/check'
+
   afterEach(() => {
     setUiSkin('classic')
     mockStatus = null
   })
 
-  test('adds IQ Check right after Channel Monitoring when next skin has both enabled', () => {
+  test('adds an external IQ Check link right after Channel Monitoring when next skin has both enabled', () => {
     setUiSkin('next')
     mockStatus = {
       channel_monitoring_enabled: true,
-      model_iq_check_enabled: true,
+      model_iq_check_url: iqCheckUrl,
     }
 
     const { result } = renderHook(() => useTopNavLinks())
     const hrefs = result.current.map((link) => link.href)
 
-    expect(result.current.map((link) => link.title)).toContain('IQ Check')
-    expect(hrefs.indexOf('/iq-check')).toBe(
+    expect(result.current).toContainEqual({
+      title: 'IQ Check',
+      href: iqCheckUrl,
+      external: true,
+    })
+    expect(hrefs.indexOf(iqCheckUrl)).toBe(
       hrefs.indexOf('/channel-monitoring') + 1
     )
-    expect(hrefs.indexOf('/docs')).toBe(hrefs.indexOf('/iq-check') + 1)
+    expect(hrefs.indexOf('/docs')).toBe(hrefs.indexOf(iqCheckUrl) + 1)
   })
 
   test('adds IQ Check on next skin even when channel monitoring is off', () => {
     setUiSkin('next')
-    mockStatus = { model_iq_check_enabled: true }
+    mockStatus = { model_iq_check_url: iqCheckUrl }
 
     const { result } = renderHook(() => useTopNavLinks())
     const hrefs = result.current.map((link) => link.href)
 
-    expect(hrefs).toContain('/iq-check')
+    expect(hrefs).toContain(iqCheckUrl)
     expect(hrefs).not.toContain('/channel-monitoring')
   })
 
   test('omits IQ Check when the site skin is classic', () => {
     setUiSkin('classic')
-    mockStatus = { model_iq_check_enabled: true }
+    mockStatus = { model_iq_check_url: iqCheckUrl }
 
     const { result } = renderHook(() => useTopNavLinks())
 
-    expect(result.current.map((link) => link.href)).not.toContain('/iq-check')
+    expect(result.current.map((link) => link.title)).not.toContain('IQ Check')
   })
 
-  test('omits IQ Check on next skin while the page stays disabled', () => {
+  test.each([
+    ['the entry is off', ''],
+    ['the address runs script', 'javascript:alert(1)'],
+    ['the address is a relative path', '/iq-check'],
+  ])('omits IQ Check on next skin when %s', (_, url) => {
     setUiSkin('next')
-    mockStatus = { model_iq_check_enabled: false }
+    mockStatus = { model_iq_check_url: url }
 
     const { result } = renderHook(() => useTopNavLinks())
 
-    expect(result.current.map((link) => link.href)).not.toContain('/iq-check')
+    expect(result.current.map((link) => link.title)).not.toContain('IQ Check')
   })
 })

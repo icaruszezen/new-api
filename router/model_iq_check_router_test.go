@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/service/authz"
 
@@ -15,9 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Reading the IQ check config exposes group names and raw upstream errors,
-// writing it decides which upstreams get called, and a manual run spends
-// upstream quota, so every admin route must stay behind channel permissions.
+// The IQ check entry link is shown to every visitor, so changing it must stay
+// behind the same channel permissions as the channel monitoring page toggle.
 func TestModelIQCheckAdminRoutesUseChannelPermissions(t *testing.T) {
 	cases := []struct {
 		method     string
@@ -27,7 +25,6 @@ func TestModelIQCheckAdminRoutesUseChannelPermissions(t *testing.T) {
 	}{
 		{http.MethodGet, "/config", authz.ChannelRead, controller.GetModelIQCheckConfig},
 		{http.MethodPut, "/config", authz.ChannelWrite, controller.UpdateModelIQCheckConfig},
-		{http.MethodPost, "/:id/run", authz.ChannelOperate, controller.RunModelIQCheck},
 	}
 	require.Len(t, modelIQCheckPermissionRoutes, len(cases), "every admin route needs an explicit permission expectation")
 
@@ -45,53 +42,27 @@ func TestModelIQCheckRoutesRegisterWithoutConflict(t *testing.T) {
 	api := engine.Group("/api")
 
 	require.NotPanics(t, func() {
-		api.GET("/iq-check/status", controller.GetModelIQCheckStatus)
-		api.GET("/iq-check/results", controller.GetModelIQCheckResults)
 		registerChannelRoutes(api)
 		registerChannelMonitoringRoutes(api)
 		registerModelIQCheckRoutes(api)
 	})
 }
 
-// The public page polls /api/iq-check/status and /api/iq-check/results without
-// a session; they must resolve to their handlers instead of falling through to
-// the relay router, while the admin routes on the same prefix still reach
-// AdminAuth.
+// The admin routes must reach AdminAuth instead of falling through to the
+// relay router's not-found handler.
 func TestModelIQCheckRoutesMatchWhenApiAndRelayRoutesExist(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	// Rate limiters bind to the backend chosen at registration time; use the
-	// in-memory limiter so the public handlers actually run.
-	originalRedisEnabled := common.RedisEnabled
-	common.RedisEnabled = false
-	t.Cleanup(func() {
-		common.RedisEnabled = originalRedisEnabled
-	})
 	engine := gin.New()
 	SetApiRouter(engine)
 	SetRelayRouter(engine)
 	engine.NoRoute(controller.RelayNotFound)
 
-	for _, path := range []string{"/api/iq-check/status", "/api/iq-check/results?ids=1,2"} {
-		req := httptest.NewRequest(http.MethodGet, path, nil)
-		rec := httptest.NewRecorder()
-		engine.ServeHTTP(rec, req)
-		require.Equal(t, http.StatusOK, rec.Code, "GET %s: %s", path, rec.Body.String())
-		assert.Contains(t, rec.Body.String(), `"success":true`, "GET %s", path)
-	}
-
-	for _, tc := range []struct {
-		method string
-		path   string
-	}{
-		{http.MethodGet, "/api/iq-check/config"},
-		{http.MethodPut, "/api/iq-check/config"},
-		{http.MethodPost, "/api/iq-check/abc/run"},
-	} {
-		req := httptest.NewRequest(tc.method, tc.path, nil)
+	for _, method := range []string{http.MethodGet, http.MethodPut} {
+		req := httptest.NewRequest(method, "/api/iq-check/config", nil)
 		rec := httptest.NewRecorder()
 		engine.ServeHTTP(rec, req)
 		require.NotEqual(t, http.StatusNotFound, rec.Code,
-			"%s %s fell through to RelayNotFound: %s", tc.method, tc.path, rec.Body.String())
+			"%s /api/iq-check/config fell through to RelayNotFound: %s", method, rec.Body.String())
 		assert.NotContains(t, rec.Body.String(), "Invalid URL")
 	}
 }

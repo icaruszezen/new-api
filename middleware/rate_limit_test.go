@@ -333,60 +333,6 @@ func TestChannelMonitoringStatusRateLimitTreatsInvalidTokenAsGuest(t *testing.T)
 	assert.False(t, redisServer.Exists(redisUserRateLimitKey(channelMonitoringStatusUserRateLimitMark, user.Id)))
 }
 
-func TestModelIQCheckRateLimitUsesBucketsIsolatedFromChannelMonitoring(t *testing.T) {
-	setupDashboardAuthMiddlewareTest(t)
-	gin.SetMode(gin.TestMode)
-	redisServer, _ := useRateLimitMiniRedis(t)
-	restoreChannelMonitoringStatusRateLimit(t)
-	previousEnable := common.ModelIQCheckRateLimitEnable
-	previousGuestNum := common.ModelIQCheckRateLimitNum
-	previousUserNum := common.ModelIQCheckUserRateLimitNum
-	previousDuration := common.ModelIQCheckRateLimitDuration
-	t.Cleanup(func() {
-		common.ModelIQCheckRateLimitEnable = previousEnable
-		common.ModelIQCheckRateLimitNum = previousGuestNum
-		common.ModelIQCheckUserRateLimitNum = previousUserNum
-		common.ModelIQCheckRateLimitDuration = previousDuration
-	})
-	common.ChannelMonitoringStatusRateLimitEnable = true
-	common.ChannelMonitoringStatusRateLimitNum = 1
-	common.ChannelMonitoringStatusUserRateLimitNum = 1
-	common.ChannelMonitoringStatusRateLimitDuration = 31
-	common.ModelIQCheckRateLimitEnable = true
-	common.ModelIQCheckRateLimitNum = 1
-	common.ModelIQCheckUserRateLimitNum = 1
-	common.ModelIQCheckRateLimitDuration = 47
-
-	user, _, userToken := createMiddlewareSessionUser(t, "iq-check-user", common.RoleCommonUser, common.UserStatusEnabled)
-
-	router := gin.New()
-	require.NoError(t, router.SetTrustedProxies(nil))
-	router.GET("/monitor", ChannelMonitoringStatusRateLimit(), func(c *gin.Context) {
-		c.Status(http.StatusNoContent)
-	})
-	router.GET("/iq", ModelIQCheckRateLimit(), func(c *gin.Context) {
-		c.Status(http.StatusNoContent)
-	})
-
-	remoteAddr := "192.0.2.90:12345"
-	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/monitor", remoteAddr).Code)
-	assert.Equal(t, http.StatusTooManyRequests, performRateLimitRequest(router, "/monitor", remoteAddr).Code)
-
-	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/iq", remoteAddr).Code,
-		"exhausting the channel-monitoring poll must not starve the IQ check page")
-	guestLimited := performRateLimitRequest(router, "/iq", remoteAddr)
-	assert.Equal(t, http.StatusTooManyRequests, guestLimited.Code)
-	assert.Equal(t, "47", guestLimited.Header().Get("Retry-After"))
-
-	assert.Equal(t, http.StatusNoContent, performRateLimitRequestWithAuth(router, "/iq", remoteAddr, userToken).Code,
-		"a signed-in user has a bucket of their own")
-	assert.Equal(t, http.StatusTooManyRequests, performRateLimitRequestWithAuth(router, "/iq", remoteAddr, userToken).Code)
-
-	assert.True(t, redisServer.Exists(redisIPRateLimitKey(modelIQCheckRateLimitMark, "192.0.2.90")))
-	assert.True(t, redisServer.Exists(redisUserRateLimitKey(modelIQCheckUserRateLimitMark, user.Id)))
-	assert.False(t, redisServer.Exists(redisUserRateLimitKey(channelMonitoringStatusUserRateLimitMark, user.Id)))
-}
-
 func TestRedisFailurePolicies(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	_, redisClient := useRateLimitMiniRedis(t)

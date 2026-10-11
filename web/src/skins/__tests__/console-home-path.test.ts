@@ -145,7 +145,6 @@ describe('isNextConsolePath', () => {
     '/pricing/gpt-4',
     '/rankings',
     '/channel-monitoring',
-    '/iq-check',
     '/about',
     '/sign-in',
     '/user-agreement',

@@ -361,26 +361,8 @@ const (
 	MsgCustomOAuthProviderIdInvalid = "custom_oauth.provider_id_field_invalid"
 )
 
-// Model IQ check messages
+// Model IQ check entry messages
 const (
-	MsgModelIQCheckTooMany               = "model_iq_check.too_many"
-	MsgModelIQCheckNameRequired          = "model_iq_check.name_required"
-	MsgModelIQCheckNameTooLong           = "model_iq_check.name_too_long"
-	MsgModelIQCheckGroupRequired         = "model_iq_check.group_required"
-	MsgModelIQCheckModelRequired         = "model_iq_check.model_required"
-	MsgModelIQCheckGroupNotFound         = "model_iq_check.group_not_found"
-	MsgModelIQCheckModelNotInGroup       = "model_iq_check.model_not_in_group"
-	MsgModelIQCheckPromptRequired        = "model_iq_check.prompt_required"
-	MsgModelIQCheckPromptTooLong         = "model_iq_check.prompt_too_long"
-	MsgModelIQCheckIntervalInvalid       = "model_iq_check.interval_invalid"
-	MsgModelIQCheckMaxTokensInvalid      = "model_iq_check.max_tokens_invalid"
-	MsgModelIQCheckIconTooLong           = "model_iq_check.icon_too_long"
-	MsgModelIQCheckIdTooLong             = "model_iq_check.id_too_long"
-	MsgModelIQCheckIdDuplicated          = "model_iq_check.id_duplicated"
-	MsgModelIQCheckHistoryLimitInvalid   = "model_iq_check.history_limit_invalid"
-	MsgModelIQCheckRequestTimeoutInvalid = "model_iq_check.request_timeout_invalid"
-	MsgModelIQCheckNotFound              = "model_iq_check.not_found"
-	MsgModelIQCheckFeatureDisabled       = "model_iq_check.feature_disabled"
-	MsgModelIQCheckCheckDisabled         = "model_iq_check.check_disabled"
-	MsgModelIQCheckRunQueued             = "model_iq_check.run_queued"
+	MsgModelIQCheckURLInvalid  = "model_iq_check.url_invalid"
+	MsgModelIQCheckURLRequired = "model_iq_check.url_required"
 )

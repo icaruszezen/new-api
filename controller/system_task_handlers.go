@@ -9,25 +9,22 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/channelmonitor"
-	"github.com/QuantumNous/new-api/pkg/modeliqcheck"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/channel_monitoring_setting"
-	"github.com/QuantumNous/new-api/setting/model_iq_check_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
 
 // RegisterScheduledSystemTasks wires the periodic channel test, upstream model
-// update, async task polling (Midjourney / Suno / video), channel monitor probe
-// and model IQ check jobs into the system task framework so a DB lease dedups
-// execution across multiple master instances and each run is recorded as one
-// task row. Call this before service.StartSystemTaskRunner.
+// update, and async task polling (Midjourney / Suno / video) jobs into the
+// system task framework so a DB lease dedups execution across multiple master
+// instances and each run is recorded as one task row. Call this before
+// service.StartSystemTaskRunner.
 func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(channelTestHandler{})
 	service.RegisterSystemTaskHandler(modelUpdateHandler{})
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
 	service.RegisterSystemTaskHandler(channelMonitorProbeHandler{})
-	service.RegisterSystemTaskHandler(modelIQCheckHandler{})
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and
@@ -176,30 +173,6 @@ func (channelMonitorProbeHandler) NewPayload() any { return nil }
 
 func (channelMonitorProbeHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
 	summary, err := runChannelMonitorProbeTask(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
-	if err != nil {
-		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, nil, err)
-		return
-	}
-	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
-}
-
-// modelIQCheckHandler 运行到期的模型智商检查。每个检查项有自己的间隔，
-// 因此调度器以较短周期轮询，Enabled() 把「是否有到期检查」折进开关，
-// 与 midjourneyPollHandler 一样，空闲时不会产生任务行。
-type modelIQCheckHandler struct{}
-
-func (modelIQCheckHandler) Type() string { return model.SystemTaskTypeModelIQCheck }
-
-func (modelIQCheckHandler) Enabled() bool {
-	return model_iq_check_setting.IsEnabled() && modeliqcheck.HasDueChecks(time.Now().Unix())
-}
-
-func (modelIQCheckHandler) Interval() time.Duration { return 30 * time.Second }
-
-func (modelIQCheckHandler) NewPayload() any { return nil }
-
-func (modelIQCheckHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
-	summary, err := runModelIQCheckTask(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
 	if err != nil {
 		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, nil, err)
 		return

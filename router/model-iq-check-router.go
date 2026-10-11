@@ -9,8 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// registerModelIQCheckRoutes 挂载模型智商检查的管理端接口。
-// 检查项决定用哪个分组的渠道发起真实上游调用，因此与渠道监控一样复用渠道权限。
+// registerModelIQCheckRoutes 挂载智商检查入口的管理端配置接口。
+// 与渠道监控状态页的开关一样，由拥有渠道权限的管理员维护。
 func registerModelIQCheckRoutes(apiRouter *gin.RouterGroup) {
 	iqCheckRoute := apiRouter.Group("/iq-check")
 	iqCheckRoute.Use(middleware.AdminAuth())
@@ -26,5 +26,4 @@ func registerModelIQCheckRoutes(apiRouter *gin.RouterGroup) {
 var modelIQCheckPermissionRoutes = []permissionRoute{
 	{method: http.MethodGet, path: "/config", permission: authz.ChannelRead, handler: controller.GetModelIQCheckConfig},
 	{method: http.MethodPut, path: "/config", permission: authz.ChannelWrite, handler: controller.UpdateModelIQCheckConfig},
-	{method: http.MethodPost, path: "/:id/run", permission: authz.ChannelOperate, handler: controller.RunModelIQCheck},
 }

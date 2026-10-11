@@ -16,151 +16,73 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo } from 'react'
+import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-import { ConfirmDialog } from '@/components/confirm-dialog'
 import { SectionPageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
-import { getGroups } from '@/features/users/api'
 
-import { getIqCheckConfig } from './api'
-import { CheckDialog } from './components/check-dialog'
-import { CheckRow } from './components/check-row'
-import { GeneralSettingsCard } from './components/general-settings-card'
-import {
-  DEFAULT_HISTORY_LIMIT,
-  DEFAULT_REQUEST_TIMEOUT_SECONDS,
-  IQ_CHECK_CONFIG_QUERY_KEY,
-  MAX_CHECKS,
-} from './constants'
-import { useRunCheck } from './hooks/use-run-check'
-import { useSaveChecks } from './hooks/use-save-checks'
-import type { CheckFormValues } from './lib/forms'
-import type { AdminIqCheck } from './types'
+import { getIqCheckConfig, updateIqCheckConfig } from './api'
+import { getIqCheckEntrySchema, type IqCheckEntryValues } from './lib/entry-url'
 
+const IQ_CHECK_CONFIG_QUERY_KEY = ['iq-check-config']
+
+/**
+ * The IQ check itself runs on an external website; this page only turns the
+ * navigation entry on and sets the address it opens.
+ */
 export function IqCheckSettings() {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const schema = useMemo(() => getIqCheckEntrySchema(t), [t])
 
   const configQuery = useQuery({
     queryKey: IQ_CHECK_CONFIG_QUERY_KEY,
     queryFn: getIqCheckConfig,
-    // A background refetch replaces the rows, which would reset an open edit
-    // dialog; the list is refreshed after every save and run request instead.
-    refetchOnWindowFocus: false,
   })
-  const groupsQuery = useQuery({
-    queryKey: ['groups'],
-    queryFn: getGroups,
+
+  const form = useForm<IqCheckEntryValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { enabled: false, url: '' },
   })
-  const { saveChecks, setEnabled, saveGeneral, isSaving } = useSaveChecks()
-  const { runCheck, runningId } = useRunCheck()
 
-  const [checks, setChecks] = useState<AdminIqCheck[]>([])
-  const [enabled, setEnabledState] = useState(false)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editIndex, setEditIndex] = useState<number | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<AdminIqCheck | null>(null)
-
+  const config = configQuery.data
   useEffect(() => {
-    if (!configQuery.data) return
-    setChecks(configQuery.data.checks)
-    setEnabledState(configQuery.data.enabled)
-  }, [configQuery.data])
+    if (config) form.reset({ enabled: config.enabled, url: config.url })
+  }, [form, config])
 
-  const handleToggleEnabled = async (checked: boolean) => {
-    setEnabledState(checked)
-    const ok = await setEnabled(checked)
-    if (!ok) setEnabledState(!checked)
-  }
+  const saveMutation = useMutation({
+    mutationFn: updateIqCheckConfig,
+    onSuccess: (response) => {
+      if (!response.success) {
+        toast.error(response.message || t('Failed to update setting'))
+        return
+      }
+      queryClient.setQueryData(IQ_CHECK_CONFIG_QUERY_KEY, response.data)
+      void queryClient.invalidateQueries({ queryKey: ['status'] })
+      toast.success(t('Setting updated successfully'))
+    },
+  })
 
-  const persistInFlight = useRef(false)
-  const persist = async (next: AdminIqCheck[]) => {
-    // The server treats the list as complete and deletes the history of every
-    // check missing from it, so nothing is saved until the real list is loaded.
-    if (!configQuery.data || persistInFlight.current) return false
-    persistInFlight.current = true
-    const previous = checks
-    setChecks(next)
-    // A rejected save must not leave the optimistic list on screen, otherwise
-    // the admin sees a check that the server never accepted.
-    try {
-      const ok = await saveChecks(next)
-      if (!ok) setChecks(previous)
-      return ok
-    } finally {
-      persistInFlight.current = false
-    }
-  }
-
-  const handleSave = (values: CheckFormValues) => {
-    const current = editIndex === null ? undefined : checks[editIndex]
-    const saved: AdminIqCheck = {
-      // Run state is owned by the server; a new check starts without any.
-      last_started_at: 0,
-      last_finished_at: 0,
-      run_requested_at: 0,
-      last_status: '',
-      last_checked_at: 0,
-      last_error: '',
-      ...current,
-      id: current?.id ?? '',
-      name: values.name,
-      group: values.group,
-      model: values.model,
-      prompt: values.prompt,
-      interval_minutes: values.interval_minutes,
-      max_tokens: values.max_tokens,
-      icon: values.icon,
-      enabled: values.enabled,
-      sort: current?.sort ?? checks.length,
-      resolved_icon: values.icon || current?.resolved_icon || '',
-    }
-    const next =
-      editIndex === null
-        ? [...checks, saved]
-        : checks.map((check, index) => (index === editIndex ? saved : check))
-    return persist(next)
-  }
-
-  const handleMove = (index: number, direction: -1 | 1) => {
-    const target = index + direction
-    if (target < 0 || target >= checks.length) return
-    const next = [...checks]
-    ;[next[index], next[target]] = [next[target], next[index]]
-    void persist(next)
-  }
-
-  const openAddDialog = () => {
-    if (!configQuery.data) return
-    if (checks.length >= MAX_CHECKS) {
-      toast.error(
-        t('At most {{count}} IQ checks can be configured.', {
-          count: MAX_CHECKS,
-        })
-      )
-      return
-    }
-    setEditIndex(null)
-    setDialogOpen(true)
-  }
-
-  const requestTimeoutSeconds =
-    configQuery.data?.request_timeout_seconds ?? DEFAULT_REQUEST_TIMEOUT_SECONDS
-
-  const renderCheckList = () => {
+  const renderContent = () => {
     if (configQuery.isLoading) {
-      return (
-        <div className='space-y-2'>
-          <Skeleton className='h-16 rounded-lg' />
-          <Skeleton className='h-16 rounded-lg' />
-        </div>
-      )
+      return <Skeleton className='h-48 rounded-lg' />
     }
     if (configQuery.isError) {
       return (
@@ -178,35 +100,72 @@ export function IqCheckSettings() {
         </div>
       )
     }
-    if (checks.length === 0) {
-      return (
-        <p className='text-muted-foreground border-border/60 rounded-lg border border-dashed px-4 py-8 text-center text-sm'>
-          {t('No IQ checks have been configured yet.')}
-        </p>
-      )
-    }
     return (
-      <ul className='space-y-2'>
-        {checks.map((check, index) => (
-          <CheckRow
-            key={check.id || `new-${check.sort}`}
-            check={check}
-            isFirst={index === 0}
-            isLast={index === checks.length - 1}
-            featureEnabled={enabled}
-            requestTimeoutSeconds={requestTimeoutSeconds}
-            runPending={runningId === check.id}
-            onRun={() => void runCheck(check.id)}
-            onEdit={() => {
-              setEditIndex(index)
-              setDialogOpen(true)
-            }}
-            onRemove={() => setDeleteTarget(check)}
-            onMove={(direction) => handleMove(index, direction)}
-            disabled={isSaving}
+      <Form {...form}>
+        <form
+          onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}
+          className='space-y-4'
+          noValidate
+        >
+          <FormField
+            control={form.control}
+            name='enabled'
+            render={({ field }) => (
+              <FormItem className='border-border/60 flex flex-row items-center justify-between gap-4 rounded-lg border px-4 py-3'>
+                <div className='space-y-1'>
+                  <FormLabel>{t('Show IQ check entry')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Adds an IQ Check link to the top navigation that opens the website below in a new tab.'
+                    )}
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={saveMutation.isPending}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
           />
-        ))}
-      </ul>
+
+          <FormField
+            control={form.control}
+            name='url'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('IQ check website')}</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    type='url'
+                    inputMode='url'
+                    placeholder='https://'
+                    disabled={saveMutation.isPending}
+                  />
+                </FormControl>
+                <FormDescription>
+                  {t(
+                    'The external website that runs the IQ checks. Use a full address starting with http:// or https://.'
+                  )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className='flex justify-end'>
+            <Button
+              type='submit'
+              disabled={saveMutation.isPending || !form.formState.isDirty}
+            >
+              {t('Save')}
+            </Button>
+          </div>
+        </form>
+      </Form>
     )
   }
 
@@ -215,97 +174,8 @@ export function IqCheckSettings() {
       <SectionPageLayout.Title>
         {t('IQ Check Settings')}
       </SectionPageLayout.Title>
-      <SectionPageLayout.Actions>
-        <Button
-          type='button'
-          onClick={openAddDialog}
-          disabled={isSaving || !configQuery.data}
-        >
-          <Plus className='size-4' />
-          {t('Add check')}
-        </Button>
-      </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
-        <div className='mx-auto max-w-3xl space-y-6'>
-          <div className='border-border/60 flex flex-wrap items-center justify-between gap-4 rounded-lg border px-4 py-3'>
-            <div className='space-y-1'>
-              <div className='text-sm font-medium'>
-                {t('Enable IQ check page')}
-              </div>
-              <p className='text-muted-foreground text-xs'>
-                {t('Publishes /iq-check and starts running scheduled checks.')}
-              </p>
-            </div>
-            <Switch
-              checked={enabled}
-              onCheckedChange={(checked) => void handleToggleEnabled(checked)}
-              disabled={isSaving || configQuery.isLoading}
-              aria-label={t('Enable IQ check page')}
-            />
-          </div>
-
-          <GeneralSettingsCard
-            values={{
-              history_limit:
-                configQuery.data?.history_limit ?? DEFAULT_HISTORY_LIMIT,
-              request_timeout_seconds: requestTimeoutSeconds,
-            }}
-            disabled={isSaving || !configQuery.data}
-            onSave={saveGeneral}
-          />
-
-          <section className='space-y-3'>
-            <div className='space-y-1'>
-              <h3 className='text-sm font-medium'>{t('Checks')}</h3>
-              <p className='text-muted-foreground text-xs'>
-                {t(
-                  'Each check sends its prompt to one model in one group through the normal relay path and publishes the answer as one card. Checks run automatically at their interval; editing the prompt, group, model or max tokens queues a fresh run.'
-                )}
-              </p>
-            </div>
-
-            {renderCheckList()}
-          </section>
-        </div>
-
-        <CheckDialog
-          open={dialogOpen}
-          onOpenChange={(open) => {
-            setDialogOpen(open)
-            if (!open) setEditIndex(null)
-          }}
-          editData={editIndex === null ? undefined : checks[editIndex]}
-          groups={groupsQuery.data?.data ?? []}
-          onSave={handleSave}
-        />
-
-        <ConfirmDialog
-          open={deleteTarget !== null}
-          onOpenChange={(open) => {
-            if (!open) setDeleteTarget(null)
-          }}
-          title={t('Delete IQ check')}
-          desc={t(
-            'This will delete {{name}} and all of its recorded results. This action cannot be undone.',
-            { name: deleteTarget?.name ?? '' }
-          )}
-          confirmText={t('Delete')}
-          destructive
-          isLoading={isSaving}
-          handleConfirm={() => {
-            if (!deleteTarget) return
-            void (async () => {
-              const ok = await persist(
-                checks.filter((check) =>
-                  deleteTarget.id
-                    ? check.id !== deleteTarget.id
-                    : check !== deleteTarget
-                )
-              )
-              if (ok) setDeleteTarget(null)
-            })()
-          }}
-        />
+        <div className='mx-auto max-w-3xl'>{renderContent()}</div>
       </SectionPageLayout.Content>
     </SectionPageLayout>
   )

@@ -72,7 +72,7 @@ func runChannelMonitorProbeTask(ctx context.Context, report func(processed, tota
 		isIdle := lastBeatById[monitor.Id] < idleCutoff &&
 			!channelmonitor.HasActivitySince(monitor.Id, idleCutoff)
 
-		channel, selectErr := selectChannelForMonitor(ctx, monitor)
+		channel, selectErr := selectChannelForGroupModel(ctx, monitor.Group, monitor.Model)
 		if selectErr != nil {
 			common.SysError(fmt.Sprintf("channel monitor %s has no available channel: %s", monitor.Id, selectErr.Error()))
 			if isIdle {
@@ -147,19 +147,19 @@ func probeChannelMonitor(ctx context.Context, monitor channelmonitor.Monitor, ch
 	return channelMonitorProbeResult{success: true, ttftMs: result.ttftMs}
 }
 
-// selectChannelForMonitor 按监控项配置的分组走生产选渠逻辑，
-// 保证探测命中的渠道与真实用户请求一致。
-func selectChannelForMonitor(ctx context.Context, monitor channelmonitor.Monitor) (*model.Channel, error) {
+// selectChannelForGroupModel 按配置的分组走生产选渠逻辑，
+// 保证渠道监控探测与模型智商检查命中的渠道与真实用户请求一致。
+func selectChannelForGroupModel(ctx context.Context, group string, modelName string) (*model.Channel, error) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequestWithContext(ctx, http.MethodPost, channelMonitorProbePath, nil)
-	common.SetContextKey(c, constant.ContextKeyUserGroup, monitor.Group)
-	common.SetContextKey(c, constant.ContextKeyUsingGroup, monitor.Group)
+	common.SetContextKey(c, constant.ContextKeyUserGroup, group)
+	common.SetContextKey(c, constant.ContextKeyUsingGroup, group)
 
 	channel, _, err := service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
 		Ctx:         c,
-		ModelName:   monitor.Model,
-		TokenGroup:  monitor.Group,
+		ModelName:   modelName,
+		TokenGroup:  group,
 		RequestPath: channelMonitorProbePath,
 		Retry:       common.GetPointer(0),
 	})
@@ -167,7 +167,7 @@ func selectChannelForMonitor(ctx context.Context, monitor channelmonitor.Monitor
 		return nil, err
 	}
 	if channel == nil {
-		return nil, fmt.Errorf("no channel available for group %s model %s", monitor.Group, monitor.Model)
+		return nil, fmt.Errorf("no channel available for group %s model %s", group, modelName)
 	}
 	return channel, nil
 }

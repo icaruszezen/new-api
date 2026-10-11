@@ -84,3 +84,56 @@ describe('useTopNavLinks channel monitoring', () => {
     expect(hrefs).not.toContain('/channel-monitoring')
   })
 })
+
+describe('useTopNavLinks IQ check', () => {
+  afterEach(() => {
+    setUiSkin('classic')
+    mockStatus = null
+  })
+
+  test('adds IQ Check right after Channel Monitoring when next skin has both enabled', () => {
+    setUiSkin('next')
+    mockStatus = {
+      channel_monitoring_enabled: true,
+      model_iq_check_enabled: true,
+    }
+
+    const { result } = renderHook(() => useTopNavLinks())
+    const hrefs = result.current.map((link) => link.href)
+
+    expect(result.current.map((link) => link.title)).toContain('IQ Check')
+    expect(hrefs.indexOf('/iq-check')).toBe(
+      hrefs.indexOf('/channel-monitoring') + 1
+    )
+    expect(hrefs.indexOf('/docs')).toBe(hrefs.indexOf('/iq-check') + 1)
+  })
+
+  test('adds IQ Check on next skin even when channel monitoring is off', () => {
+    setUiSkin('next')
+    mockStatus = { model_iq_check_enabled: true }
+
+    const { result } = renderHook(() => useTopNavLinks())
+    const hrefs = result.current.map((link) => link.href)
+
+    expect(hrefs).toContain('/iq-check')
+    expect(hrefs).not.toContain('/channel-monitoring')
+  })
+
+  test('omits IQ Check when the site skin is classic', () => {
+    setUiSkin('classic')
+    mockStatus = { model_iq_check_enabled: true }
+
+    const { result } = renderHook(() => useTopNavLinks())
+
+    expect(result.current.map((link) => link.href)).not.toContain('/iq-check')
+  })
+
+  test('omits IQ Check on next skin while the page stays disabled', () => {
+    setUiSkin('next')
+    mockStatus = { model_iq_check_enabled: false }
+
+    const { result } = renderHook(() => useTopNavLinks())
+
+    expect(result.current.map((link) => link.href)).not.toContain('/iq-check')
+  })
+})

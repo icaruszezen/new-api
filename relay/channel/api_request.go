@@ -500,6 +500,11 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	// transparent stream retries.
 	relayClient := *client
 	relayClient.CheckRedirect = keepUpstreamRedirectResponse
+	if info.MinUpstreamTimeout > 0 && req != nil {
+		relayClient.Timeout = info.UpstreamTimeout(relayClient.Timeout)
+		// 放宽超时后由调用方的 context 决定上游请求何时结束，避免上游无响应时请求一直挂着。
+		req = req.WithContext(c.Request.Context())
+	}
 	if common2.DebugEnabled && req != nil && req.URL != nil {
 		policy := service.NormalizeHTTPTransportPolicy(info.ChannelSetting)
 		logger.LogDebug(c, fmt.Sprintf(

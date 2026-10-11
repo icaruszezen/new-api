@@ -61,6 +61,8 @@ func TestMain(m *testing.M) {
 		&ChannelMonitorBeat{},
 		&ChannelMonitorStat{},
 		&ChannelMonitorState{},
+		&ModelIQCheckResult{},
+		&ModelIQCheckState{},
 		&SystemInstance{},
 		&SystemTask{},
 		&SystemTaskLock{},
@@ -98,6 +100,8 @@ func truncateTables(t *testing.T) {
 		DB.Exec("DELETE FROM channel_monitor_beats")
 		DB.Exec("DELETE FROM channel_monitor_stats")
 		DB.Exec("DELETE FROM channel_monitor_state")
+		DB.Exec("DELETE FROM model_iq_check_results")
+		DB.Exec("DELETE FROM model_iq_check_states")
 		DB.Exec("DELETE FROM system_instances")
 		DB.Exec("DELETE FROM system_task_locks")
 		DB.Exec("DELETE FROM system_tasks")

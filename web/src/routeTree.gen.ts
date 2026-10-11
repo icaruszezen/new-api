@@ -30,6 +30,7 @@ import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authentica
 import { Route as AuthenticatedSystemSettingsRouteRouteImport } from './routes/_authenticated/system-settings/route'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as ChannelMonitoringIndexRouteImport } from './routes/channel-monitoring/index'
+import { Route as IqCheckIndexRouteImport } from './routes/iq-check/index'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
 import { Route as PricingIndexRouteImport } from './routes/pricing/index'
 import { Route as RankingsIndexRouteImport } from './routes/rankings/index'
@@ -45,6 +46,7 @@ import { Route as AuthenticatedErrorMessageOverridesIndexRouteImport } from './r
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedFirstTokenErrorsIndexRouteImport } from './routes/_authenticated/first-token-errors/index'
 import { Route as AuthenticatedInviteIndexRouteImport } from './routes/_authenticated/invite/index'
+import { Route as AuthenticatedIqCheckSettingsIndexRouteImport } from './routes/_authenticated/iq-check-settings/index'
 import { Route as AuthenticatedKeysIndexRouteImport } from './routes/_authenticated/keys/index'
 import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
 import { Route as AuthenticatedModelsSectionRouteImport } from './routes/_authenticated/models/$section'
@@ -178,6 +180,11 @@ const ChannelMonitoringIndexRoute = ChannelMonitoringIndexRouteImport.update({
   path: '/channel-monitoring/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const IqCheckIndexRoute = IqCheckIndexRouteImport.update({
+  id: '/iq-check/',
+  path: '/iq-check/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OauthProviderRoute = OauthProviderRouteImport.update({
   id: '/oauth/$provider',
   path: '/oauth/$provider',
@@ -260,6 +267,12 @@ const AuthenticatedInviteIndexRoute =
   AuthenticatedInviteIndexRouteImport.update({
     id: '/invite/',
     path: '/invite/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedIqCheckSettingsIndexRoute =
+  AuthenticatedIqCheckSettingsIndexRouteImport.update({
+    id: '/iq-check-settings/',
+    path: '/iq-check-settings/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedKeysIndexRoute = AuthenticatedKeysIndexRouteImport.update({
@@ -449,6 +462,7 @@ export interface FileRoutesByFullPath {
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/channel-monitoring/': typeof ChannelMonitoringIndexRoute
+  '/iq-check/': typeof IqCheckIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
@@ -465,6 +479,7 @@ export interface FileRoutesByFullPath {
   '/error-message-overrides/': typeof AuthenticatedErrorMessageOverridesIndexRoute
   '/first-token-errors/': typeof AuthenticatedFirstTokenErrorsIndexRoute
   '/invite/': typeof AuthenticatedInviteIndexRoute
+  '/iq-check-settings/': typeof AuthenticatedIqCheckSettingsIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
   '/playground/': typeof AuthenticatedPlaygroundIndexRoute
@@ -512,6 +527,7 @@ export interface FileRoutesByTo {
   '/oauth/$provider': typeof OauthProviderRoute
   '/about': typeof AboutIndexRoute
   '/channel-monitoring': typeof ChannelMonitoringIndexRoute
+  '/iq-check': typeof IqCheckIndexRoute
   '/pricing': typeof PricingIndexRoute
   '/rankings': typeof RankingsIndexRoute
   '/setup': typeof SetupIndexRoute
@@ -528,6 +544,7 @@ export interface FileRoutesByTo {
   '/error-message-overrides': typeof AuthenticatedErrorMessageOverridesIndexRoute
   '/first-token-errors': typeof AuthenticatedFirstTokenErrorsIndexRoute
   '/invite': typeof AuthenticatedInviteIndexRoute
+  '/iq-check-settings': typeof AuthenticatedIqCheckSettingsIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
   '/models': typeof AuthenticatedModelsIndexRoute
   '/playground': typeof AuthenticatedPlaygroundIndexRoute
@@ -579,6 +596,7 @@ export interface FileRoutesById {
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/channel-monitoring/': typeof ChannelMonitoringIndexRoute
+  '/iq-check/': typeof IqCheckIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
@@ -595,6 +613,7 @@ export interface FileRoutesById {
   '/_authenticated/error-message-overrides/': typeof AuthenticatedErrorMessageOverridesIndexRoute
   '/_authenticated/first-token-errors/': typeof AuthenticatedFirstTokenErrorsIndexRoute
   '/_authenticated/invite/': typeof AuthenticatedInviteIndexRoute
+  '/_authenticated/iq-check-settings/': typeof AuthenticatedIqCheckSettingsIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
   '/_authenticated/playground/': typeof AuthenticatedPlaygroundIndexRoute
@@ -645,6 +664,7 @@ export interface FileRouteTypes {
     | '/oauth/$provider'
     | '/about/'
     | '/channel-monitoring/'
+    | '/iq-check/'
     | '/pricing/'
     | '/rankings/'
     | '/setup/'
@@ -661,6 +681,7 @@ export interface FileRouteTypes {
     | '/error-message-overrides/'
     | '/first-token-errors/'
     | '/invite/'
+    | '/iq-check-settings/'
     | '/keys/'
     | '/models/'
     | '/playground/'
@@ -708,6 +729,7 @@ export interface FileRouteTypes {
     | '/oauth/$provider'
     | '/about'
     | '/channel-monitoring'
+    | '/iq-check'
     | '/pricing'
     | '/rankings'
     | '/setup'
@@ -724,6 +746,7 @@ export interface FileRouteTypes {
     | '/error-message-overrides'
     | '/first-token-errors'
     | '/invite'
+    | '/iq-check-settings'
     | '/keys'
     | '/models'
     | '/playground'
@@ -774,6 +797,7 @@ export interface FileRouteTypes {
     | '/oauth/$provider'
     | '/about/'
     | '/channel-monitoring/'
+    | '/iq-check/'
     | '/pricing/'
     | '/rankings/'
     | '/setup/'
@@ -790,6 +814,7 @@ export interface FileRouteTypes {
     | '/_authenticated/error-message-overrides/'
     | '/_authenticated/first-token-errors/'
     | '/_authenticated/invite/'
+    | '/_authenticated/iq-check-settings/'
     | '/_authenticated/keys/'
     | '/_authenticated/models/'
     | '/_authenticated/playground/'
@@ -832,6 +857,7 @@ export interface RootRouteChildren {
   OauthProviderRoute: typeof OauthProviderRoute
   AboutIndexRoute: typeof AboutIndexRoute
   ChannelMonitoringIndexRoute: typeof ChannelMonitoringIndexRoute
+  IqCheckIndexRoute: typeof IqCheckIndexRoute
   PricingIndexRoute: typeof PricingIndexRoute
   RankingsIndexRoute: typeof RankingsIndexRoute
   SetupIndexRoute: typeof SetupIndexRoute
@@ -987,6 +1013,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChannelMonitoringIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/iq-check/': {
+      id: '/iq-check/'
+      path: '/iq-check'
+      fullPath: '/iq-check/'
+      preLoaderRoute: typeof IqCheckIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/oauth/$provider': {
       id: '/oauth/$provider'
       path: '/oauth/$provider'
@@ -1090,6 +1123,13 @@ declare module '@tanstack/react-router' {
       path: '/invite'
       fullPath: '/invite/'
       preLoaderRoute: typeof AuthenticatedInviteIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/iq-check-settings/': {
+      id: '/_authenticated/iq-check-settings/'
+      path: '/iq-check-settings'
+      fullPath: '/iq-check-settings/'
+      preLoaderRoute: typeof AuthenticatedIqCheckSettingsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/keys/': {
@@ -1389,6 +1429,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedErrorMessageOverridesIndexRoute: typeof AuthenticatedErrorMessageOverridesIndexRoute
   AuthenticatedFirstTokenErrorsIndexRoute: typeof AuthenticatedFirstTokenErrorsIndexRoute
   AuthenticatedInviteIndexRoute: typeof AuthenticatedInviteIndexRoute
+  AuthenticatedIqCheckSettingsIndexRoute: typeof AuthenticatedIqCheckSettingsIndexRoute
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
   AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
   AuthenticatedPlaygroundIndexRoute: typeof AuthenticatedPlaygroundIndexRoute
@@ -1421,6 +1462,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedFirstTokenErrorsIndexRoute:
     AuthenticatedFirstTokenErrorsIndexRoute,
   AuthenticatedInviteIndexRoute: AuthenticatedInviteIndexRoute,
+  AuthenticatedIqCheckSettingsIndexRoute:
+    AuthenticatedIqCheckSettingsIndexRoute,
   AuthenticatedKeysIndexRoute: AuthenticatedKeysIndexRoute,
   AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,
   AuthenticatedPlaygroundIndexRoute: AuthenticatedPlaygroundIndexRoute,
@@ -1451,6 +1494,7 @@ const rootRouteChildren: RootRouteChildren = {
   OauthProviderRoute: OauthProviderRoute,
   AboutIndexRoute: AboutIndexRoute,
   ChannelMonitoringIndexRoute: ChannelMonitoringIndexRoute,
+  IqCheckIndexRoute: IqCheckIndexRoute,
   PricingIndexRoute: PricingIndexRoute,
   RankingsIndexRoute: RankingsIndexRoute,
   SetupIndexRoute: SetupIndexRoute,

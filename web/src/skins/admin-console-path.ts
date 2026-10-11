@@ -20,6 +20,7 @@ const ADMIN_CONSOLE_PATHS = [
   '/first-token-errors',
   '/channels',
   '/channel-monitoring-settings',
+  '/iq-check-settings',
   '/error-message-overrides',
   '/billing-corrections',
   '/models',

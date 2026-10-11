@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import {
   Activity,
   Box,
+  Brain,
   CreditCard,
   FileText,
   FlaskConical,
@@ -144,6 +145,11 @@ export function useSidebarData(): SidebarData {
                   title: t('Channel Monitoring Settings'),
                   url: '/channel-monitoring-settings',
                   icon: Gauge,
+                },
+                {
+                  title: t('IQ Check Settings'),
+                  url: '/iq-check-settings',
+                  icon: Brain,
                 },
               ]
             : []),

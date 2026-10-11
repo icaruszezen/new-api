@@ -205,6 +205,24 @@ func loadOptionsFromDatabase() {
 	}
 }
 
+// ReloadOptions 立即从数据库刷新指定配置项。多节点部署中，其它节点写入的配置要等
+// 下一次 SyncOptions 才会到达本节点；必须按最新配置执行的后台任务可先调用它。
+func ReloadOptions(keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	var options []Option
+	if err := DB.Where(commonKeyCol+" IN ?", keys).Find(&options).Error; err != nil {
+		return err
+	}
+	for _, option := range options {
+		if err := updateOptionMap(option.Key, option.Value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func SyncOptions(frequency int) {
 	for {
 		time.Sleep(time.Duration(frequency) * time.Second)

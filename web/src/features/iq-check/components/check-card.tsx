@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import {
+  Brain,
   CalendarClock,
   Clock,
   Hash,
@@ -52,6 +53,7 @@ import { cn } from '@/lib/utils'
 
 import { FINISH_REASON_LENGTH } from '../constants'
 import type { ResultDetailState } from '../hooks/use-result-details'
+import { getReasoningEffortLabels } from '../lib/request-options'
 import type {
   IqCheckHistoryItem,
   IqCheckResult,
@@ -118,6 +120,11 @@ export function CheckCard(props: CheckCardProps) {
   const run = props.run
   const result = props.result
   const nowSeconds = Math.floor(Date.now() / 1000)
+  // A loaded result shows the depth it ran with; the check's current setting
+  // stands in until then, the same way the prompt does.
+  const reasoningEffort = result
+    ? result.reasoning_effort
+    : check.reasoning_effort
 
   const runStatusLabel: Record<IqCheckRunStatus, string> = {
     success: t('Completed'),
@@ -246,6 +253,13 @@ export function CheckCard(props: CheckCardProps) {
                   })}
                 </span>
               )}
+            </MetaItem>
+          )}
+          {reasoningEffort && (
+            <MetaItem icon={<Brain className='size-3.5' />}>
+              {t('Thinking depth: {{level}}', {
+                level: getReasoningEffortLabels(t)[reasoningEffort],
+              })}
             </MetaItem>
           )}
           {result?.finish_reason === FINISH_REASON_LENGTH && (

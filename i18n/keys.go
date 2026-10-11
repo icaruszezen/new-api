@@ -374,6 +374,8 @@ const (
 	MsgModelIQCheckPromptTooLong         = "model_iq_check.prompt_too_long"
 	MsgModelIQCheckIntervalInvalid       = "model_iq_check.interval_invalid"
 	MsgModelIQCheckMaxTokensInvalid      = "model_iq_check.max_tokens_invalid"
+	MsgModelIQCheckEndpointInvalid       = "model_iq_check.endpoint_type_invalid"
+	MsgModelIQCheckEffortInvalid         = "model_iq_check.reasoning_effort_invalid"
 	MsgModelIQCheckIconTooLong           = "model_iq_check.icon_too_long"
 	MsgModelIQCheckIdTooLong             = "model_iq_check.id_too_long"
 	MsgModelIQCheckIdDuplicated          = "model_iq_check.id_duplicated"

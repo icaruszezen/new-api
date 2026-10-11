@@ -147,10 +147,11 @@ func runModelIQCheck(ctx context.Context, check modeliqcheck.Check, userID int, 
 	}
 
 	result := model.ModelIQCheckResult{
-		CheckId:   check.Id,
-		ModelName: check.Model,
-		Prompt:    check.Prompt,
-		Status:    model.ModelIQCheckStatusFailed,
+		CheckId:         check.Id,
+		ModelName:       check.Model,
+		Prompt:          check.Prompt,
+		ReasoningEffort: check.ReasoningEffort,
+		Status:          model.ModelIQCheckStatusFailed,
 	}
 	channel, err := selectChannelForGroupModel(ctx, check.Group, check.Model)
 	switch {
@@ -201,6 +202,9 @@ func executeModelIQCheck(ctx context.Context, check modeliqcheck.Check, channel 
 		captureResponse: true,
 		omitMaxTokens:   check.MaxTokens <= 0,
 		requireStream:   true,
+		// 思考参数在格式转换后按上游协议与上游模型换算，适配各代 OpenAI / Claude / Gemini 模型的要求。
+		reasoningEffort:  check.ReasoningEffort,
+		reasoningSummary: check.ReasoningSummary,
 		// 推理模型可能静默思考很久：在检查超时之前，中转层的空闲超时与请求超时都不应先触发。
 		minUpstreamTimeout: time.Duration(timeoutSeconds)*time.Second + modelIQCheckTimeoutGrace,
 	}
@@ -219,7 +223,7 @@ func executeModelIQCheck(ctx context.Context, check modeliqcheck.Check, channel 
 				done <- testResult{localErr: fmt.Errorf("check panicked: %v", r)}
 			}
 		}()
-		done <- testChannel(checkCtx, channel, userID, check.Model, "", true, opts)
+		done <- testChannel(checkCtx, channel, userID, check.Model, check.EndpointType, true, opts)
 	}()
 
 	var testRes testResult
@@ -252,7 +256,8 @@ func executeModelIQCheck(ctx context.Context, check modeliqcheck.Check, channel 
 	case timedOut:
 		result.ErrorType = modeliqcheck.ErrorTypeTimeout
 		result.ErrorMessage = fmt.Sprintf("timed out after %d seconds", timeoutSeconds)
-	case errors.Is(testRes.localErr, errChannelTestStreamUnsupported):
+	case errors.Is(testRes.localErr, errChannelTestStreamUnsupported),
+		errors.Is(testRes.localErr, errChannelTestReasoningUnsupported):
 		result.ErrorType = modeliqcheck.ErrorTypeUnsupportedModel
 		result.ErrorMessage = testRes.localErr.Error()
 	case testRes.localErr != nil:

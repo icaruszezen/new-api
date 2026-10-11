@@ -40,6 +40,30 @@ export const MAX_INTERVAL_MINUTES = 10080
 export const DEFAULT_MAX_TOKENS = 8192
 export const MAX_MAX_TOKENS = 200000
 
+/** Mirrors modeliqcheck.EndpointTypes; '' keeps auto detection. */
+export const ENDPOINT_TYPES = [
+  '',
+  'openai',
+  'openai-response',
+  'anthropic',
+  'gemini',
+] as const
+
+/** Mirrors modeliqcheck.ReasoningEfforts; '' keeps the model default. */
+export const REASONING_EFFORTS = [
+  '',
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+] as const
+
+/** New checks ask for a thinking summary so the page can show the thinking. */
+export const DEFAULT_REASONING_SUMMARY = true
+
 /** Mirrors model_iq_check_setting history bounds (results kept per check). */
 export const DEFAULT_HISTORY_LIMIT = 10
 export const MIN_HISTORY_LIMIT = 1

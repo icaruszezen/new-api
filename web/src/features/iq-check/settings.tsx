@@ -116,6 +116,9 @@ export function IqCheckSettings() {
       prompt: values.prompt,
       interval_minutes: values.interval_minutes,
       max_tokens: values.max_tokens,
+      endpoint_type: values.endpoint_type,
+      reasoning_effort: values.reasoning_effort,
+      reasoning_summary: values.reasoning_summary,
       icon: values.icon,
       enabled: values.enabled,
       sort: current?.sort ?? checks.length,
@@ -259,7 +262,7 @@ export function IqCheckSettings() {
               <h3 className='text-sm font-medium'>{t('Checks')}</h3>
               <p className='text-muted-foreground text-xs'>
                 {t(
-                  'Each check sends its prompt to one model in one group through the normal relay path and publishes the answer as one card. Checks run automatically at their interval; editing the prompt, group, model or max tokens queues a fresh run.'
+                  'Each check sends its prompt to one model in one group through the normal relay path and publishes the answer as one card. Checks run automatically at their interval; editing the prompt, group, model, max tokens or request options queues a fresh run.'
                 )}
               </p>
             </div>

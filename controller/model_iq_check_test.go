@@ -23,6 +23,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 	"gorm.io/gorm"
 )
 
@@ -72,7 +73,9 @@ func TestApplyChannelTestOptionsReplacesNativePrompts(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, claudeReq.Messages, 1)
 	assert.Equal(t, iqCheckPrompt, claudeReq.Messages[0].Content)
-	require.NotNil(t, claudeReq.MaxTokens, "the Anthropic API requires max_tokens, so it is never dropped")
+	// Claude upstreams get the Claude default max tokens after conversion, while
+	// the same request converted for other upstreams carries no limit.
+	assert.Nil(t, claudeReq.MaxTokens)
 }
 
 func TestApplyChannelTestOptionsOmitsMaxTokens(t *testing.T) {
@@ -614,4 +617,184 @@ func TestExecuteModelIQCheckRejectsChannelsThatCannotStream(t *testing.T) {
 			assert.Equal(t, modeliqcheck.ErrorTypeUnsupportedModel, result.ErrorType, result.ErrorMessage)
 		})
 	}
+}
+
+// claudeStream is a minimal Anthropic Messages stream with summarized thinking.
+const claudeStream = "event: message_start\n" +
+	`data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude","content":[],"usage":{"input_tokens":5,"output_tokens":1}}}` + "\n\n" +
+	"event: content_block_start\n" +
+	`data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}` + "\n\n" +
+	"event: content_block_delta\n" +
+	`data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Add."}}` + "\n\n" +
+	"event: content_block_stop\n" +
+	`data: {"type":"content_block_stop","index":0}` + "\n\n" +
+	"event: content_block_start\n" +
+	`data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}` + "\n\n" +
+	"event: content_block_delta\n" +
+	`data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"4"}}` + "\n\n" +
+	"event: content_block_stop\n" +
+	`data: {"type":"content_block_stop","index":1}` + "\n\n" +
+	"event: message_delta\n" +
+	`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}` + "\n\n" +
+	"event: message_stop\n" +
+	`data: {"type":"message_stop"}` + "\n\n"
+
+// The reasoning effort reaches the upstream in the parameters the upstream
+// model accepts, whichever request format the check uses, and every response
+// format is read back into the answer and its thinking.
+func TestExecuteModelIQCheckSendsReasoningForUpstreamModel(t *testing.T) {
+	setStreamingTimeout(t, 300)
+
+	responsesStream := "event: response.reasoning_summary_text.delta\n" +
+		`data: {"type":"response.reasoning_summary_text.delta","delta":"Add."}` + "\n\n" +
+		"event: response.output_text.delta\n" +
+		`data: {"type":"response.output_text.delta","delta":"4"}` + "\n\n" +
+		"event: response.completed\n" +
+		`data: {"type":"response.completed","response":{"id":"r1","status":"completed","output":[],"usage":{"input_tokens":5,"output_tokens":3,"total_tokens":8}}}` + "\n\n"
+	geminiStream := `data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Add.","thought":true}]},"index":0}],"usageMetadata":{"promptTokenCount":5}}` + "\n\n" +
+		`data: {"candidates":[{"content":{"role":"model","parts":[{"text":"4"}]},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":1,"totalTokenCount":6}}` + "\n\n"
+	chatStream := `data: {"id":"c1","object":"chat.completion.chunk","created":1,"model":"gpt-5","choices":[{"index":0,"delta":{"reasoning_content":"Add."},"finish_reason":null}]}` + "\n\n" +
+		iqCheckChunk("4", "stop") + "data: [DONE]\n\n"
+
+	tests := []struct {
+		name          string
+		channelType   int
+		modelMapping  string
+		check         modeliqcheck.Check
+		wantPath      string
+		wantBody      map[string]any
+		absentFields  []string
+		response      string
+		wantReasoning string
+	}{
+		{
+			name:         "claude format on an anthropic channel uses adaptive thinking",
+			channelType:  constant.ChannelTypeAnthropic,
+			modelMapping: `{"gpt-5":"claude-opus-4-8"}`,
+			check:        modeliqcheck.Check{EndpointType: "anthropic", ReasoningEffort: "high", ReasoningSummary: true},
+			wantPath:     "/v1/messages",
+			wantBody: map[string]any{
+				"model": "claude-opus-4-8", "stream": true, "max_tokens": 8192.0,
+				"thinking.type": "adaptive", "thinking.display": "summarized", "output_config.effort": "high",
+			},
+			absentFields:  []string{"thinking.budget_tokens", "temperature"},
+			response:      claudeStream,
+			wantReasoning: "Add.",
+		},
+		{
+			name:         "chat format on an anthropic channel replaces the fixed thinking budget",
+			channelType:  constant.ChannelTypeAnthropic,
+			modelMapping: `{"gpt-5":"claude-opus-4-8"}`,
+			check:        modeliqcheck.Check{ReasoningEffort: "xhigh", MaxTokens: 64000},
+			wantPath:     "/v1/messages",
+			wantBody:     map[string]any{"max_tokens": 64000.0, "thinking.type": "adaptive", "output_config.effort": "xhigh"},
+			absentFields: []string{"thinking.budget_tokens", "thinking.display"},
+			response:     claudeStream,
+			// Without a summary request the chat client still receives whatever thinking the upstream returned.
+			wantReasoning: "Add.",
+		},
+		{
+			name:          "chat format on an anthropic channel keeps a budget for older models",
+			channelType:   constant.ChannelTypeAnthropic,
+			modelMapping:  `{"gpt-5":"claude-sonnet-4-5"}`,
+			check:         modeliqcheck.Check{ReasoningEffort: "medium", MaxTokens: 8192},
+			wantPath:      "/v1/messages",
+			wantBody:      map[string]any{"max_tokens": 8192.0, "thinking.type": "enabled", "thinking.budget_tokens": 4096.0},
+			absentFields:  []string{"output_config"},
+			response:      claudeStream,
+			wantReasoning: "Add.",
+		},
+		{
+			name:          "responses format requests the summary",
+			channelType:   constant.ChannelTypeOpenAI,
+			modelMapping:  `{"gpt-5":"gpt-5.2"}`,
+			check:         modeliqcheck.Check{EndpointType: "openai-response", ReasoningEffort: "max", ReasoningSummary: true},
+			wantPath:      "/v1/responses",
+			wantBody:      map[string]any{"model": "gpt-5.2", "reasoning.effort": "xhigh", "reasoning.summary": "auto"},
+			response:      responsesStream,
+			wantReasoning: "Add.",
+		},
+		{
+			name:          "chat format maps the effort to the model's levels",
+			channelType:   constant.ChannelTypeOpenAI,
+			check:         modeliqcheck.Check{ReasoningEffort: "none"},
+			wantPath:      "/v1/chat/completions",
+			wantBody:      map[string]any{"model": "gpt-5", "reasoning_effort": "minimal"},
+			response:      chatStream,
+			wantReasoning: "Add.",
+		},
+		{
+			name:          "claude format on an openai channel keeps the effort the conversion drops",
+			channelType:   constant.ChannelTypeOpenAI,
+			modelMapping:  `{"gpt-5":"gpt-5.2"}`,
+			check:         modeliqcheck.Check{EndpointType: "anthropic", ReasoningEffort: "high"},
+			wantPath:      "/v1/chat/completions",
+			wantBody:      map[string]any{"model": "gpt-5.2", "reasoning_effort": "high"},
+			absentFields:  []string{"thinking", "output_config", "max_tokens"},
+			response:      chatStream,
+			wantReasoning: "Add.",
+		},
+		{
+			name:          "gemini format on a gemini channel sets the thinking budget",
+			channelType:   constant.ChannelTypeGemini,
+			modelMapping:  `{"gpt-5":"gemini-2.5-flash"}`,
+			check:         modeliqcheck.Check{EndpointType: "gemini", ReasoningEffort: "low", ReasoningSummary: true},
+			wantPath:      "/v1beta/models/gemini-2.5-flash:streamGenerateContent",
+			wantBody:      map[string]any{"generationConfig.thinkingConfig.thinkingBudget": 1024.0, "generationConfig.thinkingConfig.includeThoughts": true},
+			absentFields:  []string{"generationConfig.thinkingConfig.thinkingLevel"},
+			response:      geminiStream,
+			wantReasoning: "Add.",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var gotPath string
+			var gotBody []byte
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				body, err := io.ReadAll(r.Body)
+				assert.NoError(t, err)
+				gotBody = body
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, test.response)
+			}))
+			t.Cleanup(server.Close)
+			channel := setupModelIQCheckChannel(t, test.channelType, server.URL, test.modelMapping)
+
+			check := test.check
+			check.Id, check.Group, check.Model, check.Prompt = "c1", "default", "gpt-5", "2+2?"
+			result := model.ModelIQCheckResult{Status: model.ModelIQCheckStatusFailed}
+			executeModelIQCheck(context.Background(), check, channel, 1, 600, &result)
+
+			assert.Equal(t, test.wantPath, gotPath)
+			require.True(t, gjson.ValidBytes(gotBody), string(gotBody))
+			for path, want := range test.wantBody {
+				assert.Equal(t, want, gjson.GetBytes(gotBody, path).Value(), "upstream field %s in %s", path, gotBody)
+			}
+			for _, path := range test.absentFields {
+				assert.False(t, gjson.GetBytes(gotBody, path).Exists(), "upstream field %s must be absent in %s", path, gotBody)
+			}
+			assert.Equal(t, model.ModelIQCheckStatusSuccess, result.Status, result.ErrorMessage)
+			assert.Equal(t, "4", result.Content)
+			assert.Equal(t, test.wantReasoning, result.Reasoning)
+			assert.Equal(t, "stop", result.FinishReason)
+		})
+	}
+}
+
+// An explicit effort cannot be silently dropped for channels whose request
+// format the check does not know how to adapt.
+func TestExecuteModelIQCheckRejectsEffortForUnadaptableChannels(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("the upstream must not be called")
+	}))
+	t.Cleanup(upstream.Close)
+	channel := setupModelIQCheckChannel(t, constant.ChannelTypeCohere, upstream.URL, "")
+
+	result := model.ModelIQCheckResult{Status: model.ModelIQCheckStatusFailed}
+	executeModelIQCheck(context.Background(), modeliqcheck.Check{Id: "c1", Group: "default", Model: "gpt-5", Prompt: "2+2?", ReasoningEffort: "high"}, channel, 1, 600, &result)
+
+	assert.Equal(t, model.ModelIQCheckStatusFailed, result.Status)
+	assert.Equal(t, modeliqcheck.ErrorTypeUnsupportedModel, result.ErrorType, result.ErrorMessage)
+	assert.Contains(t, result.ErrorMessage, "reasoning effort is not supported")
 }

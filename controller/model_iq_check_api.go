@@ -257,7 +257,9 @@ func UpdateModelIQCheckConfig(c *gin.Context) {
 			}
 			previous, existed := previousById[check.Id]
 			if existed && previous.Enabled && previous.Group == check.Group && previous.Model == check.Model &&
-				previous.Prompt == check.Prompt && previous.MaxTokens == check.MaxTokens {
+				previous.Prompt == check.Prompt && previous.MaxTokens == check.MaxTokens &&
+				previous.EndpointType == check.EndpointType && previous.ReasoningEffort == check.ReasoningEffort &&
+				previous.ReasoningSummary == check.ReasoningSummary {
 				continue
 			}
 			if err := model.RequestModelIQCheckRun(check.Id, now); err != nil {

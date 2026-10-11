@@ -22,6 +22,8 @@ import { z } from 'zod'
 import {
   DEFAULT_INTERVAL_MINUTES,
   DEFAULT_MAX_TOKENS,
+  DEFAULT_REASONING_SUMMARY,
+  ENDPOINT_TYPES,
   MAX_CHECK_NAME_LENGTH,
   MAX_HISTORY_LIMIT,
   MAX_ICON_LENGTH,
@@ -32,6 +34,7 @@ import {
   MIN_HISTORY_LIMIT,
   MIN_INTERVAL_MINUTES,
   MIN_REQUEST_TIMEOUT_SECONDS,
+  REASONING_EFFORTS,
 } from '../constants'
 import type { IqCheck } from '../types'
 
@@ -93,6 +96,9 @@ export function getCheckFormSchema(t: TFunction) {
         max: MAX_MAX_TOKENS,
       })
     ),
+    endpoint_type: z.enum(ENDPOINT_TYPES),
+    reasoning_effort: z.enum(REASONING_EFFORTS),
+    reasoning_summary: z.boolean(),
     icon: z
       .string()
       .trim()
@@ -113,6 +119,9 @@ export const CHECK_FORM_DEFAULT_VALUES: CheckFormValues = {
   prompt: '',
   interval_minutes: DEFAULT_INTERVAL_MINUTES,
   max_tokens: DEFAULT_MAX_TOKENS,
+  endpoint_type: '',
+  reasoning_effort: '',
+  reasoning_summary: DEFAULT_REASONING_SUMMARY,
   icon: '',
   enabled: true,
 }
@@ -125,6 +134,9 @@ export function checkToFormValues(check: IqCheck): CheckFormValues {
     prompt: check.prompt,
     interval_minutes: check.interval_minutes || DEFAULT_INTERVAL_MINUTES,
     max_tokens: check.max_tokens,
+    endpoint_type: check.endpoint_type ?? '',
+    reasoning_effort: check.reasoning_effort ?? '',
+    reasoning_summary: check.reasoning_summary,
     icon: check.icon ?? '',
     enabled: check.enabled,
   }

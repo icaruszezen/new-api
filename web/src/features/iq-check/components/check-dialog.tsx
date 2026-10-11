@@ -35,17 +35,27 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { getGroupModels } from '@/features/channel-monitoring/api'
 import { getLobeIcon } from '@/lib/lobe-icon'
 
 import {
+  ENDPOINT_TYPES,
   MAX_CHECK_NAME_LENGTH,
   MAX_INTERVAL_MINUTES,
   MAX_MAX_TOKENS,
   MAX_PROMPT_LENGTH,
   MIN_INTERVAL_MINUTES,
+  REASONING_EFFORTS,
 } from '../constants'
 import {
   CHECK_FORM_DEFAULT_VALUES,
@@ -54,9 +64,16 @@ import {
   countCharacters,
   getCheckFormSchema,
 } from '../lib/forms'
+import {
+  getEndpointTypeLabels,
+  getReasoningEffortLabels,
+} from '../lib/request-options'
 import type { IqCheck } from '../types'
 
 const CHECK_FORM_ID = 'iq-check-form'
+// Select items cannot use an empty value, so the "use the default" option of
+// the request format and thinking depth selects goes through this sentinel.
+const DEFAULT_SELECT_VALUE = '__default__'
 
 type CheckDialogProps = {
   open: boolean
@@ -116,6 +133,22 @@ export function CheckDialog(props: CheckDialogProps) {
       })),
     [groupModelsQuery.data]
   )
+
+  const endpointTypeItems = useMemo(() => {
+    const labels = getEndpointTypeLabels(t)
+    return ENDPOINT_TYPES.map((type) => ({
+      value: type || DEFAULT_SELECT_VALUE,
+      label: labels[type],
+    }))
+  }, [t])
+
+  const reasoningEffortItems = useMemo(() => {
+    const labels = getReasoningEffortLabels(t)
+    return REASONING_EFFORTS.map((effort) => ({
+      value: effort || DEFAULT_SELECT_VALUE,
+      label: labels[effort],
+    }))
+  }, [t])
 
   // The dialog stays open when the server rejects the save, so the admin can
   // fix the problem without retyping a long prompt.
@@ -335,6 +368,113 @@ export function CheckDialog(props: CheckDialogProps) {
               )}
             />
           </div>
+
+          <div className='grid gap-4 sm:grid-cols-2'>
+            <FormField
+              control={form.control}
+              name='endpoint_type'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Request format')}</FormLabel>
+                  <Select
+                    items={endpointTypeItems}
+                    value={field.value || DEFAULT_SELECT_VALUE}
+                    onValueChange={(value) => {
+                      const type = ENDPOINT_TYPES.find(
+                        (option) => (option || DEFAULT_SELECT_VALUE) === value
+                      )
+                      if (type !== undefined) field.onChange(type)
+                    }}
+                  >
+                    <FormControl>
+                      <SelectTrigger className='w-full'>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent alignItemWithTrigger={false}>
+                      <SelectGroup>
+                        {endpointTypeItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    {t(
+                      'The API format the check sends through the relay. Auto detect uses Chat Completions, or Responses for Codex models.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='reasoning_effort'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Thinking depth')}</FormLabel>
+                  <Select
+                    items={reasoningEffortItems}
+                    value={field.value || DEFAULT_SELECT_VALUE}
+                    onValueChange={(value) => {
+                      const effort = REASONING_EFFORTS.find(
+                        (option) => (option || DEFAULT_SELECT_VALUE) === value
+                      )
+                      if (effort !== undefined) field.onChange(effort)
+                    }}
+                  >
+                    <FormControl>
+                      <SelectTrigger className='w-full'>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent alignItemWithTrigger={false}>
+                      <SelectGroup>
+                        {reasoningEffortItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    {t(
+                      'Converted to what the upstream model accepts: OpenAI reasoning effort, Claude adaptive thinking (a thinking budget on older models) or Gemini thinking level. Levels a model lacks use the closest one; high levels need a large max output tokens.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <FormField
+            control={form.control}
+            name='reasoning_summary'
+            render={({ field }) => (
+              <FormItem className='flex flex-row items-center justify-between gap-4'>
+                <div className='space-y-1'>
+                  <FormLabel>{t('Request thinking summary')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Ask the model to return a readable summary of its thinking so the page can show it. Turn this off if the upstream rejects the request.'
+                    )}
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
 
           <FormField
             control={form.control}

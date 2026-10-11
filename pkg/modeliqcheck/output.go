@@ -5,13 +5,17 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/QuantumNous/new-api/relaykit/reasonmap"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/tidwall/gjson"
 )
 
 // ExtractOutput 从中转写给合成客户端的响应中提取模型输出。
-// 检查走渠道测试链路，客户端格式为 OpenAI Chat Completions 或 Responses：
-// 流式响应是 SSE（只解析 data: 行，忽略 event: 行、": PING" 保活注释与 [DONE]），
-// 非流式响应是单个 JSON 对象。正文与思考内容按字节上限在 UTF-8 边界截断。
+// 检查走渠道测试链路，客户端格式为 OpenAI Chat Completions、Responses、Claude Messages
+// 或 Gemini generateContent：流式响应是 SSE（只解析 data: 行，忽略 event: 行、
+// ": PING" 保活注释与 [DONE]），非流式响应是单个 JSON 对象。
+// 结束原因统一换算成 Chat Completions 口径（stop / length / content_filter 等）。
+// 正文与思考内容按字节上限在 UTF-8 边界截断。
 func ExtractOutput(body []byte) Output {
 	collector := outputCollector{}
 	trimmed := bytes.TrimSpace(body)
@@ -77,7 +81,7 @@ func TruncateErrorMessage(message string) string {
 	return string([]rune(message)[:MaxErrorMessageLength])
 }
 
-// outputCollector 累积 Chat Completions 增量与 Responses 事件中的文本。
+// outputCollector 累积 Chat Completions 增量、Responses / Claude 事件与 Gemini 分片中的文本。
 type outputCollector struct {
 	content      strings.Builder
 	reasoning    strings.Builder
@@ -100,8 +104,29 @@ func (o *outputCollector) addStreamPayload(payload gjson.Result) {
 		return
 	}
 
+	if payload.Get("candidates").Exists() {
+		o.addGeminiCandidate(payload.Get("candidates.0"))
+		return
+	}
+
 	eventType := payload.Get("type").String()
 	switch eventType {
+	case "content_block_start":
+		block := payload.Get("content_block")
+		o.content.WriteString(block.Get("text").String())
+		o.reasoning.WriteString(block.Get("thinking").String())
+	case "content_block_delta":
+		delta := payload.Get("delta")
+		switch delta.Get("type").String() {
+		case "text_delta":
+			o.content.WriteString(delta.Get("text").String())
+		case "thinking_delta":
+			o.reasoning.WriteString(delta.Get("thinking").String())
+		}
+	case "message_delta":
+		if reason := payload.Get("delta.stop_reason").String(); reason != "" {
+			o.finishReason = reasonmap.ClaudeStopReasonToOpenAIFinishReason(reason)
+		}
 	case "response.output_text.delta":
 		o.content.WriteString(payload.Get("delta").String())
 	case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
@@ -141,6 +166,52 @@ func (o *outputCollector) addCompletion(body gjson.Result) {
 	}
 	if body.Get("output").Exists() {
 		o.finishResponse(body, body.Get("status").String())
+		return
+	}
+	if body.Get("candidates").Exists() {
+		o.addGeminiCandidate(body.Get("candidates.0"))
+		return
+	}
+	if body.Get("type").String() == "message" {
+		for _, block := range body.Get("content").Array() {
+			switch block.Get("type").String() {
+			case "text":
+				o.content.WriteString(block.Get("text").String())
+			case "thinking":
+				o.reasoning.WriteString(block.Get("thinking").String())
+			}
+		}
+		if reason := body.Get("stop_reason").String(); reason != "" {
+			o.finishReason = reasonmap.ClaudeStopReasonToOpenAIFinishReason(reason)
+		}
+	}
+}
+
+// addGeminiCandidate 读取 Gemini 候选的文本分片：thought 为真的分片是思考摘要。
+func (o *outputCollector) addGeminiCandidate(candidate gjson.Result) {
+	for _, part := range candidate.Get("content.parts").Array() {
+		if part.Get("thought").Bool() {
+			o.reasoning.WriteString(part.Get("text").String())
+			continue
+		}
+		o.content.WriteString(part.Get("text").String())
+	}
+	if reason := candidate.Get("finishReason").String(); reason != "" {
+		o.finishReason = geminiFinishReason(reason)
+	}
+}
+
+// geminiFinishReason 把 Gemini 的 finishReason 换算成 Chat Completions 口径。
+func geminiFinishReason(reason string) string {
+	switch strings.ToUpper(reason) {
+	case "STOP":
+		return "stop"
+	case "MAX_TOKENS":
+		return "length"
+	case "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY":
+		return types.FinishReasonContentFilter
+	default:
+		return strings.ToLower(reason)
 	}
 }
 
@@ -176,8 +247,14 @@ func (o *outputCollector) finishResponse(response gjson.Result, status string) {
 			if !reasoningEmpty {
 				continue
 			}
+			// 原生 Responses 把思考摘要放在 summary，中转转换出的条目放在 content。
 			for _, summary := range item.Get("summary").Array() {
 				o.reasoning.WriteString(summary.Get("text").String())
+			}
+			for _, part := range item.Get("content").Array() {
+				if part.Get("type").String() == "summary_text" {
+					o.reasoning.WriteString(part.Get("text").String())
+				}
 			}
 		}
 	}

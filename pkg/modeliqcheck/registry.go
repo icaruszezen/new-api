@@ -2,6 +2,7 @@ package modeliqcheck
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -178,6 +179,16 @@ func ValidateChecks(checks []Check, groupExists func(string) bool, modelInGroup 
 		if check.MaxTokens < 0 || check.MaxTokens > MaxMaxTokens {
 			return nil, newValidationError(i18n.MsgModelIQCheckMaxTokensInvalid, map[string]any{"Name": check.Name, "Max": MaxMaxTokens},
 				"IQ check %q: max output tokens must be between 0 and %d", check.Name, MaxMaxTokens)
+		}
+		check.EndpointType = strings.ToLower(strings.TrimSpace(check.EndpointType))
+		if !slices.Contains(EndpointTypes, check.EndpointType) {
+			return nil, newValidationError(i18n.MsgModelIQCheckEndpointInvalid, map[string]any{"Name": check.Name, "Value": check.EndpointType},
+				"IQ check %q: unsupported request format %q", check.Name, check.EndpointType)
+		}
+		check.ReasoningEffort = strings.ToLower(strings.TrimSpace(check.ReasoningEffort))
+		if !slices.Contains(ReasoningEfforts, check.ReasoningEffort) {
+			return nil, newValidationError(i18n.MsgModelIQCheckEffortInvalid, map[string]any{"Name": check.Name, "Value": check.ReasoningEffort},
+				"IQ check %q: unsupported reasoning effort %q", check.Name, check.ReasoningEffort)
 		}
 		if len(check.Icon) > MaxIconLength {
 			return nil, newValidationError(i18n.MsgModelIQCheckIconTooLong, map[string]any{"Name": check.Name},

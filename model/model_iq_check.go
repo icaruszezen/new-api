@@ -12,7 +12,7 @@ const (
 )
 
 // ModelIQCheckResult 是一次智商检查的完整结果。
-// Prompt / ModelName 是运行时快照：管理员之后修改提示词，历史结果仍对应当时的问题。
+// Prompt / ModelName / ReasoningEffort 是运行时快照：管理员之后修改配置，历史结果仍对应当时的问题与思考深度。
 // Prompt / Content / Reasoning / ErrorMessage 不加 type 标签，由 GORM 映射为
 // MySQL longtext、PostgreSQL / SQLite text，避免 MySQL TEXT 的 64KB 上限截断网页输出。
 type ModelIQCheckResult struct {
@@ -22,6 +22,7 @@ type ModelIQCheckResult struct {
 	Status             int    `json:"status"`
 	ModelName          string `json:"model_name" gorm:"size:255"`
 	Prompt             string `json:"prompt"`
+	ReasoningEffort    string `json:"reasoning_effort" gorm:"size:16"`
 	Content            string `json:"content"`
 	ContentTruncated   bool   `json:"content_truncated"`
 	Reasoning          string `json:"reasoning"`

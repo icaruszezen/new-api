@@ -20,14 +20,17 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
+	"github.com/QuantumNous/new-api/pkg/modeliqcheck"
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/relay/channel/aws"
+	"github.com/QuantumNous/new-api/relay/channel/vertex"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	hosttypes "github.com/QuantumNous/new-api/types"
 
@@ -57,8 +60,8 @@ type channelTestOptions struct {
 	maxTokens      *uint
 	// prompt 非空时替换合成的 "hi" 用户消息。
 	prompt string
-	// omitMaxTokens 去掉 buildTestRequest 写入的 max tokens 字段（OpenAI chat / Gemini），
-	// 由上游使用默认输出上限；Claude 原生请求必须携带该字段，保留原值。
+	// omitMaxTokens 去掉 buildTestRequest 写入的 max tokens 字段，由上游使用默认输出上限；
+	// Claude 上游必须携带该字段，由 applyChannelTestReasoning 补上 Claude 设置中的默认值。
 	omitMaxTokens bool
 	// captureResponse 读取完整的中转响应到 testResult.responseBody，且不把响应内容写入系统日志。
 	captureResponse bool
@@ -68,10 +71,17 @@ type channelTestOptions struct {
 	// requireStream 要求上游以流式返回：只能整段返回的组合直接报错，
 	// 流在正常结束前中断（空闲超时、连接断开等）也按失败处理，而不是把半截输出当成功。
 	requireStream bool
+	// reasoningEffort 是思考深度（modeliqcheck.ReasoningEfforts），空值不改动模型默认设置；
+	// reasoningSummary 要求上游返回可读的思考摘要。二者由 applyChannelTestReasoning 写入上游请求。
+	reasoningEffort  string
+	reasoningSummary bool
 }
 
 // errChannelTestStreamUnsupported 表示该渠道与模型的组合无法以流式请求上游。
 var errChannelTestStreamUnsupported = errors.New("upstream streaming is not supported")
+
+// errChannelTestReasoningUnsupported 表示思考深度无法写入该渠道的上游请求格式。
+var errChannelTestReasoningUnsupported = errors.New("reasoning effort is not supported by this channel's request format")
 
 // channelTestResponseWriter 为测试链路的响应记录器补上 CloseNotify：部分渠道通过
 // gin 的 c.Stream 输出，它依赖 http.CloseNotifier，原生 ResponseRecorder 未实现时会 panic。
@@ -438,6 +448,14 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 
+	if err != nil {
+		return testResult{
+			context:     c,
+			localErr:    err,
+			newAPIError: types.NewError(err, types.ErrorCodeConvertRequestFailed),
+		}
+	}
+	convertedRequest, err = applyChannelTestReasoning(convertedRequest, info, opts)
 	if err != nil {
 		return testResult{
 			context:     c,
@@ -946,6 +964,76 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 	return testRequest
 }
 
+// applyChannelTestReasoning 把思考深度与思考摘要写入转换后的上游请求，并为缺少 max_tokens 的
+// Claude 请求补上默认值。参数按上游协议与上游模型写入，而不是按客户端格式：跨格式转换会
+// 丢弃思考参数（Claude / Gemini 转 OpenAI），或不分模型换算成固定预算（OpenAI 转 Claude
+// 一律发送 budget_tokens，Opus 4.7 起的模型直接返回 400）。
+// 适配器按值返回 Responses 请求，因此返回改写后的请求。
+func applyChannelTestReasoning(converted any, info *relaycommon.RelayInfo, opts channelTestOptions) (any, error) {
+	effort := opts.reasoningEffort
+	summary := opts.reasoningSummary
+	switch req := converted.(type) {
+	case *dto.ClaudeRequest:
+		return req, applyChannelTestClaudeThinking(req.Model, &req.Thinking, &req.OutputConfig, &req.MaxTokens, opts)
+	case *vertex.VertexAIClaudeRequest:
+		return req, applyChannelTestClaudeThinking(info.UpstreamModelName, &req.Thinking, &req.OutputConfig, &req.MaxTokens, opts)
+	case *dto.GeminiChatRequest:
+		req.GenerationConfig.ThinkingConfig = modeliqcheck.GeminiThinkingConfig(info.UpstreamModelName, effort, summary, req.GenerationConfig.ThinkingConfig)
+		return req, nil
+	case dto.OpenAIResponsesRequest:
+		req.Reasoning = modeliqcheck.ResponsesReasoning(req.Model, effort, summary, req.Reasoning)
+		return req, nil
+	case *dto.OpenAIResponsesRequest:
+		req.Reasoning = modeliqcheck.ResponsesReasoning(req.Model, effort, summary, req.Reasoning)
+		return req, nil
+	case *dto.GeneralOpenAIRequest:
+		upstreamEffort := modeliqcheck.OpenAIReasoningEffort(req.Model, effort)
+		if upstreamEffort == "" {
+			return req, nil
+		}
+		// OpenRouter 用 reasoning 对象表达思考深度，适配器在转换时已把 reasoning_effort 换成该对象。
+		if info.ChannelType == constant.ChannelTypeOpenRouter {
+			reasoning, err := common.Marshal(map[string]string{"effort": upstreamEffort})
+			if err != nil {
+				return req, err
+			}
+			req.Reasoning = reasoning
+			req.ReasoningEffort = ""
+			return req, nil
+		}
+		req.ReasoningEffort = upstreamEffort
+		return req, nil
+	}
+	if effort != "" {
+		return converted, fmt.Errorf("%w (%T)", errChannelTestReasoningUnsupported, converted)
+	}
+	return converted, nil
+}
+
+// applyChannelTestClaudeThinking 改写 Claude Messages 请求（含 Vertex 的同构请求）的思考参数。
+// Anthropic 要求请求携带 max_tokens，缺失时与生产入口一样使用 Claude 设置中的默认值。
+func applyChannelTestClaudeThinking(model string, thinking **dto.Thinking, outputConfig *json.RawMessage, maxTokens **uint, opts channelTestOptions) error {
+	if *maxTokens == nil {
+		defaultMaxTokens := model_setting.GetClaudeSettings().GetDefaultMaxTokens(model)
+		if defaultMaxTokens <= 0 {
+			defaultMaxTokens = modeliqcheck.DefaultMaxTokens
+		}
+		*maxTokens = common.GetPointer(uint(defaultMaxTokens))
+	}
+	fields, err := modeliqcheck.ApplyClaudeThinking(model, opts.reasoningEffort, opts.reasoningSummary, modeliqcheck.ClaudeThinkingFields{
+		Thinking:     *thinking,
+		OutputConfig: *outputConfig,
+		MaxTokens:    **maxTokens,
+	})
+	if err != nil {
+		return err
+	}
+	*thinking = fields.Thinking
+	*outputConfig = fields.OutputConfig
+	*maxTokens = &fields.MaxTokens
+	return nil
+}
+
 func channelTestMaxTokens(fallback uint, override *uint) *uint {
 	if override != nil {
 		return override
@@ -989,6 +1077,9 @@ func applyChannelTestOptions(request dto.Request, opts channelTestOptions) error
 	case *dto.ClaudeRequest:
 		if opts.prompt != "" {
 			req.Messages = []dto.ClaudeMessage{{Role: "user", Content: opts.prompt}}
+		}
+		if opts.omitMaxTokens {
+			req.MaxTokens = nil
 		}
 	case *dto.GeminiChatRequest:
 		if opts.prompt != "" {

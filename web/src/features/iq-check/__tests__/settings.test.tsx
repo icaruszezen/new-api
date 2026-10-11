@@ -55,6 +55,7 @@ function adminCheck(overrides: Partial<AdminIqCheck> = {}): AdminIqCheck {
     prompt: 'How many r are in strawberry?',
     interval_minutes: 60,
     max_tokens: 8192,
+    reasoning_summary: false,
     icon: '',
     enabled: true,
     sort: 0,

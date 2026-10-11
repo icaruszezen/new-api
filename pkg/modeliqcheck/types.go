@@ -48,11 +48,20 @@ type Check struct {
 	Model           string `json:"model"`
 	Prompt          string `json:"prompt"`
 	IntervalMinutes int    `json:"interval_minutes"`
-	// MaxTokens 为 0 时请求不携带 max tokens 字段，由上游使用默认值。
-	MaxTokens int    `json:"max_tokens"`
-	Icon      string `json:"icon,omitempty"`
-	Enabled   bool   `json:"enabled"`
-	Sort      int    `json:"sort"`
+	// MaxTokens 为 0 时请求不携带 max tokens 字段，由上游使用默认值；
+	// Claude 上游必须携带该字段，此时使用 Claude 设置中的默认最大输出 tokens。
+	MaxTokens int `json:"max_tokens"`
+	// EndpointType 是发给中转的请求格式，取 EndpointTypes 中的值；空值自动检测。
+	EndpointType string `json:"endpoint_type,omitempty"`
+	// ReasoningEffort 是思考深度，取 ReasoningEfforts 中的值；空值不改动模型默认的思考设置。
+	// 请求按上游协议与模型代际换算成对应参数，见 reasoning.go。
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	// ReasoningSummary 要求上游返回可读的思考摘要：OpenAI Responses 的 reasoning.summary、
+	// Claude 的 thinking.display=summarized、Gemini 的 includeThoughts。
+	ReasoningSummary bool   `json:"reasoning_summary"`
+	Icon             string `json:"icon,omitempty"`
+	Enabled          bool   `json:"enabled"`
+	Sort             int    `json:"sort"`
 }
 
 // Output 是从中转写给合成客户端的响应中提取出的模型输出。
@@ -75,11 +84,13 @@ type StatusView struct {
 // 刻意不含 group 与 channel 信息，避免向未登录访客暴露内部路由拓扑；
 // 历史只带元数据，完整输出通过 /api/iq-check/results 按需读取。
 type CheckView struct {
-	Id              string `json:"id"`
-	Name            string `json:"name"`
-	Model           string `json:"model"`
-	Icon            string `json:"icon"`
-	Prompt          string `json:"prompt"`
+	Id     string `json:"id"`
+	Name   string `json:"name"`
+	Model  string `json:"model"`
+	Icon   string `json:"icon"`
+	Prompt string `json:"prompt"`
+	// ReasoningEffort 是当前配置的思考深度，空值表示模型默认。
+	ReasoningEffort string `json:"reasoning_effort"`
 	IntervalMinutes int    `json:"interval_minutes"`
 	Running         bool   `json:"running"`
 	Queued          bool   `json:"queued"`
@@ -100,7 +111,7 @@ type HistoryItemView struct {
 }
 
 // ResultView 是 GET /api/iq-check/results 返回的单条完整结果。
-// Model / Prompt 是该次运行的快照；失败原因只给 ErrorType 分类，不含原始错误。
+// Model / Prompt / ReasoningEffort 是该次运行的快照；失败原因只给 ErrorType 分类，不含原始错误。
 type ResultView struct {
 	Id                 int64  `json:"id"`
 	CheckId            string `json:"check_id"`
@@ -108,6 +119,7 @@ type ResultView struct {
 	Status             string `json:"status"`
 	Model              string `json:"model"`
 	Prompt             string `json:"prompt"`
+	ReasoningEffort    string `json:"reasoning_effort"`
 	Content            string `json:"content"`
 	ContentTruncated   bool   `json:"content_truncated"`
 	Reasoning          string `json:"reasoning"`

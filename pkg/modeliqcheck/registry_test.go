@@ -42,7 +42,8 @@ func TestParseChecksSortsByConfiguredOrderAndTreatsBlankAsEmpty(t *testing.T) {
 func TestValidateChecksNormalizesAndAppliesDefaults(t *testing.T) {
 	normalized, err := ValidateChecks([]Check{
 		{Name: "  Pro  ", Group: " vip ", Model: " gpt-5 ", Prompt: "\n  Write a web page  \n", Icon: " OpenAI ", Enabled: true, Sort: 99},
-		{Id: "keep-me", Name: "Plus", Group: "default", Model: "gpt-5", Prompt: "1+1=?", IntervalMinutes: 30, MaxTokens: 4096},
+		{Id: "keep-me", Name: "Plus", Group: "default", Model: "gpt-5", Prompt: "1+1=?", IntervalMinutes: 30, MaxTokens: 4096,
+			EndpointType: " Anthropic ", ReasoningEffort: " XHigh ", ReasoningSummary: true},
 	}, allowAllGroups, allowAllModels)
 	require.NoError(t, err)
 	require.Len(t, normalized, 2)
@@ -56,6 +57,8 @@ func TestValidateChecksNormalizesAndAppliesDefaults(t *testing.T) {
 	assert.Len(t, first.Id, 16, "a missing id must be generated so results stay attributable")
 	assert.Equal(t, DefaultIntervalMinutes, first.IntervalMinutes, "an unset interval falls back to the default")
 	assert.Equal(t, 0, first.MaxTokens, "0 means the request carries no max tokens field")
+	assert.Empty(t, first.EndpointType, "an empty request format keeps auto detection")
+	assert.Empty(t, first.ReasoningEffort, "an empty reasoning effort keeps the model default")
 	// Sort is rewritten from the submitted order so the admin list order wins.
 	assert.Equal(t, 0, first.Sort)
 
@@ -63,6 +66,9 @@ func TestValidateChecksNormalizesAndAppliesDefaults(t *testing.T) {
 	assert.Equal(t, "keep-me", second.Id, "an existing id must survive so its history stays linked")
 	assert.Equal(t, 30, second.IntervalMinutes)
 	assert.Equal(t, 4096, second.MaxTokens)
+	assert.Equal(t, "anthropic", second.EndpointType)
+	assert.Equal(t, "xhigh", second.ReasoningEffort)
+	assert.True(t, second.ReasoningSummary)
 	assert.Equal(t, 1, second.Sort)
 	assert.False(t, second.Enabled)
 }
@@ -179,6 +185,18 @@ func TestValidateChecksRejectsInvalidInput(t *testing.T) {
 			name:    "max tokens above maximum",
 			checks:  withField(func(c *Check) { c.MaxTokens = MaxMaxTokens + 1 }),
 			wantKey: i18n.MsgModelIQCheckMaxTokensInvalid,
+		},
+		{
+			name:       "unsupported request format",
+			checks:     withField(func(c *Check) { c.EndpointType = "embeddings" }),
+			wantKey:    i18n.MsgModelIQCheckEndpointInvalid,
+			wantParams: map[string]any{"Name": "Pro", "Value": "embeddings"},
+		},
+		{
+			name:       "unsupported reasoning effort",
+			checks:     withField(func(c *Check) { c.ReasoningEffort = "extreme" }),
+			wantKey:    i18n.MsgModelIQCheckEffortInvalid,
+			wantParams: map[string]any{"Name": "Pro", "Value": "extreme"},
 		},
 		{
 			name:    "icon too long",

@@ -57,6 +57,7 @@ function checkView(
     last_checked_at: history[0]?.checked_at ?? 0,
     next_check_at: 0,
     history,
+    reasoning_effort: '',
   }
 }
 
@@ -82,6 +83,7 @@ function resultFor(
     prompt_tokens: 10,
     completion_tokens: 20,
     reasoning_tokens: 0,
+    reasoning_effort: '',
   }
 }
 

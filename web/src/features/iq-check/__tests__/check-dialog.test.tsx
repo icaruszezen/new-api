@@ -47,6 +47,7 @@ function savedCheck(overrides: Partial<IqCheck> = {}): IqCheck {
     prompt: 'How many r are in strawberry?',
     interval_minutes: 60,
     max_tokens: 8192,
+    reasoning_summary: false,
     icon: '',
     enabled: true,
     sort: 0,
@@ -89,6 +90,46 @@ describe('CheckDialog', () => {
     expect(screen.getByLabelText('Check interval (minutes)')).toHaveValue(60)
     expect(screen.getByLabelText('Max output tokens')).toHaveValue(8192)
     expect(screen.getByRole('switch', { name: 'Enabled' })).toBeChecked()
+    expect(
+      screen.getByRole('combobox', { name: 'Request format' })
+    ).toHaveTextContent('Auto detect (default)')
+    expect(
+      screen.getByRole('combobox', { name: 'Thinking depth' })
+    ).toHaveTextContent('Model default')
+    expect(
+      screen.getByRole('switch', { name: 'Request thinking summary' })
+    ).toBeChecked()
+  })
+
+  test('submits the chosen request format and thinking depth', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderDialog(
+      savedCheck({ model: 'claude-opus-4-8', reasoning_effort: 'low' })
+    )
+
+    expect(
+      screen.getByRole('combobox', { name: 'Thinking depth' })
+    ).toHaveTextContent('Low')
+    await user.click(screen.getByRole('combobox', { name: 'Request format' }))
+    await user.click(
+      await screen.findByRole('option', { name: 'Claude Messages' })
+    )
+    await user.click(screen.getByRole('combobox', { name: 'Thinking depth' }))
+    await user.click(await screen.findByRole('option', { name: 'Extra high' }))
+    await user.click(
+      screen.getByRole('switch', { name: 'Request thinking summary' })
+    )
+    await user.click(screen.getByRole('button', { name: 'Update' }))
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          endpoint_type: 'anthropic',
+          reasoning_effort: 'xhigh',
+          reasoning_summary: true,
+        })
+      )
+    })
   })
 
   test('loads models scoped to the selected group', async () => {
@@ -159,6 +200,9 @@ describe('CheckDialog', () => {
         prompt: 'Draw a clock as HTML.',
         interval_minutes: 60,
         max_tokens: 0,
+        endpoint_type: '',
+        reasoning_effort: '',
+        reasoning_summary: false,
         icon: '',
         enabled: true,
       })

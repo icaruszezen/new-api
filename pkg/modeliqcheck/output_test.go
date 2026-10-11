@@ -97,6 +97,118 @@ func TestExtractOutputFromIncompleteResponsesStreamFallsBackToFinalOutput(t *tes
 	assert.Equal(t, "length", output.FinishReason)
 }
 
+// Responses converted from another protocol carry the reasoning text in the
+// item content instead of the summary.
+func TestExtractOutputFromConvertedResponsesFallsBackToReasoningContent(t *testing.T) {
+	body := strings.Join([]string{
+		`event: response.completed`,
+		`data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"reasoning","content":[{"type":"summary_text","text":"Converted plan"}]},{"type":"message","content":[{"type":"output_text","text":"ok"}]}]}}`,
+		``,
+	}, "\n")
+
+	output := ExtractOutput([]byte(body))
+
+	assert.Equal(t, "ok", output.Content)
+	assert.Equal(t, "Converted plan", output.Reasoning)
+	assert.Equal(t, "stop", output.FinishReason)
+}
+
+func TestExtractOutputFromClaudeMessagesStream(t *testing.T) {
+	body := strings.Join([]string{
+		`event: message_start`,
+		`data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"usage":{"input_tokens":9,"output_tokens":1}}}`,
+		``,
+		`event: content_block_start`,
+		`data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`,
+		``,
+		`event: content_block_delta`,
+		`data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Count the r's. "}}`,
+		``,
+		`event: content_block_delta`,
+		`data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Three."}}`,
+		``,
+		`event: content_block_delta`,
+		`data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig"}}`,
+		``,
+		`event: content_block_stop`,
+		`data: {"type":"content_block_stop","index":0}`,
+		``,
+		`event: ping`,
+		`data: {"type":"ping"}`,
+		``,
+		`event: content_block_start`,
+		`data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}`,
+		``,
+		`event: content_block_delta`,
+		`data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"There are "}}`,
+		``,
+		`event: content_block_delta`,
+		`data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"3."}}`,
+		``,
+		`event: content_block_stop`,
+		`data: {"type":"content_block_stop","index":1}`,
+		``,
+		`event: message_delta`,
+		`data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":20}}`,
+		``,
+		`event: message_stop`,
+		`data: {"type":"message_stop"}`,
+		``,
+	}, "\n")
+
+	output := ExtractOutput([]byte(body))
+
+	assert.Equal(t, "There are 3.", output.Content)
+	assert.Equal(t, "Count the r's. Three.", output.Reasoning)
+	assert.Equal(t, "stop", output.FinishReason)
+	assert.Empty(t, output.ErrorMessage)
+}
+
+// A Claude stream cut before message_delta has no stop reason, which the check
+// treats as an incomplete answer.
+func TestExtractOutputFromClaudeStreamWithoutStopReason(t *testing.T) {
+	body := strings.Join([]string{
+		`event: content_block_delta`,
+		`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}`,
+		``,
+	}, "\n")
+
+	output := ExtractOutput([]byte(body))
+
+	assert.Equal(t, "partial", output.Content)
+	assert.Empty(t, output.FinishReason)
+}
+
+func TestExtractOutputFromGeminiStream(t *testing.T) {
+	cases := []struct {
+		name       string
+		lastReason string
+		wantFinish string
+	}{
+		{name: "stop", lastReason: "STOP", wantFinish: "stop"},
+		{name: "max tokens", lastReason: "MAX_TOKENS", wantFinish: "length"},
+		{name: "safety", lastReason: "SAFETY", wantFinish: "content_filter"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			body := strings.Join([]string{
+				`data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Weighing options.","thought":true}]},"index":0}],"usageMetadata":{"promptTokenCount":5}}`,
+				``,
+				`data: {"candidates":[{"content":{"role":"model","parts":[{"text":"<html>"}]},"finishReason":null,"index":0}],"usageMetadata":{"promptTokenCount":5}}`,
+				``,
+				`data: {"candidates":[{"content":{"role":"model","parts":[{"text":"</html>"}]},"finishReason":"` + testCase.lastReason + `","index":0}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":4,"thoughtsTokenCount":3}}`,
+				``,
+			}, "\n")
+
+			output := ExtractOutput([]byte(body))
+
+			assert.Equal(t, "<html></html>", output.Content)
+			assert.Equal(t, "Weighing options.", output.Reasoning)
+			assert.Equal(t, testCase.wantFinish, output.FinishReason)
+		})
+	}
+}
+
 func TestExtractOutputFromNonStreamBodies(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -123,6 +235,20 @@ func TestExtractOutputFromNonStreamBodies(t *testing.T) {
 			body:        `{"id":"resp_1","object":"response","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Hi "},{"type":"output_text","text":"there"}]}]}`,
 			wantContent: "Hi there",
 			wantFinish:  "stop",
+		},
+		{
+			name:          "claude message",
+			body:          `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"thinking","thinking":"Compare sizes.","signature":"sig"},{"type":"text","text":"Jupiter"}],"stop_reason":"max_tokens"}`,
+			wantContent:   "Jupiter",
+			wantReasoning: "Compare sizes.",
+			wantFinish:    "length",
+		},
+		{
+			name:          "gemini generate content",
+			body:          `{"candidates":[{"content":{"role":"model","parts":[{"text":"Plan.","thought":true},{"text":"Done"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":3}}`,
+			wantContent:   "Done",
+			wantReasoning: "Plan.",
+			wantFinish:    "stop",
 		},
 	}
 
@@ -171,6 +297,17 @@ func TestExtractOutputReportsUpstreamErrors(t *testing.T) {
 				`data: {"type":"response.failed","response":{"status":"failed","error":{"code":"server_error","message":"generation failed"}}}`,
 			}, "\n"),
 			wantError: "generation failed",
+		},
+		{
+			name: "claude error event",
+			body: strings.Join([]string{
+				`event: content_block_delta`,
+				`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}`,
+				`event: error`,
+				`data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`,
+			}, "\n"),
+			wantContent: "partial",
+			wantError:   "Overloaded",
 		},
 		{
 			name: "null error is not a failure",

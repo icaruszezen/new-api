@@ -16,8 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { ENDPOINT_TYPES, REASONING_EFFORTS } from './constants'
+
 /** Outcome of one finished check run. */
 export type IqCheckRunStatus = 'success' | 'failed'
+
+/** Request format of a check; '' keeps auto detection. */
+export type IqCheckEndpointType = (typeof ENDPOINT_TYPES)[number]
+
+/** Thinking depth of a check; '' keeps the model default. */
+export type IqCheckReasoningEffort = (typeof REASONING_EFFORTS)[number]
 
 /** Run metadata listed on the public page; the output is fetched separately. */
 export type IqCheckHistoryItem = {
@@ -39,6 +47,8 @@ export type IqCheckView = {
   icon: string
   /** Prompt currently configured for the check. */
   prompt: string
+  /** Thinking depth currently configured for the check. */
+  reasoning_effort: IqCheckReasoningEffort
   interval_minutes: number
   running: boolean
   queued: boolean
@@ -72,6 +82,8 @@ export type IqCheckResult = {
   model: string
   /** Prompt that was actually sent for this run. */
   prompt: string
+  /** Thinking depth requested for this run. */
+  reasoning_effort: IqCheckReasoningEffort
   content: string
   content_truncated: boolean
   reasoning: string
@@ -95,6 +107,12 @@ export type IqCheck = {
   interval_minutes: number
   /** 0 means no max-tokens field is sent upstream. */
   max_tokens: number
+  /** Omitted by the backend when auto detection is used. */
+  endpoint_type?: IqCheckEndpointType
+  /** Omitted by the backend when the model default is used. */
+  reasoning_effort?: IqCheckReasoningEffort
+  /** Ask the upstream to return a readable summary of its thinking. */
+  reasoning_summary: boolean
   icon?: string
   enabled: boolean
   sort: number

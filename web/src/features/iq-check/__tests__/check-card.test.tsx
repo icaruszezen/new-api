@@ -61,6 +61,7 @@ function check(overrides: Partial<IqCheckView> = {}): IqCheckView {
     last_checked_at: NEWEST.checked_at,
     next_check_at: NEWEST.checked_at + 3600,
     history: [NEWEST, OLDER],
+    reasoning_effort: '',
     ...overrides,
   }
 }
@@ -83,6 +84,7 @@ function result(overrides: Partial<IqCheckResult> = {}): IqCheckResult {
     prompt_tokens: 20,
     completion_tokens: NEWEST.completion_tokens,
     reasoning_tokens: 0,
+    reasoning_effort: '',
     ...overrides,
   }
 }
@@ -125,6 +127,24 @@ describe('CheckCard', () => {
     expect(screen.getByText('Every 60 min')).toBeInTheDocument()
     expect(screen.getByText('1,234 output tokens')).toBeInTheDocument()
     expect(screen.queryByTitle('HTML preview')).not.toBeInTheDocument()
+  })
+
+  test('shows the thinking depth the selected run used, not the current setting', () => {
+    renderCard({
+      check: check({ reasoning_effort: 'low' }),
+      result: result({ reasoning_effort: 'xhigh' }),
+    })
+
+    expect(screen.getByText('Thinking depth: Extra high')).toBeInTheDocument()
+  })
+
+  test('omits the thinking depth for a run that used the model default', () => {
+    renderCard({
+      check: check({ reasoning_effort: 'high' }),
+      result: result(),
+    })
+
+    expect(screen.queryByText(/Thinking depth/)).not.toBeInTheDocument()
   })
 
   test('renders HTML embedded in the answer as a sandboxed preview', () => {

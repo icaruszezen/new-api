@@ -142,7 +142,19 @@ export interface LogOtherData {
       original: number
       clamped: number
     }
+    // Billing correction audit: set when a per-channel billing correction
+    // rule waived this request's charge. Admin-only (nested under admin_info).
+    billing_correction?: {
+      rule_id: number
+      channel_id: number
+      prompt_tokens_threshold: number
+      prompt_tokens: number
+      original_quota: number
+    }
   }
+  // True when a billing correction rule waived this request's charge because
+  // the upstream returned no output and no usage. Visible to the log owner.
+  billing_corrected?: boolean
   // Language-independent operation descriptor (audit/login logs).
   // Frontend renders localized content from action + params via i18n templates.
   op?: {

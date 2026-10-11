@@ -36,6 +36,7 @@ import { Route as PricingIndexRouteImport } from './routes/pricing/index'
 import { Route as RankingsIndexRouteImport } from './routes/rankings/index'
 import { Route as SetupIndexRouteImport } from './routes/setup/index'
 import { Route as authUserResetRouteImport } from './routes/(auth)/user/reset'
+import { Route as AuthenticatedBillingCorrectionsIndexRouteImport } from './routes/_authenticated/billing-corrections/index'
 import { Route as AuthenticatedChannelMonitoringSettingsIndexRouteImport } from './routes/_authenticated/channel-monitoring-settings/index'
 import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
 import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authenticated/chat/$chatId'
@@ -209,6 +210,12 @@ const authUserResetRoute = authUserResetRouteImport.update({
   path: '/user/reset',
   getParentRoute: () => authRouteRoute,
 } as any)
+const AuthenticatedBillingCorrectionsIndexRoute =
+  AuthenticatedBillingCorrectionsIndexRouteImport.update({
+    id: '/billing-corrections/',
+    path: '/billing-corrections/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedChannelMonitoringSettingsIndexRoute =
   AuthenticatedChannelMonitoringSettingsIndexRouteImport.update({
     id: '/channel-monitoring-settings/',
@@ -465,6 +472,7 @@ export interface FileRoutesByFullPath {
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
+  '/billing-corrections/': typeof AuthenticatedBillingCorrectionsIndexRoute
   '/channel-monitoring-settings/': typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
@@ -529,6 +537,7 @@ export interface FileRoutesByTo {
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
+  '/billing-corrections': typeof AuthenticatedBillingCorrectionsIndexRoute
   '/channel-monitoring-settings': typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
@@ -597,6 +606,7 @@ export interface FileRoutesById {
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/models/$section': typeof AuthenticatedModelsSectionRoute
   '/_authenticated/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
+  '/_authenticated/billing-corrections/': typeof AuthenticatedBillingCorrectionsIndexRoute
   '/_authenticated/channel-monitoring-settings/': typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
@@ -664,6 +674,7 @@ export interface FileRouteTypes {
     | '/errors/$error'
     | '/models/$section'
     | '/usage-logs/$section'
+    | '/billing-corrections/'
     | '/channel-monitoring-settings/'
     | '/channels/'
     | '/dashboard/'
@@ -728,6 +739,7 @@ export interface FileRouteTypes {
     | '/errors/$error'
     | '/models/$section'
     | '/usage-logs/$section'
+    | '/billing-corrections'
     | '/channel-monitoring-settings'
     | '/channels'
     | '/dashboard'
@@ -795,6 +807,7 @@ export interface FileRouteTypes {
     | '/_authenticated/errors/$error'
     | '/_authenticated/models/$section'
     | '/_authenticated/usage-logs/$section'
+    | '/_authenticated/billing-corrections/'
     | '/_authenticated/channel-monitoring-settings/'
     | '/_authenticated/channels/'
     | '/_authenticated/dashboard/'
@@ -1041,6 +1054,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/user/reset'
       preLoaderRoute: typeof authUserResetRouteImport
       parentRoute: typeof authRouteRoute
+    }
+    '/_authenticated/billing-corrections/': {
+      id: '/_authenticated/billing-corrections/'
+      path: '/billing-corrections'
+      fullPath: '/billing-corrections/'
+      preLoaderRoute: typeof AuthenticatedBillingCorrectionsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/channel-monitoring-settings/': {
       id: '/_authenticated/channel-monitoring-settings/'
@@ -1402,6 +1422,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedModelsSectionRoute: typeof AuthenticatedModelsSectionRoute
   AuthenticatedUsageLogsSectionRoute: typeof AuthenticatedUsageLogsSectionRoute
+  AuthenticatedBillingCorrectionsIndexRoute: typeof AuthenticatedBillingCorrectionsIndexRoute
   AuthenticatedChannelMonitoringSettingsIndexRoute: typeof AuthenticatedChannelMonitoringSettingsIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
@@ -1430,6 +1451,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedModelsSectionRoute: AuthenticatedModelsSectionRoute,
   AuthenticatedUsageLogsSectionRoute: AuthenticatedUsageLogsSectionRoute,
+  AuthenticatedBillingCorrectionsIndexRoute:
+    AuthenticatedBillingCorrectionsIndexRoute,
   AuthenticatedChannelMonitoringSettingsIndexRoute:
     AuthenticatedChannelMonitoringSettingsIndexRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,

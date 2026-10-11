@@ -30,6 +30,7 @@ describe('isAdminConsolePath', () => {
     '/channel-monitoring-settings',
     '/iq-check-settings',
     '/error-message-overrides',
+    '/billing-corrections',
     '/models',
     '/models/metadata',
     '/users',

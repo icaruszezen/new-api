@@ -196,6 +196,19 @@ const (
 	MsgErrorMessageOverrideChannelIdInvalid = "error_message_override.channel_id_invalid"
 )
 
+// Billing correction related messages
+const (
+	MsgBillingCorrectionNotExists        = "billing_correction.not_exists"
+	MsgBillingCorrectionIdFormatError    = "billing_correction.id_format_error"
+	MsgBillingCorrectionChannelIdInvalid = "billing_correction.channel_id_invalid"
+	MsgBillingCorrectionChannelTaken     = "billing_correction.channel_taken"
+	MsgBillingCorrectionThresholdInvalid = "billing_correction.threshold_invalid"
+
+	MsgBillingCorrectionRecordsTooMany           = "billing_correction.records_too_many"
+	MsgBillingCorrectionRecordsNoSelection       = "billing_correction.records_no_selection"
+	MsgBillingCorrectionRecordsSelectionTooLarge = "billing_correction.records_selection_too_large"
+)
+
 // Model related messages
 const (
 	MsgModelNameEmpty     = "model.name_empty"

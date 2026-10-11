@@ -79,6 +79,32 @@ function ToolSurchargeMarker() {
   )
 }
 
+function BillingCorrectedMarker() {
+  const { t } = useTranslation()
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Badge
+            variant='secondary'
+            className='h-5 cursor-help px-1.5 text-[10px]'
+            tabIndex={0}
+            data-billing-corrected-indicator='true'
+          >
+            {t('Waived')}
+          </Badge>
+        }
+      />
+      <TooltipContent>
+        {t(
+          'Not charged: the upstream returned no output and no usage information.'
+        )}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 function QuotaBadge(props: { quota: number }) {
   const quotaDisplay = splitQuotaDisplay(formatLogQuota(props.quota))
 
@@ -120,8 +146,9 @@ function SubscriptionBadge(props: { quota: number }) {
 export function LogCostDisplay(props: LogCostDisplayProps) {
   const isSubscription = props.other?.billing_source === 'subscription'
   const showToolSurcharge = hasToolSurcharge(props.other)
+  const isBillingCorrected = props.other?.billing_corrected === true
 
-  if (!isSubscription && !showToolSurcharge) {
+  if (!isSubscription && !showToolSurcharge && !isBillingCorrected) {
     return (
       <div className='flex flex-col gap-0.5'>
         <QuotaBadge quota={props.quota} />
@@ -138,6 +165,7 @@ export function LogCostDisplay(props: LogCostDisplayProps) {
           <QuotaBadge quota={props.quota} />
         )}
         {showToolSurcharge ? <ToolSurchargeMarker /> : null}
+        {isBillingCorrected ? <BillingCorrectedMarker /> : null}
       </div>
     </TooltipProvider>
   )

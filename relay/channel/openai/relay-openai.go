@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/channel/openrouter"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
@@ -276,11 +277,27 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 
 	usageModified := false
 	if simpleResponse.Usage.PromptTokens == 0 {
+		// 上游没给输入 token，改用请求前的本地估算值
+		common.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
 		completionTokens := simpleResponse.Usage.CompletionTokens
 		if completionTokens == 0 {
+			// 与流式兜底保持一致：工具调用的函数名和参数也算输出，每次调用另加 7 个 token
 			for _, choice := range simpleResponse.Choices {
-				ctkm := service.CountTextToken(choice.Message.StringContent()+choice.Message.GetReasoningContent(), info.UpstreamModelName)
-				completionTokens += ctkm
+				responseText := choice.Message.StringContent() + choice.Message.GetReasoningContent()
+				toolCalls := choice.Message.ParseToolCalls()
+				for _, tc := range toolCalls {
+					responseText += tc.Function.Name + tc.Function.Arguments
+				}
+				completionTokens += service.CountTextToken(responseText, info.UpstreamModelName) + len(toolCalls)*7
+			}
+			if info.RelayMode == relayconstant.RelayModeCompletions {
+				// completions 的输出在 choices[].text，不在 message 里
+				var completionsResponse dto.CompletionsStreamResponse
+				if err := common.Unmarshal(responseBody, &completionsResponse); err == nil {
+					var completionText strings.Builder
+					processCompletionsStreamResponse(completionsResponse, &completionText)
+					completionTokens += service.CountTextToken(completionText.String(), info.UpstreamModelName)
+				}
 			}
 		}
 		simpleResponse.Usage = dto.Usage{

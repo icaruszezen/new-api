@@ -361,6 +361,18 @@ func SetApiRouter(router *gin.Engine) {
 			errorMessageOverrideRoute.DELETE("/:id", controller.DeleteErrorMessageOverride)
 		}
 
+		billingCorrectionRoute := apiRouter.Group("/billing-correction")
+		billingCorrectionRoute.Use(middleware.AdminAuth())
+		{
+			billingCorrectionRoute.GET("/", controller.GetBillingCorrectionRules)
+			billingCorrectionRoute.GET("/records", controller.GetBillingCorrectionRecords)
+			billingCorrectionRoute.POST("/records/refund", controller.MarkBillingCorrectionRecordsRefunded)
+			billingCorrectionRoute.POST("/records/unrefund", controller.UnmarkBillingCorrectionRecordsRefunded)
+			billingCorrectionRoute.POST("/", controller.CreateBillingCorrectionRule)
+			billingCorrectionRoute.PUT("/:id", controller.UpdateBillingCorrectionRule)
+			billingCorrectionRoute.DELETE("/:id", controller.DeleteBillingCorrectionRule)
+		}
+
 		mjRoute := apiRouter.Group("/mj")
 		mjRoute.GET("/self", middleware.UserAuth(), controller.GetUserMidjourney)
 		mjRoute.GET("/", middleware.AdminAuth(), controller.GetAllMidjourney)

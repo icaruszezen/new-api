@@ -22,6 +22,7 @@ const ADMIN_CONSOLE_PATHS = [
   '/channel-monitoring-settings',
   '/iq-check-settings',
   '/error-message-overrides',
+  '/billing-corrections',
   '/models',
   '/users',
   '/redemption-codes',

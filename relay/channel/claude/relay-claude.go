@@ -181,7 +181,12 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 		claudeInfo.Usage.UsageSemantic = "anthropic"
 	}
 	if claudeInfo.Usage != nil && claudeInfo.Usage.BillingUsage == nil {
-		claudeInfo.Usage.BillingUsage = dto.NewClaudeMessagesBillingUsage(buildMessageDeltaPatchUsage(nil, claudeInfo))
+		billingUsage := buildMessageDeltaPatchUsage(nil, claudeInfo)
+		if billingUsage.OutputTokens == 0 {
+			// 上游没给 usage 时，本地补估的输出也要进计费用量，否则有输出仍按 0 输出结算
+			billingUsage.OutputTokens = claudeInfo.Usage.CompletionTokens
+		}
+		claudeInfo.Usage.BillingUsage = dto.NewClaudeMessagesBillingUsage(billingUsage)
 	}
 
 	if info.RelayFormat == types.RelayFormatClaude {

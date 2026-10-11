@@ -30,6 +30,7 @@ import {
   MessageSquare,
   MessageSquareWarning,
   Radio,
+  ReceiptText,
   ServerCog,
   Settings,
   Ticket,
@@ -156,6 +157,11 @@ export function useSidebarData(): SidebarData {
             title: t('Error Message Override'),
             url: '/error-message-overrides',
             icon: MessageSquareWarning,
+          },
+          {
+            title: t('Billing Correction'),
+            url: '/billing-corrections',
+            icon: ReceiptText,
           },
           {
             title: t('Models'),

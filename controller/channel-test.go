@@ -435,6 +435,11 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		case *dto.ClaudeRequest:
 			// 与生产入口一致：补默认 max_tokens，并把模型名上的思考后缀换成思考参数。
 			relay.ApplyClaudeModelSuffix(req, info)
+			// 不限制输出时，默认 max_tokens 只由 applyChannelTestReasoning 补给 Claude 上游，
+			// 不能随转换带给其他上游。
+			if opts.omitMaxTokens {
+				req.MaxTokens = nil
+			}
 			convertedRequest, err = adaptor.ConvertClaudeRequest(c, info, req)
 		case *dto.GeminiChatRequest:
 			convertedRequest, err = adaptor.ConvertGeminiRequest(c, info, req)

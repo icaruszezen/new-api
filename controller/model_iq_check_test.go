@@ -588,6 +588,19 @@ func TestExecuteModelIQCheckFailsWhenUpstreamStreamEndsEarly(t *testing.T) {
 	}
 }
 
+// An error the upstream reports with new-api's own conversion error code (a
+// chained gateway) still reached the upstream, so it stays an upstream error.
+func TestExecuteModelIQCheckKeepsUpstreamConversionErrorsAsUpstreamErrors(t *testing.T) {
+	result := runIQCheckAgainst(t, constant.ChannelTypeOpenAI, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, `{"error":{"message":"not implemented","type":"new_api_error","code":"convert_request_failed"}}`)
+	})
+
+	assert.Equal(t, model.ModelIQCheckStatusFailed, result.Status)
+	assert.Equal(t, modeliqcheck.ErrorTypeUpstream, result.ErrorType, result.ErrorMessage)
+}
+
 // Channels that can only answer in one piece cannot be checked, since the check
 // must stream from the upstream model.
 func TestExecuteModelIQCheckRejectsChannelsThatCannotStream(t *testing.T) {
@@ -753,7 +766,7 @@ func TestExecuteModelIQCheckSendsReasoningForUpstreamModel(t *testing.T) {
 			check:         modeliqcheck.Check{EndpointType: "anthropic", ReasoningEffort: "high"},
 			wantPath:      "/v1/chat/completions",
 			wantBody:      map[string]any{"model": "gpt-5.2", "reasoning_effort": "high"},
-			absentFields:  []string{"thinking", "output_config", "max_tokens"},
+			absentFields:  []string{"thinking", "output_config", "max_tokens", "max_completion_tokens"},
 			response:      chatStream,
 			wantReasoning: "Add.",
 		},

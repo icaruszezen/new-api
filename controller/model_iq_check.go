@@ -262,7 +262,9 @@ func executeModelIQCheck(ctx context.Context, check modeliqcheck.Check, channel 
 		result.ErrorMessage = testRes.localErr.Error()
 	// 渠道不支持所选请求格式（适配器返回 not implemented），或思考深度无法写入其请求格式时，
 	// 请求在转换阶段失败、没有发往上游，不能记为上游错误。
-	case testRes.newAPIError != nil && testRes.newAPIError.GetErrorCode() == types.ErrorCodeConvertRequestFailed:
+	// 只看本地产生的错误：上游（例如串联的另一个 new-api）返回的同名错误码仍是上游错误。
+	case testRes.newAPIError != nil && testRes.newAPIError.GetErrorType() == types.ErrorTypeNewAPIError &&
+		testRes.newAPIError.GetErrorCode() == types.ErrorCodeConvertRequestFailed:
 		result.ErrorType = modeliqcheck.ErrorTypeUnsupportedRequest
 		result.ErrorMessage = testRes.newAPIError.Error()
 	case testRes.localErr != nil:

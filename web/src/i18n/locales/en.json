@@ -797,6 +797,7 @@
     "Cancel": "Cancel",
     "Cancelled": "Cancelled",
     "Cancelled at": "Cancelled at",
+    "Cancelled by client": "Cancelled by client",
     "Capabilities": "Capabilities",
     "Caps the response length": "Caps the response length",
     "Capture a reusable bundle of models, tags, or endpoints.": "Capture a reusable bundle of models, tags, or endpoints.",

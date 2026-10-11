@@ -797,6 +797,7 @@
     "Cancel": "取消",
     "Cancelled": "已取消",
     "Cancelled at": "作废于",
+    "Cancelled by client": "客户端主动取消",
     "Capabilities": "能力",
     "Caps the response length": "限制回复长度",
     "Capture a reusable bundle of models, tags, or endpoints.": "捕获可重用的模型、标签或端点捆绑包。",

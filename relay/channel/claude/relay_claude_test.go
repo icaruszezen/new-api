@@ -1,12 +1,15 @@
 package claude
 
 import (
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -221,6 +224,64 @@ func TestFormatClaudeResponseInfo_ContentBlockDelta(t *testing.T) {
 	}
 	if claudeInfo.ResponseText.String() != "hello" {
 		t.Errorf("ResponseText = %q, want %q", claudeInfo.ResponseText.String(), "hello")
+	}
+}
+
+// tool_use 块的函数名和 input_json_delta 参数都是模型输出，上游不给 usage 时要能被本地估算计入。
+func TestFormatClaudeResponseInfo_ToolUseCountsAsResponseText(t *testing.T) {
+	claudeInfo := &ClaudeResponseInfo{Usage: &dto.Usage{}}
+	partialJson := `{"path":"main.go"}`
+	events := []*dto.ClaudeResponse{
+		{Type: "content_block_start", ContentBlock: &dto.ClaudeMediaMessage{Type: "tool_use", Id: "toolu_1", Name: "read_file"}},
+		{Type: "content_block_delta", Delta: &dto.ClaudeMediaMessage{Type: "input_json_delta", PartialJson: &partialJson}},
+	}
+
+	for _, event := range events {
+		require.True(t, FormatClaudeResponseInfo(event, nil, claudeInfo))
+	}
+
+	assert.Equal(t, `read_file{"path":"main.go"}`, claudeInfo.ResponseText.String())
+}
+
+// 流在没有任何 usage 的情况下结束时，计费用量来自本地估算：已输出的内容必须进 BillingUsage 的输出 token，
+// 只有心跳、没有输出的流才保持 0 输出。
+func TestHandleStreamFinalResponseEstimatedBillingUsageKeepsOutput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const estimatedPromptTokens = 3_000_000
+
+	tests := []struct {
+		name         string
+		responseText string
+		wantOutput   bool
+	}{
+		{name: "streamed text is billed as output", responseText: "Hello, this is some real output.", wantOutput: true},
+		{name: "heartbeat-only stream has no output", responseText: "", wantOutput: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			info := &relaycommon.RelayInfo{
+				RelayFormat:     types.RelayFormatClaude,
+				OriginModelName: "claude-sonnet-4-20250514",
+				ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "claude-sonnet-4-20250514"},
+			}
+			info.SetEstimatePromptTokens(estimatedPromptTokens)
+			claudeInfo := &ClaudeResponseInfo{Usage: &dto.Usage{}}
+			claudeInfo.ResponseText.WriteString(tt.responseText)
+
+			HandleStreamFinalResponse(c, info, claudeInfo)
+
+			require.NotNil(t, claudeInfo.Usage.BillingUsage)
+			require.NotNil(t, claudeInfo.Usage.BillingUsage.ClaudeUsage)
+			assert.Equal(t, estimatedPromptTokens, claudeInfo.Usage.BillingUsage.ClaudeUsage.InputTokens)
+			assert.Equal(t, claudeInfo.Usage.CompletionTokens, claudeInfo.Usage.BillingUsage.ClaudeUsage.OutputTokens)
+			if tt.wantOutput {
+				assert.Greater(t, claudeInfo.Usage.BillingUsage.ClaudeUsage.OutputTokens, 0)
+			} else {
+				assert.Equal(t, 0, claudeInfo.Usage.BillingUsage.ClaudeUsage.OutputTokens)
+			}
+		})
 	}
 }
 

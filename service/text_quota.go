@@ -424,6 +424,15 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		}
 	}
 
+	// 超大上下文错误计费修正放在所有计价（含阶梯计费和工具附加费）之后，
+	// 让结算、用量统计和消费日志统一看到 0 扣费。
+	correction := matchBillingCorrection(ctx, relayInfo, originUsage, summary)
+	if correction != nil {
+		summary.Quota = 0
+		summary.ToolSurchargeItems = nil
+		extraContent = append(extraContent, billingCorrectionLogContent)
+	}
+
 	for _, item := range summary.ToolSurchargeItems {
 		q := decimal.NewFromFloat(item.Price).
 			Mul(decimal.NewFromInt(int64(item.Count))).
@@ -442,7 +451,10 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		extraContent = append(extraContent, fmt.Sprintf("Audio Input 花费 %s", logger.LogQuota(common.QuotaFromDecimal(q))))
 	}
 
-	if !summary.hasBillableUsage() {
+	if correction != nil {
+		logger.LogInfo(ctx, fmt.Sprintf("billing correction applied: channel %d, rule %d, prompt tokens %d > threshold %d, no output and no upstream usage, original quota %d waived",
+			correction.ChannelId, correction.RuleId, correction.PromptTokens, correction.PromptTokensThreshold, correction.OriginalQuota))
+	} else if !summary.hasBillableUsage() {
 		extraContent = append(extraContent, "上游没有返回计费信息，无法扣费（可能是上游超时）")
 		relayInfo.DebugBillingIssue = relaycommon.DebugBillingIssueZeroTokens
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, summary.ModelName, relayInfo.FinalPreConsumedQuota))
@@ -480,6 +492,12 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		other = GenerateTextOtherInfo(ctx, relayInfo, summary.ModelRatio, summary.GroupRatio, summary.CompletionRatio, summary.CacheTokens, summary.CacheRatio, summary.ModelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
 	}
 	appendUsageBillingPathForLog(other, common.GetContextKeyBool(ctx, constant.ContextKeyLocalCountTokens), originUsage)
+	if correction != nil {
+		other["billing_corrected"] = true
+		if adminInfo, ok := other["admin_info"].(map[string]interface{}); ok {
+			adminInfo["billing_correction"] = correction
+		}
+	}
 	if adminRejectReason != "" {
 		other["reject_reason"] = adminRejectReason
 	}

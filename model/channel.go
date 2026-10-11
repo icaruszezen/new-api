@@ -484,6 +484,10 @@ func BatchDeleteChannels(ids []int) (int64, error) {
 			return 0, err
 		}
 	}
+	if err := DeleteOrphanBillingCorrectionRules(tx); err != nil {
+		tx.Rollback()
+		return 0, err
+	}
 	if err := tx.Commit().Error; err != nil {
 		return 0, err
 	}
@@ -615,7 +619,10 @@ func (channel *Channel) Delete() error {
 		return err
 	}
 	err = channel.DeleteAbilities()
-	return err
+	if err != nil {
+		return err
+	}
+	return DeleteOrphanBillingCorrectionRules(DB)
 }
 
 var channelStatusLock sync.Mutex
@@ -891,7 +898,10 @@ func DeleteChannelByStatus(status int64) (int64, error) {
 
 func DeleteDisabledChannel() (int64, error) {
 	result := DB.Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).Delete(&Channel{})
-	return result.RowsAffected, result.Error
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return result.RowsAffected, DeleteOrphanBillingCorrectionRules(DB)
 }
 
 func GetPaginatedTags(offset int, limit int) ([]*string, error) {

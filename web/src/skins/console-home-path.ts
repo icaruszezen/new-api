@@ -74,6 +74,7 @@ const NEXT_CONSOLE_PATH_PREFIXES = [
   '/channels',
   '/channel-monitoring-settings',
   '/error-message-overrides',
+  '/billing-corrections',
   '/models',
   '/users',
   '/redemption-codes',

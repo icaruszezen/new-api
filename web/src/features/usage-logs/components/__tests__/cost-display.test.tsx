@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import type React from 'react'
 import { beforeAll, describe, expect, test } from 'vitest'
@@ -41,6 +42,9 @@ describe('log cost display', () => {
       Subscription: 'Subscription',
       'Deducted by subscription': 'Deducted by subscription',
       'Includes tool-call surcharge': 'Includes tool-call surcharge',
+      Waived: 'Waived',
+      'Not charged: the upstream returned no output and no usage information.':
+        'Not charged: the upstream returned no output and no usage information.',
     })
   })
 
@@ -79,5 +83,40 @@ describe('log cost display', () => {
     expect(
       screen.getByRole('img', { name: 'Includes tool-call surcharge' })
     ).toHaveAttribute('data-tool-surcharge-indicator', 'true')
+  })
+
+  test('marks a billing-corrected request as waived next to its zero cost', () => {
+    const rendered = renderCost({
+      quota: 0,
+      other: { billing_corrected: true },
+    })
+
+    expect(
+      normalizedText(rendered.container.textContent).includes(
+        normalizedText(formatLogQuota(0))
+      )
+    ).toBe(true)
+    const marker = screen.getByText('Waived')
+    expect(marker).toHaveAttribute('data-billing-corrected-indicator', 'true')
+    expect(marker).toHaveAttribute('tabindex', '0')
+  })
+
+  test('explains why the request was waived when the marker is hovered', async () => {
+    const user = userEvent.setup()
+    renderCost({ quota: 0, other: { billing_corrected: true } })
+
+    await user.hover(screen.getByText('Waived'))
+
+    expect(
+      await screen.findByText(
+        'Not charged: the upstream returned no output and no usage information.'
+      )
+    ).toBeInTheDocument()
+  })
+
+  test('does not mark a regular zero-cost request as waived', () => {
+    renderCost({ quota: 0, other: { billing_corrected: false } })
+
+    expect(screen.queryByText('Waived')).not.toBeInTheDocument()
   })
 })

@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -513,4 +514,57 @@ func TestGeminiStreamHandlerEmptyUsageMetadataBuildsEstimatedBillingUsage(t *tes
 	require.Equal(t, usage.PromptTokens, usage.BillingUsage.GeminiUsageMetadata.PromptTokenCount)
 	require.Equal(t, usage.CompletionTokens, usage.BillingUsage.GeminiUsageMetadata.CandidatesTokenCount)
 	require.True(t, common.GetContextKeyBool(c, constant.ContextKeyLocalCountTokens))
+}
+
+// 只返回 functionCall 的回复也是有输出的：上游不给 usageMetadata 时，函数名和参数要计入估算的输出 token，
+// 否则会被当成 0 输出。
+func TestGeminiHandlersCountFunctionCallAsOutputWhenUsageMissing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	oldStreamingTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 300
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldStreamingTimeout
+	})
+
+	const functionCallResponse = `{"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"read_file","args":{"path":"main.go"}}}]},"finishReason":"STOP"}]}`
+	tests := []struct {
+		name   string
+		stream bool
+	}{
+		{name: "non-stream", stream: false},
+		{name: "stream", stream: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-flash:generateContent", nil)
+			info := &relaycommon.RelayInfo{
+				RelayFormat:     types.RelayFormatGemini,
+				OriginModelName: "gemini-2.5-flash",
+				ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "gemini-2.5-flash"},
+			}
+			info.SetEstimatePromptTokens(20)
+
+			var usage *dto.Usage
+			var newAPIError *types.NewAPIError
+			if tt.stream {
+				resp := &http.Response{Body: io.NopCloser(bytes.NewReader([]byte("data: " + functionCallResponse + "\n")))}
+				usage, newAPIError = geminiStreamHandler(c, info, resp, func(_ string, _ *dto.GeminiChatResponse) bool {
+					return true
+				})
+			} else {
+				resp := &http.Response{Body: io.NopCloser(bytes.NewReader([]byte(functionCallResponse)))}
+				usage, newAPIError = GeminiChatHandler(c, info, resp)
+			}
+
+			require.Nil(t, newAPIError)
+			require.NotNil(t, usage)
+			assert.Equal(t, 20, usage.PromptTokens)
+			assert.Greater(t, usage.CompletionTokens, 0)
+			require.NotNil(t, usage.BillingUsage)
+			require.NotNil(t, usage.BillingUsage.GeminiUsageMetadata)
+			assert.Equal(t, usage.CompletionTokens, usage.BillingUsage.GeminiUsageMetadata.CandidatesTokenCount)
+		})
+	}
 }

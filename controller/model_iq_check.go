@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modeliqcheck"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/model_iq_check_setting"
 )
 
@@ -256,10 +257,14 @@ func executeModelIQCheck(ctx context.Context, check modeliqcheck.Check, channel 
 	case timedOut:
 		result.ErrorType = modeliqcheck.ErrorTypeTimeout
 		result.ErrorMessage = fmt.Sprintf("timed out after %d seconds", timeoutSeconds)
-	case errors.Is(testRes.localErr, errChannelTestStreamUnsupported),
-		errors.Is(testRes.localErr, errChannelTestReasoningUnsupported):
+	case errors.Is(testRes.localErr, errChannelTestStreamUnsupported):
 		result.ErrorType = modeliqcheck.ErrorTypeUnsupportedModel
 		result.ErrorMessage = testRes.localErr.Error()
+	// 渠道不支持所选请求格式（适配器返回 not implemented），或思考深度无法写入其请求格式时，
+	// 请求在转换阶段失败、没有发往上游，不能记为上游错误。
+	case testRes.newAPIError != nil && testRes.newAPIError.GetErrorCode() == types.ErrorCodeConvertRequestFailed:
+		result.ErrorType = modeliqcheck.ErrorTypeUnsupportedRequest
+		result.ErrorMessage = testRes.newAPIError.Error()
 	case testRes.localErr != nil:
 		result.ErrorType = modeliqcheck.ErrorTypeUpstream
 		result.ErrorMessage = testRes.localErr.Error()

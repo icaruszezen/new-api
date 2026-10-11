@@ -684,13 +684,25 @@ func TestExecuteModelIQCheckSendsReasoningForUpstreamModel(t *testing.T) {
 		{
 			name:         "chat format on an anthropic channel replaces the fixed thinking budget",
 			channelType:  constant.ChannelTypeAnthropic,
-			modelMapping: `{"gpt-5":"claude-opus-4-8"}`,
+			modelMapping: `{"gpt-5":"claude-opus-4-6-thinking"}`,
 			check:        modeliqcheck.Check{ReasoningEffort: "xhigh", MaxTokens: 64000},
 			wantPath:     "/v1/messages",
-			wantBody:     map[string]any{"max_tokens": 64000.0, "thinking.type": "adaptive", "output_config.effort": "xhigh"},
+			// The conversion sends a fixed budget for -thinking models; Opus 4.6 has no xhigh.
+			wantBody:     map[string]any{"model": "claude-opus-4-6", "max_tokens": 64000.0, "thinking.type": "adaptive", "output_config.effort": "max"},
 			absentFields: []string{"thinking.budget_tokens", "thinking.display"},
 			response:     claudeStream,
 			// Without a summary request the chat client still receives whatever thinking the upstream returned.
+			wantReasoning: "Add.",
+		},
+		{
+			name:          "claude format strips the thinking suffix like the production entry",
+			channelType:   constant.ChannelTypeAnthropic,
+			modelMapping:  `{"gpt-5":"claude-opus-4-8-thinking"}`,
+			check:         modeliqcheck.Check{EndpointType: "anthropic", ReasoningEffort: "low"},
+			wantPath:      "/v1/messages",
+			wantBody:      map[string]any{"model": "claude-opus-4-8", "thinking.type": "adaptive", "output_config.effort": "low"},
+			absentFields:  []string{"thinking.budget_tokens"},
+			response:      claudeStream,
 			wantReasoning: "Add.",
 		},
 		{
@@ -720,6 +732,17 @@ func TestExecuteModelIQCheckSendsReasoningForUpstreamModel(t *testing.T) {
 			check:         modeliqcheck.Check{ReasoningEffort: "none"},
 			wantPath:      "/v1/chat/completions",
 			wantBody:      map[string]any{"model": "gpt-5", "reasoning_effort": "minimal"},
+			response:      chatStream,
+			wantReasoning: "Add.",
+		},
+		{
+			name:          "chat format turns deepseek thinking off with the thinking switch",
+			channelType:   constant.ChannelTypeDeepSeek,
+			modelMapping:  `{"gpt-5":"deepseek-v4-pro"}`,
+			check:         modeliqcheck.Check{ReasoningEffort: "none"},
+			wantPath:      "/v1/chat/completions",
+			wantBody:      map[string]any{"model": "deepseek-v4-pro", "thinking.type": "disabled"},
+			absentFields:  []string{"reasoning_effort"},
 			response:      chatStream,
 			wantReasoning: "Add.",
 		},
@@ -782,19 +805,45 @@ func TestExecuteModelIQCheckSendsReasoningForUpstreamModel(t *testing.T) {
 	}
 }
 
-// An explicit effort cannot be silently dropped for channels whose request
-// format the check does not know how to adapt.
-func TestExecuteModelIQCheckRejectsEffortForUnadaptableChannels(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		t.Error("the upstream must not be called")
-	}))
-	t.Cleanup(upstream.Close)
-	channel := setupModelIQCheckChannel(t, constant.ChannelTypeCohere, upstream.URL, "")
+// A request the routed channel cannot take fails before reaching the upstream,
+// so it must not be published as an upstream error. An explicit effort is never
+// silently dropped for channels whose request format the check cannot adapt.
+func TestExecuteModelIQCheckReportsRequestsTheChannelCannotTake(t *testing.T) {
+	tests := []struct {
+		name        string
+		channelType int
+		check       modeliqcheck.Check
+		wantMessage string
+	}{
+		{
+			name:        "effort on a format without thinking parameters",
+			channelType: constant.ChannelTypeCohere,
+			check:       modeliqcheck.Check{ReasoningEffort: "high"},
+			wantMessage: "reasoning effort is not supported",
+		},
+		{
+			name:        "request format the channel does not implement",
+			channelType: constant.ChannelTypeAnthropic,
+			check:       modeliqcheck.Check{EndpointType: "gemini"},
+			wantMessage: "not implemented",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				t.Error("the upstream must not be called")
+			}))
+			t.Cleanup(upstream.Close)
+			channel := setupModelIQCheckChannel(t, test.channelType, upstream.URL, "")
 
-	result := model.ModelIQCheckResult{Status: model.ModelIQCheckStatusFailed}
-	executeModelIQCheck(context.Background(), modeliqcheck.Check{Id: "c1", Group: "default", Model: "gpt-5", Prompt: "2+2?", ReasoningEffort: "high"}, channel, 1, 600, &result)
+			check := test.check
+			check.Id, check.Group, check.Model, check.Prompt = "c1", "default", "gpt-5", "2+2?"
+			result := model.ModelIQCheckResult{Status: model.ModelIQCheckStatusFailed}
+			executeModelIQCheck(context.Background(), check, channel, 1, 600, &result)
 
-	assert.Equal(t, model.ModelIQCheckStatusFailed, result.Status)
-	assert.Equal(t, modeliqcheck.ErrorTypeUnsupportedModel, result.ErrorType, result.ErrorMessage)
-	assert.Contains(t, result.ErrorMessage, "reasoning effort is not supported")
+			assert.Equal(t, model.ModelIQCheckStatusFailed, result.Status)
+			assert.Equal(t, modeliqcheck.ErrorTypeUnsupportedRequest, result.ErrorType, result.ErrorMessage)
+			assert.Contains(t, result.ErrorMessage, test.wantMessage)
+		})
+	}
 }

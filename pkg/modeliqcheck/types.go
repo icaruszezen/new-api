@@ -34,9 +34,11 @@ const (
 const (
 	ErrorTypeNoChannel        = "no_channel"
 	ErrorTypeUnsupportedModel = "unsupported_model"
-	ErrorTypeTimeout          = "timeout"
-	ErrorTypeUpstream         = "upstream_error"
-	ErrorTypeEmptyResponse    = "empty_response"
+	// ErrorTypeUnsupportedRequest 表示路由到的渠道无法接受检查的请求格式或思考深度，请求没有发出。
+	ErrorTypeUnsupportedRequest = "unsupported_request"
+	ErrorTypeTimeout            = "timeout"
+	ErrorTypeUpstream           = "upstream_error"
+	ErrorTypeEmptyResponse      = "empty_response"
 )
 
 // Check 是管理员配置的一条智商检查：定期用 Prompt 调用 Group 分组下的 Model。

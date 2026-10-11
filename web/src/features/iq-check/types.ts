@@ -68,6 +68,7 @@ export type IqCheckStatus = {
 export type IqCheckErrorType =
   | 'no_channel'
   | 'unsupported_model'
+  | 'unsupported_request'
   | 'timeout'
   | 'upstream_error'
   | 'empty_response'

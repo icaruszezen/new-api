@@ -5059,6 +5059,7 @@
     "This model has both fixed-price and ratio settings. Saving the current mode will rewrite the conflicting fields.": "该模型同时存在固定价格和比例设置。保存当前模式会重写冲突字段。",
     "This model has both fixed-price and token-price settings. Saving the current mode will rewrite the conflicting fields.": "该模型同时存在固定价格和按 token 价格设置。保存当前模式会重写冲突字段。",
     "This model is not available in any group, or no group pricing information is configured.": "此模型在任何分组中均不可用，或未配置分组定价信息。",
+    "This model's channel does not accept the check's request format or thinking depth.": "该模型所在的渠道不支持此检查的请求格式或思考深度。",
     "This month": "本月获得",
     "This only records the refund; it does not return any quota to users.": "这只是记录退费，不会给用户退回任何额度。",
     "This page has not been created yet.": "此页面尚未创建。",

@@ -61,7 +61,7 @@ type channelTestOptions struct {
 	// prompt 非空时替换合成的 "hi" 用户消息。
 	prompt string
 	// omitMaxTokens 去掉 buildTestRequest 写入的 max tokens 字段，由上游使用默认输出上限；
-	// Claude 上游必须携带该字段，由 applyChannelTestReasoning 补上 Claude 设置中的默认值。
+	// Claude 上游必须携带该字段，与生产入口一样使用 Claude 设置中的默认值。
 	omitMaxTokens bool
 	// captureResponse 读取完整的中转响应到 testResult.responseBody，且不把响应内容写入系统日志。
 	captureResponse bool
@@ -79,9 +79,6 @@ type channelTestOptions struct {
 
 // errChannelTestStreamUnsupported 表示该渠道与模型的组合无法以流式请求上游。
 var errChannelTestStreamUnsupported = errors.New("upstream streaming is not supported")
-
-// errChannelTestReasoningUnsupported 表示思考深度无法写入该渠道的上游请求格式。
-var errChannelTestReasoningUnsupported = errors.New("reasoning effort is not supported by this channel's request format")
 
 // channelTestResponseWriter 为测试链路的响应记录器补上 CloseNotify：部分渠道通过
 // gin 的 c.Stream 输出，它依赖 http.CloseNotifier，原生 ResponseRecorder 未实现时会 panic。
@@ -436,6 +433,8 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		case *dto.GeneralOpenAIRequest:
 			convertedRequest, err = adaptor.ConvertOpenAIRequest(c, info, req)
 		case *dto.ClaudeRequest:
+			// 与生产入口一致：补默认 max_tokens，并把模型名上的思考后缀换成思考参数。
+			relay.ApplyClaudeModelSuffix(req, info)
 			convertedRequest, err = adaptor.ConvertClaudeRequest(c, info, req)
 		case *dto.GeminiChatRequest:
 			convertedRequest, err = adaptor.ConvertGeminiRequest(c, info, req)
@@ -967,7 +966,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 // applyChannelTestReasoning 把思考深度与思考摘要写入转换后的上游请求，并为缺少 max_tokens 的
 // Claude 请求补上默认值。参数按上游协议与上游模型写入，而不是按客户端格式：跨格式转换会
 // 丢弃思考参数（Claude / Gemini 转 OpenAI），或不分模型换算成固定预算（OpenAI 转 Claude
-// 一律发送 budget_tokens，Opus 4.7 起的模型直接返回 400）。
+// 时 -thinking 模型多数发送 budget_tokens，Opus 4.7 起的多数模型对它返回 400）。
 // 适配器按值返回 Responses 请求，因此返回改写后的请求。
 func applyChannelTestReasoning(converted any, info *relaycommon.RelayInfo, opts channelTestOptions) (any, error) {
 	effort := opts.reasoningEffort
@@ -991,21 +990,26 @@ func applyChannelTestReasoning(converted any, info *relaycommon.RelayInfo, opts 
 		if upstreamEffort == "" {
 			return req, nil
 		}
+		switch {
 		// OpenRouter 用 reasoning 对象表达思考深度，适配器在转换时已把 reasoning_effort 换成该对象。
-		if info.ChannelType == constant.ChannelTypeOpenRouter {
+		case info.ChannelType == constant.ChannelTypeOpenRouter:
 			reasoning, err := common.Marshal(map[string]string{"effort": upstreamEffort})
 			if err != nil {
 				return req, err
 			}
 			req.Reasoning = reasoning
 			req.ReasoningEffort = ""
-			return req, nil
+		// DeepSeek 用 thinking.type 开关思考，reasoning_effort 没有 none。
+		case info.ChannelType == constant.ChannelTypeDeepSeek && upstreamEffort == modeliqcheck.ReasoningEffortNone:
+			req.THINKING = json.RawMessage(`{"type":"disabled"}`)
+			req.ReasoningEffort = ""
+		default:
+			req.ReasoningEffort = upstreamEffort
 		}
-		req.ReasoningEffort = upstreamEffort
 		return req, nil
 	}
 	if effort != "" {
-		return converted, fmt.Errorf("%w (%T)", errChannelTestReasoningUnsupported, converted)
+		return converted, fmt.Errorf("reasoning effort is not supported by this channel's request format (%T)", converted)
 	}
 	return converted, nil
 }

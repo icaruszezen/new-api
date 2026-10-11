@@ -5059,6 +5059,7 @@
     "This model has both fixed-price and ratio settings. Saving the current mode will rewrite the conflicting fields.": "This model has both fixed-price and ratio settings. Saving the current mode will rewrite the conflicting fields.",
     "This model has both fixed-price and token-price settings. Saving the current mode will rewrite the conflicting fields.": "This model has both fixed-price and token-price settings. Saving the current mode will rewrite the conflicting fields.",
     "This model is not available in any group, or no group pricing information is configured.": "This model is not available in any group, or no group pricing information is configured.",
+    "This model's channel does not accept the check's request format or thinking depth.": "This model's channel does not accept the check's request format or thinking depth.",
     "This month": "This month",
     "This only records the refund; it does not return any quota to users.": "This only records the refund; it does not return any quota to users.",
     "This page has not been created yet.": "This page has not been created yet.",

@@ -5059,6 +5059,7 @@
     "This model has both fixed-price and ratio settings. Saving the current mode will rewrite the conflicting fields.": "Ce modèle possède à la fois un prix fixe et des paramètres de ratio. L’enregistrement du mode actuel réécrira les champs en conflit.",
     "This model has both fixed-price and token-price settings. Saving the current mode will rewrite the conflicting fields.": "Ce modèle possède à la fois un prix fixe et des prix par token. L’enregistrement du mode actuel réécrira les champs en conflit.",
     "This model is not available in any group, or no group pricing information is configured.": "Ce modèle n'est disponible dans aucun groupe, ou aucune information de tarification de groupe n'est configurée.",
+    "This model's channel does not accept the check's request format or thinking depth.": "Le canal de ce modèle n'accepte pas le format de requête ou la profondeur de réflexion de ce test.",
     "This month": "Ce mois-ci",
     "This only records the refund; it does not return any quota to users.": "Cela enregistre seulement le remboursement ; aucun quota n'est rendu aux utilisateurs.",
     "This page has not been created yet.": "Cette page n'a pas encore été créée.",

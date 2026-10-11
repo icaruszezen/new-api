@@ -5059,6 +5059,7 @@
     "This model has both fixed-price and ratio settings. Saving the current mode will rewrite the conflicting fields.": "このモデルには固定価格と比率設定の両方があります。現在のモードで保存すると、競合するフィールドが上書きされます。",
     "This model has both fixed-price and token-price settings. Saving the current mode will rewrite the conflicting fields.": "このモデルには固定価格とトークン価格設定の両方があります。現在のモードで保存すると、競合するフィールドが上書きされます。",
     "This model is not available in any group, or no group pricing information is configured.": "このモデルはどのグループでも利用できないか、グループの料金情報が設定されていません。",
+    "This model's channel does not accept the check's request format or thinking depth.": "このモデルのチャネルは、このチェックのリクエスト形式または思考の深さに対応していません。",
     "This month": "今月",
     "This only records the refund; it does not return any quota to users.": "返金を記録するだけで、ユーザーにクォータは返却されません。",
     "This page has not been created yet.": "このページはまだ作成されていません。",

@@ -120,10 +120,10 @@ export function CheckCard(props: CheckCardProps) {
   const run = props.run
   const result = props.result
   const nowSeconds = Math.floor(Date.now() / 1000)
-  // A loaded result shows the depth it ran with; the check's current setting
-  // stands in until then, the same way the prompt does.
-  const reasoningEffort = result
-    ? result.reasoning_effort
+  // A run shows only the depth it recorded, never the check's current setting;
+  // that setting is shown only before the check has run.
+  const reasoningEffort = run
+    ? (result?.reasoning_effort ?? '')
     : check.reasoning_effort
 
   const runStatusLabel: Record<IqCheckRunStatus, string> = {

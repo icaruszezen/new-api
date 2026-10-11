@@ -260,36 +260,40 @@ var (
 	openAIOPattern   = regexp.MustCompile(`^o\d+(?:-|$)`)
 )
 
-// openAIModelVersion 解析 OpenAI 模型名（忽略 openai/ 之类的前缀），
-// 返回是否为 o 系列与 gpt 版本号；都不是时 gptVersion 为 -1。
-func openAIModelVersion(model string) (oSeries bool, gptVersion int) {
-	name := strings.ToLower(strings.TrimSpace(model))
-	name = name[strings.LastIndex(name, "/")+1:]
+// openAIModelVersion 解析 OpenAI 模型名（忽略 openai/ 之类的前缀与微调模型的 ft: 前缀），
+// 返回小写的模型名、是否为 o 系列与 gpt 版本号；都不是时 gptVersion 为 -1。
+func openAIModelVersion(model string) (name string, oSeries bool, gptVersion int) {
+	name = strings.ToLower(strings.TrimSpace(model))
+	name = strings.TrimPrefix(name[strings.LastIndex(name, "/")+1:], "ft:")
 	if openAIOPattern.MatchString(name) {
-		return true, -1
+		return name, true, -1
 	}
 	match := openAIGPTPattern.FindStringSubmatch(name)
 	if match == nil {
-		return false, -1
+		return name, false, -1
 	}
 	major, _ := strconv.Atoi(match[1])
 	minor, _ := strconv.Atoi(match[2])
-	return false, major*100 + minor
+	return name, false, major*100 + minor
 }
 
 // OpenAIReasoningEffort 把思考深度换算成 OpenAI 协议（Chat Completions 的 reasoning_effort、
 // Responses 的 reasoning.effort）的取值，返回空串表示不发送：
 //   - o 系列只有 low / medium / high；
-//   - gpt-5 是 minimal / low / medium / high；
+//   - gpt-5 是 minimal / low / medium / high，gpt-5-codex 只有 low / medium / high，
+//     gpt-5-pro 只有 high；
 //   - gpt-5.1 是 none / low / medium / high（gpt-5.1-codex-max 另有 xhigh）；
-//   - gpt-5.2 及之后是 none / low / medium / high / xhigh；
+//   - gpt-5.2 至 gpt-5.5 是 none / low / medium / high / xhigh，其 pro 版只有 medium / high / xhigh；
+//   - gpt-5.6 起另有 max；gpt-6 起只有 gpt-6-luna 能关闭思考，其余最低为 low；
 //   - gpt-4.x 等非推理模型不接受该参数，不发送；
-//   - 其他供应商的模型原样发送，由上游决定。
+//   - 其他供应商的模型（如经 OpenRouter）原样发送，由上游换算；
+//     但不能关闭思考的 Gemini 与 Claude 模型会拒绝 none，改用 low。
 func OpenAIReasoningEffort(model string, effort string) string {
 	if effort == "" {
 		return ""
 	}
-	oSeries, version := openAIModelVersion(model)
+	name, oSeries, version := openAIModelVersion(model)
+	isPro := strings.Contains(name, "-pro")
 	switch {
 	case oSeries:
 		switch effort {
@@ -299,42 +303,74 @@ func OpenAIReasoningEffort(model string, effort string) string {
 			return ReasoningEffortHigh
 		}
 	case version < 0:
-		return effort
+		if effort == ReasoningEffortNone && !thinkingCanBeDisabled(name) {
+			return ReasoningEffortLow
+		}
 	case version < 500:
 		return ""
 	case version < 501:
-		switch effort {
-		case ReasoningEffortNone:
-			return ReasoningEffortMinimal
-		case ReasoningEffortXHigh, ReasoningEffortMax:
+		switch {
+		case isPro:
 			return ReasoningEffortHigh
+		case effort == ReasoningEffortXHigh, effort == ReasoningEffortMax:
+			return ReasoningEffortHigh
+		case strings.Contains(name, "codex") && (effort == ReasoningEffortNone || effort == ReasoningEffortMinimal):
+			return ReasoningEffortLow
+		case effort == ReasoningEffortNone:
+			return ReasoningEffortMinimal
 		}
 	case version < 502:
 		switch effort {
 		case ReasoningEffortMinimal:
 			return ReasoningEffortLow
 		case ReasoningEffortXHigh, ReasoningEffortMax:
-			if strings.Contains(strings.ToLower(model), "codex-max") {
+			if strings.Contains(name, "codex-max") {
 				return ReasoningEffortXHigh
 			}
 			return ReasoningEffortHigh
 		}
-	default:
+	case isPro && version < 506:
+		switch effort {
+		case ReasoningEffortNone, ReasoningEffortMinimal, ReasoningEffortLow:
+			return ReasoningEffortMedium
+		case ReasoningEffortMax:
+			return ReasoningEffortXHigh
+		}
+	case version < 506:
 		switch effort {
 		case ReasoningEffortMinimal:
 			return ReasoningEffortLow
 		case ReasoningEffortMax:
 			return ReasoningEffortXHigh
 		}
+	default:
+		switch {
+		case effort == ReasoningEffortMinimal:
+			return ReasoningEffortLow
+		case effort == ReasoningEffortNone && version >= 600 && !strings.Contains(name, "luna"):
+			return ReasoningEffortLow
+		}
 	}
 	return effort
+}
+
+// thinkingCanBeDisabled 判断经 OpenAI 兼容接口访问的其他供应商模型能否关闭思考：
+// Gemini 2.5 Pro 与 Gemini 3 起的模型、以及 claudeThinkingOffUnsupported 的 Claude 模型不能关闭。
+func thinkingCanBeDisabled(name string) bool {
+	if version, ok := geminiModelVersion(name); ok {
+		return version < 205 || (version < 300 && !strings.Contains(name, "-pro"))
+	}
+	if strings.Contains(name, "claude") {
+		return claudeThinkingProfileFor(name).off != claudeThinkingOffUnsupported
+	}
+	return true
 }
 
 // ResponsesReasoning 返回 Responses 请求的 reasoning 字段：写入换算后的 effort，
 // summary 为真时请求 auto 摘要（OpenAI 只有设置了 summary 才返回思考内容）。
 // gpt-4.x 等非推理模型不接受 reasoning，原样返回。
 func ResponsesReasoning(model string, effort string, summary bool, current *dto.Reasoning) *dto.Reasoning {
-	oSeries, version := openAIModelVersion(model)
+	_, oSeries, version := openAIModelVersion(model)
 	if !oSeries && version >= 0 && version < 500 {
 		return current
 	}
@@ -357,26 +393,38 @@ func ResponsesReasoning(model string, effort string, summary bool, current *dto.
 }
 
 // geminiModelPattern 匹配 Gemini 版本号，如 gemini-2.5-pro、gemini-3-flash-preview、gemini-3.1-pro。
-var geminiModelPattern = regexp.MustCompile(`gemini-(\d+)(?:\.(\d+))?(?:[^0-9.]|$)`)
+var (
+	geminiModelPattern       = regexp.MustCompile(`gemini-(\d+)(?:\.(\d+))?(?:[^0-9.]|$)`)
+	geminiLatestAliasPattern = regexp.MustCompile(`gemini-(?:pro|flash|flash-lite)-latest`)
+)
+
+// geminiLatestAliasVersion 是 gemini-*-latest 别名的版本：别名指向最新一代（Gemini 3 起），
+// 按 3.x 最新模型的规则换算。
+const geminiLatestAliasVersion = 399
+
+// geminiModelVersion 解析 Gemini 模型名中的版本号（如 2.5 记为 205），无法识别时返回 false。
+func geminiModelVersion(name string) (int, bool) {
+	match := geminiModelPattern.FindStringSubmatch(name)
+	if match == nil {
+		return geminiLatestAliasVersion, geminiLatestAliasPattern.MatchString(name)
+	}
+	major, _ := strconv.Atoi(match[1])
+	minor, _ := strconv.Atoi(match[2])
+	return major*100 + minor, true
+}
 
 // GeminiThinkingConfig 把思考深度换算成 Gemini 的 thinkingConfig，返回 nil 或 current 表示不改动：
 //   - Gemini 2.5 使用 thinkingBudget：Pro 范围 128~32768 且不能关闭，Flash-Lite 最小 512，
 //     其余 0~24576；
-//   - Gemini 3 起使用 thinkingLevel：Pro 不能关闭思考（3.0 Pro 只有 low / high），
-//     Flash 有 minimal / low / medium / high；
+//   - Gemini 3 起使用 thinkingLevel 且都不能关闭思考：Pro 最低为 low（3.0 Pro 只有 low / high），
+//     Flash 与 Flash-Lite 有 minimal / low / medium / high（3.8 Flash 起没有 minimal）；
 //   - 2.5 之前的模型与无法识别的模型不支持思考参数，不改动。
 //
 // thinkingBudget 与 thinkingLevel 不能同时设置，换算时只保留其一。
 func GeminiThinkingConfig(model string, effort string, summary bool, current *dto.GeminiThinkingConfig) *dto.GeminiThinkingConfig {
 	name := strings.ToLower(model)
-	match := geminiModelPattern.FindStringSubmatch(name)
-	if match == nil {
-		return current
-	}
-	major, _ := strconv.Atoi(match[1])
-	minor, _ := strconv.Atoi(match[2])
-	version := major*100 + minor
-	if version < 205 {
+	version, ok := geminiModelVersion(name)
+	if !ok || version < 205 {
 		return current
 	}
 	if effort == "" {
@@ -425,7 +473,7 @@ func GeminiThinkingConfig(model string, effort string, summary bool, current *dt
 	switch effort {
 	case ReasoningEffortNone, ReasoningEffortMinimal:
 		level = ReasoningEffortMinimal
-		if isPro {
+		if isPro || (!isFlashLite && version >= 308) {
 			level = ReasoningEffortLow
 		}
 	case ReasoningEffortLow:

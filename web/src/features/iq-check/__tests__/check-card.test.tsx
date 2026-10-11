@@ -138,6 +138,16 @@ describe('CheckCard', () => {
     expect(screen.getByText('Thinking depth: Extra high')).toBeInTheDocument()
   })
 
+  test('does not show the current thinking depth for a run whose result is not loaded', () => {
+    renderCard({
+      check: check({ reasoning_effort: 'high' }),
+      run: OLDER,
+      resultState: 'error',
+    })
+
+    expect(screen.queryByText(/Thinking depth/)).not.toBeInTheDocument()
+  })
+
   test('omits the thinking depth for a run that used the model default', () => {
     renderCard({
       check: check({ reasoning_effort: 'high' }),

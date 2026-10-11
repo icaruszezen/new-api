@@ -123,6 +123,9 @@ export function ResultBody(props: ResultBodyProps) {
   const failureMessages: Record<IqCheckErrorType, string> = {
     no_channel: t('No channel is currently available for this model.'),
     unsupported_model: t('This model cannot answer a text prompt.'),
+    unsupported_request: t(
+      "This model's channel does not accept the check's request format or thinking depth."
+    ),
     timeout: t('The model did not finish within the time limit.'),
     upstream_error: t('The upstream service returned an error.'),
     empty_response:

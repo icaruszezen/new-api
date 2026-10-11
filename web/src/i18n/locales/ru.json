@@ -5059,6 +5059,7 @@
     "This model has both fixed-price and ratio settings. Saving the current mode will rewrite the conflicting fields.": "У этой модели одновременно заданы фиксированная цена и коэффициенты. Сохранение текущего режима перезапишет конфликтующие поля.",
     "This model has both fixed-price and token-price settings. Saving the current mode will rewrite the conflicting fields.": "У этой модели одновременно заданы фиксированная цена и цены за токены. Сохранение текущего режима перезапишет конфликтующие поля.",
     "This model is not available in any group, or no group pricing information is configured.": "Эта модель недоступна ни в одной группе, или информация о ценах для групп не настроена.",
+    "This model's channel does not accept the check's request format or thinking depth.": "Канал этой модели не принимает формат запроса или глубину размышлений этой проверки.",
     "This month": "В этом месяце",
     "This only records the refund; it does not return any quota to users.": "Это только отметка о возврате; квота пользователям не возвращается.",
     "This page has not been created yet.": "Эта страница еще не создана.",

@@ -5059,6 +5059,7 @@
     "This model has both fixed-price and ratio settings. Saving the current mode will rewrite the conflicting fields.": "Mô hình này có cả giá cố định và cài đặt tỷ lệ. Lưu chế độ hiện tại sẽ ghi lại các trường xung đột.",
     "This model has both fixed-price and token-price settings. Saving the current mode will rewrite the conflicting fields.": "Mô hình này có cả giá cố định và cài đặt giá theo token. Lưu chế độ hiện tại sẽ ghi lại các trường xung đột.",
     "This model is not available in any group, or no group pricing information is configured.": "Mô hình này không khả dụng trong bất kỳ nhóm nào, hoặc thông tin giá nhóm chưa được cấu hình.",
+    "This model's channel does not accept the check's request format or thinking depth.": "Kênh của mô hình này không chấp nhận định dạng yêu cầu hoặc độ sâu suy nghĩ của lần kiểm tra này.",
     "This month": "Tháng này",
     "This only records the refund; it does not return any quota to users.": "Thao tác này chỉ ghi nhận việc hoàn tiền, không hoàn hạn ngạch cho người dùng.",
     "This page has not been created yet.": "Trang này chưa được tạo.",

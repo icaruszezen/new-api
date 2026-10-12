@@ -20,12 +20,13 @@ import type {
   BillingCorrectionRecord,
   BillingCorrectionRecordFilters,
   BillingCorrectionRecordQuery,
-  BillingCorrectionRefundPayload,
+  BillingCorrectionRecordsPayload,
+  BillingCorrectionRule,
 } from '../types'
 
 const DEFAULT_RANGE_DAYS = 7
 
-/** Prefix of every records query key, so a refund mark refreshes all pages. */
+/** Prefix of every records query key, so any write refreshes all pages. */
 export const RECORDS_QUERY_KEY = 'billing-correction-records'
 
 /** From midnight seven days ago until an hour from now. */
@@ -42,10 +43,12 @@ export function getDefaultRecordFilters(): BillingCorrectionRecordFilters {
     model: '',
     channel: '',
     status: '',
+    match: '',
+    upstream: '',
   }
 }
 
-/** The filter part shared by the list query and "mark all as refunded". */
+/** The filter part shared by the list query and the "all records" actions. */
 function buildFilterParams(filters: BillingCorrectionRecordFilters) {
   const channel = Number(filters.channel)
   return {
@@ -59,6 +62,8 @@ function buildFilterParams(filters: BillingCorrectionRecordFilters) {
     token_name: filters.token.trim() || undefined,
     model_name: filters.model.trim() || undefined,
     channel: Number.isInteger(channel) && channel > 0 ? channel : undefined,
+    match: filters.match || undefined,
+    upstream: filters.upstream || undefined,
   }
 }
 
@@ -76,12 +81,14 @@ export function buildRecordQuery(
 }
 
 /**
- * Marks every charged, unmarked record under the current filters. The status
- * filter is left out on purpose: only pending records can be marked anyway.
+ * Applies an action (mark, return quota, re-check upstream) to every record
+ * under the current filters. The status filter is left out on purpose: the
+ * stats shown next to these actions ignore it, and only pending records can
+ * be marked or credited anyway.
  */
-export function buildMarkAllPayload(
+export function buildAllRecordsPayload(
   filters: BillingCorrectionRecordFilters
-): BillingCorrectionRefundPayload {
+): BillingCorrectionRecordsPayload {
   return { all: true, ...buildFilterParams(filters) }
 }
 
@@ -93,4 +100,23 @@ export function getChannelLabel(channelId: number, channelName?: string) {
 /** Corrected records were never charged, and legacy logs have no request id. */
 export function isRecordSelectable(record: BillingCorrectionRecord): boolean {
   return record.status !== 'corrected' && record.request_id !== ''
+}
+
+/**
+ * A record can be looked up upstream once its channel has an upstream check
+ * and the log kept the upstream request id.
+ */
+export function isRecordUpstreamCheckable(
+  record: BillingCorrectionRecord
+): boolean {
+  return (
+    isRecordSelectable(record) &&
+    record.upstream_status !== undefined &&
+    record.upstream_status !== 'unavailable'
+  )
+}
+
+/** Whether any enabled rule looks requests up in an upstream new-api. */
+export function hasUpstreamCheck(rules: BillingCorrectionRule[]): boolean {
+  return rules.some((rule) => rule.enabled && rule.upstream_check_enabled)
 }

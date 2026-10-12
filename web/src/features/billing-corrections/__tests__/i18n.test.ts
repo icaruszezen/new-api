@@ -39,7 +39,7 @@ const BILLING_CORRECTION_KEYS = [
   'Rule ID',
   'Correction rules',
   'Mis-billed records',
-  'Wrongly charged',
+  'Charged with zero output',
   'Pending refund',
   'Refunded',
   'Corrected',
@@ -50,6 +50,18 @@ const BILLING_CORRECTION_KEYS = [
   'This only records the refund; it does not return any quota to users.',
   'Marking records as refunded only records it; refund the quota to users separately.',
   '{{count}} charged record(s) under the current filters, {{quota}} in total, will be marked as refunded.',
+  'Matches rule',
+  'Zero output only',
+  'Return quota',
+  'Quota returned',
+  'Marked as refunded',
+  'Check charges on the upstream new-api (experimental)',
+  'Upstream system access token',
+  'Return quota automatically',
+  'Upstream not charged',
+  'Upstream charged',
+  'Re-check upstream',
+  '{{count}} pending record(s) under the current filters, {{quota}} in total, will be returned to users.',
 ] as const
 
 describe('billing correction Chinese locales', () => {
@@ -78,14 +90,23 @@ describe('billing correction Chinese locales', () => {
     }
   })
 
-  test('the refund confirmation keeps its count and quota placeholders in every Chinese locale', () => {
-    const key =
-      '{{count}} charged record(s) under the current filters, {{quota}} in total, will be marked as refunded.'
-
-    for (const translation of [zh.translation[key], zhTW.translation[key]]) {
-      expect(translation).toContain('{{count}}')
-      expect(translation).toContain('{{quota}}')
+  test.each([
+    '{{count}} charged record(s) under the current filters, {{quota}} in total, will be marked as refunded.',
+    '{{count}} pending record(s) under the current filters, {{quota}} in total, will be returned to users.',
+    '{{count}} selected pending record(s), {{quota}} in total, will be returned to users.',
+  ] as const)(
+    'the confirmation "%s" keeps its count and quota placeholders in every Chinese locale',
+    (key) => {
+      for (const translation of [zh.translation[key], zhTW.translation[key]]) {
+        expect(translation).toContain('{{count}}')
+        expect(translation).toContain('{{quota}}')
+      }
     }
+  )
+
+  test('zh calls returning quota 补费, as the request does', () => {
+    expect(zh.translation['Return quota']).toBe('补费')
+    expect(zh.translation['Quota returned']).toBe('已补费')
   })
 
   test('zh uses the agreed names for the feature and the waived marker', () => {

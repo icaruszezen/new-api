@@ -33,11 +33,22 @@ const apiMocks = vi.hoisted(() => ({
   getBillingCorrectionRecords: vi.fn(),
   markBillingCorrectionRecordsRefunded: vi.fn(),
   unmarkBillingCorrectionRecordsRefunded: vi.fn(),
+  creditBillingCorrectionRecords: vi.fn(),
+  checkBillingCorrectionRecordsUpstream: vi.fn(),
 }))
 
 vi.mock('../api', () => apiMocks)
 
 const { RecordsPanel } = await import('../components/records-panel')
+
+const NO_UPSTREAM = {
+  upstream_check_enabled: false,
+  upstream_base_url: '',
+  upstream_user_id: 0,
+  upstream_access_token_set: false,
+  upstream_check_since: 0,
+  auto_refund: false,
+}
 
 const RULES: BillingCorrectionRule[] = [
   {
@@ -45,6 +56,7 @@ const RULES: BillingCorrectionRule[] = [
     channel_id: 7,
     prompt_tokens_threshold: 1_000_000,
     enabled: true,
+    ...NO_UPSTREAM,
     created_time: 0,
     updated_time: 0,
     channel_name: 'heartbeat-upstream',
@@ -54,9 +66,19 @@ const RULES: BillingCorrectionRule[] = [
     channel_id: 8,
     prompt_tokens_threshold: 1_000_000,
     enabled: false,
+    ...NO_UPSTREAM,
     created_time: 0,
     updated_time: 0,
     channel_name: 'disabled-upstream',
+  },
+]
+
+const UPSTREAM_RULES: BillingCorrectionRule[] = [
+  {
+    ...RULES[0],
+    upstream_check_enabled: true,
+    upstream_user_id: 9,
+    upstream_access_token_set: true,
   },
 ]
 
@@ -77,6 +99,7 @@ function buildRecord(
     quota: 750_000,
     use_time: 30,
     is_stream: true,
+    match: 'rule',
     status: 'pending',
     ...overrides,
   }
@@ -113,17 +136,23 @@ function buildPage(items: BillingCorrectionRecord[]): {
       stats: {
         charged_count: 2,
         charged_quota: 1_500_000,
+        rule_matched_count: 2,
+        rule_matched_quota: 1_500_000,
         pending_count: 1,
         pending_quota: 750_000,
         refunded_count: 1,
         refunded_quota: 750_000,
+        credited_count: 0,
+        credited_quota: 0,
         corrected_count: 1,
+        upstream_not_charged_count: 0,
+        upstream_not_charged_quota: 0,
       },
     },
   }
 }
 
-function renderPanel() {
+function renderPanel(rules: BillingCorrectionRule[] = RULES) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -133,7 +162,7 @@ function renderPanel() {
       <Toaster duration={60_000} />
     </QueryClientProvider>
   )
-  return render(<RecordsPanel rules={RULES} />, { wrapper: Wrapper })
+  return render(<RecordsPanel rules={rules} />, { wrapper: Wrapper })
 }
 
 afterEach(() => {
@@ -150,7 +179,7 @@ describe('billing correction records panel', () => {
     renderPanel()
 
     const charged = await screen.findByRole('group', {
-      name: 'Wrongly charged',
+      name: 'Charged with zero output',
     })
     expect(within(charged).getByText('2 record(s)')).toBeInTheDocument()
     const corrected = screen.getByRole('group', { name: 'Corrected' })
@@ -159,7 +188,7 @@ describe('billing correction records panel', () => {
 
     const rows = screen.getAllByRole('row')
     expect(within(rows[1]).getByText('Pending refund')).toBeInTheDocument()
-    expect(within(rows[2]).getByText('Refunded')).toBeInTheDocument()
+    expect(within(rows[2]).getByText('Marked as refunded')).toBeInTheDocument()
     expect(within(rows[3]).getByText('Corrected')).toBeInTheDocument()
     expect(within(rows[3]).getByText(/^Original cost:/)).toBeInTheDocument()
   })
@@ -391,6 +420,209 @@ describe('billing correction records panel', () => {
 
     expect(
       await screen.findByText('2 record(s) without a request ID were skipped')
+    ).toBeInTheDocument()
+  })
+
+  test('returns quota for the selected pending records after confirmation and reloads the list', async () => {
+    const user = userEvent.setup()
+    apiMocks.getBillingCorrectionRecords.mockResolvedValue(
+      buildPage([PENDING, REFUNDED])
+    )
+    apiMocks.creditBillingCorrectionRecords.mockResolvedValue({
+      success: true,
+      message: '',
+      data: { credited: 1, quota: 750_000, skipped: 0, failed: 0 },
+    })
+
+    renderPanel()
+    await user.click(
+      await screen.findByRole('checkbox', { name: 'Select all on this page' })
+    )
+    await user.click(screen.getByRole('button', { name: 'Return quota' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(apiMocks.creditBillingCorrectionRecords).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => {
+      expect(apiMocks.creditBillingCorrectionRecords).toHaveBeenCalledWith({
+        request_ids: ['req-pending'],
+      })
+    })
+    expect(
+      await screen.findByText(/^Returned .+ to users for 1 record\(s\)$/)
+    ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(apiMocks.getBillingCorrectionRecords).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  test('returning quota for every pending record keeps the condition filter but not the status filter', async () => {
+    const user = userEvent.setup()
+    apiMocks.getBillingCorrectionRecords.mockResolvedValue(buildPage([PENDING]))
+    apiMocks.creditBillingCorrectionRecords.mockResolvedValue({
+      success: true,
+      message: '',
+      data: { credited: 1, quota: 750_000, skipped: 0, failed: 1 },
+    })
+
+    renderPanel()
+    await screen.findByText('alice')
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Condition' }),
+      'zero_output'
+    )
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Status' }),
+      'pending'
+    )
+    await user.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => {
+      expect(apiMocks.getBillingCorrectionRecords).toHaveBeenCalledTimes(2)
+    })
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Return quota for all pending',
+      })
+    )
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Confirm',
+      })
+    )
+
+    await waitFor(() => {
+      expect(apiMocks.creditBillingCorrectionRecords).toHaveBeenCalledTimes(1)
+    })
+    const payload = apiMocks.creditBillingCorrectionRecords.mock.calls[0][0]
+    expect(payload).toMatchObject({ all: true, match: 'zero_output' })
+    expect(payload).not.toHaveProperty('status')
+    expect(
+      await screen.findByText(
+        '1 record(s) could not be returned; see the system log for details'
+      )
+    ).toBeInTheDocument()
+  })
+
+  test('hides the upstream filter, column and actions when no rule checks the upstream', async () => {
+    apiMocks.getBillingCorrectionRecords.mockResolvedValue(buildPage([PENDING]))
+
+    renderPanel()
+    await screen.findByText('alice')
+
+    expect(
+      screen.queryByRole('combobox', { name: 'Upstream result' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('columnheader', { name: 'Upstream result' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', {
+        name: 'Check upstream for filtered records',
+      })
+    ).not.toBeInTheDocument()
+  })
+
+  test('shows each upstream result and re-checks only the selected records that can be checked', async () => {
+    const user = userEvent.setup()
+    apiMocks.getBillingCorrectionRecords.mockResolvedValue(
+      buildPage([
+        buildRecord({
+          request_id: 'req-unchecked',
+          upstream_status: 'unchecked',
+        }),
+        buildRecord({
+          request_id: 'req-no-upstream-id',
+          upstream_status: 'unavailable',
+        }),
+        buildRecord({
+          request_id: 'req-charged',
+          status: 'credited',
+          upstream_status: 'charged',
+          upstream_quota: 500_000,
+        }),
+      ])
+    )
+    apiMocks.checkBillingCorrectionRecordsUpstream.mockResolvedValue({
+      success: true,
+      message: '',
+      data: {
+        checked: 2,
+        charged: 1,
+        not_charged: 1,
+        not_found: 0,
+        failed: 0,
+        unsupported: 0,
+        skipped: 0,
+        remaining: 0,
+      },
+    })
+
+    renderPanel(UPSTREAM_RULES)
+    const rows = await screen.findAllByRole('row')
+    expect(within(rows[1]).getByText('Not checked')).toBeInTheDocument()
+    expect(within(rows[2]).getByText('Cannot check')).toBeInTheDocument()
+    expect(within(rows[3]).getByText('Upstream charged')).toBeInTheDocument()
+    expect(within(rows[3]).getByText('Quota returned')).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Select all on this page' })
+    )
+    await user.click(screen.getByRole('button', { name: 'Re-check upstream' }))
+
+    await waitFor(() => {
+      expect(
+        apiMocks.checkBillingCorrectionRecordsUpstream
+      ).toHaveBeenCalledWith({ request_ids: ['req-unchecked', 'req-charged'] })
+    })
+    expect(
+      await screen.findByText(
+        'Checked 2 record(s): 1 charged upstream, 1 not charged, 0 not found, 0 failed'
+      )
+    ).toBeInTheDocument()
+  })
+
+  test('checking every filtered record sends the filters and says when more are left', async () => {
+    const user = userEvent.setup()
+    apiMocks.getBillingCorrectionRecords.mockResolvedValue(
+      buildPage([buildRecord({ upstream_status: 'unchecked' })])
+    )
+    apiMocks.checkBillingCorrectionRecordsUpstream.mockResolvedValue({
+      success: true,
+      message: '',
+      data: {
+        checked: 100,
+        charged: 100,
+        not_charged: 0,
+        not_found: 0,
+        failed: 0,
+        unsupported: 0,
+        skipped: 0,
+        remaining: 40,
+      },
+    })
+
+    renderPanel(UPSTREAM_RULES)
+    await screen.findByText('alice')
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Check upstream for filtered records',
+      })
+    )
+
+    await waitFor(() => {
+      expect(
+        apiMocks.checkBillingCorrectionRecordsUpstream
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          all: true,
+          start_timestamp: expect.any(Number),
+        })
+      )
+    })
+    expect(
+      await screen.findByText(
+        '40 record(s) are still waiting; run the check again to continue'
+      )
     ).toBeInTheDocument()
   })
 })

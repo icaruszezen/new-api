@@ -22,6 +22,8 @@ const (
 	SystemTaskTypeMidjourneyPoll      = "midjourney_poll"
 	SystemTaskTypeAsyncTaskPoll       = "async_task_poll"
 	SystemTaskTypeChannelMonitorProbe = "channel_monitor_probe"
+	// SystemTaskTypeBillingCorrectionCheck 到上游 new-api 核对 0 输出请求是否扣费，按规则自动返还。
+	SystemTaskTypeBillingCorrectionCheck = "billing_correction_check"
 )
 
 var ErrSystemTaskLockLost = errors.New("system task lock lost")

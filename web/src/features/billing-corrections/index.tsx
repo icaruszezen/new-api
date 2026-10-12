@@ -190,6 +190,28 @@ export function BillingCorrections() {
                         ),
                       },
                       {
+                        id: 'upstream',
+                        header: t('Upstream check'),
+                        cell: (rule) => {
+                          if (!rule.upstream_check_enabled) {
+                            return (
+                              <span className='text-muted-foreground'>-</span>
+                            )
+                          }
+                          return (
+                            <StatusBadge
+                              label={
+                                rule.auto_refund
+                                  ? t('On, returns quota automatically')
+                                  : t('On')
+                              }
+                              variant='info'
+                              copyable={false}
+                            />
+                          )
+                        },
+                      },
+                      {
                         id: 'updated',
                         header: t('Updated'),
                         cellClassName: 'font-mono whitespace-nowrap',

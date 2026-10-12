@@ -53,6 +53,7 @@ func TestMain(m *testing.M) {
 		&model.ErrorMessageOverride{},
 		&model.BillingCorrectionRule{},
 		&model.BillingCorrectionRefund{},
+		&model.BillingCorrectionUpstreamCheck{},
 		&model.Ability{},
 	); err != nil {
 		panic("failed to migrate: " + err.Error())

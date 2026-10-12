@@ -22,6 +22,7 @@ const billingCorrectionLogContent = "超大上下文错误计费修正：上游�
 type enabledBillingCorrectionRule struct {
 	id                    int
 	promptTokensThreshold int
+	upstreamCheck         bool
 }
 
 // billingCorrectionCache 以渠道 ID 为键，只收录已启用的规则，结算热路径无需查库。
@@ -41,10 +42,25 @@ func ReloadBillingCorrectionRules() error {
 		byChannel[rule.ChannelId] = enabledBillingCorrectionRule{
 			id:                    rule.Id,
 			promptTokensThreshold: rule.PromptTokensThreshold,
+			upstreamCheck:         rule.HasUpstreamCheck(),
 		}
 	}
 	billingCorrectionCache.Store(&byChannel)
 	return nil
+}
+
+// HasBillingCorrectionUpstreamChecks 判断是否有已启用的规则配置了上游核对，决定后台自动核对要不要运行。
+func HasBillingCorrectionUpstreamChecks() bool {
+	rules := billingCorrectionCache.Load()
+	if rules == nil {
+		return false
+	}
+	for _, rule := range *rules {
+		if rule.upstreamCheck {
+			return true
+		}
+	}
+	return false
 }
 
 // SyncBillingCorrectionRules 周期性重载规则，让非 master 节点也能拿到最新配置。

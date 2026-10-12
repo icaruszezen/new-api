@@ -1024,3 +1024,31 @@ func BenchmarkRatioBilling_Parallel(b *testing.B) {
 		}
 	})
 }
+
+func TestSamePriceCacheReadsRemainInInput(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		usage       dto.Usage
+		extra       string
+		input, cost float64
+	}{
+		{"openai", dto.Usage{PromptTokens: 1000, CompletionTokens: 100, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 200}}, "", 1000, 72000},
+		{"anthropic", dto.Usage{PromptTokens: 800, CompletionTokens: 100, UsageSemantic: "anthropic", PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 200}}, "", 1000, 72000},
+		{"anthropic mixed cache TTLs", dto.Usage{PromptTokens: 750, CompletionTokens: 100, UsageSemantic: "anthropic", ClaudeCacheCreation5mTokens: 30, ClaudeCacheCreation1hTokens: 20, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 200, CachedCreationTokens: 50}}, " + cc * 75 + cc1h * 120", 950, 73650},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			merged := `tier("base", p * 60 + c * 120` + tc.extra + `)`
+			separate := `tier("base", p * 60 + c * 120 + cr * 60` + tc.extra + `)`
+			params := BuildTieredTokenParams(&tc.usage, tc.usage.UsageSemantic == "anthropic", billingexpr.UsedVars(merged))
+			assert.Equal(t, tc.input, params.P)
+			cost, _, err := billingexpr.RunExpr(merged, params)
+			require.NoError(t, err)
+			assert.Equal(t, tc.cost, cost)
+			separateParams := BuildTieredTokenParams(&tc.usage, tc.usage.UsageSemantic == "anthropic", billingexpr.UsedVars(separate))
+			previousCost, _, err := billingexpr.RunExpr(separate, separateParams)
+			require.NoError(t, err)
+			assert.Equal(t, previousCost, cost, "folding cache reads into input must preserve the charge")
+			assert.Equal(t, separateParams.Len, params.Len, "tier conditions keep the full context length")
+		})
+	}
+}

@@ -133,6 +133,12 @@ func ClaudeMessagesRequestToOpenAIChat(claudeRequest dto.ClaudeRequest, info con
 		}
 	}
 
+	type unnamedToolResult struct {
+		index int
+		id    string
+	}
+	toolNames := make(map[string]string)
+	var unnamedToolResults []unnamedToolResult
 	for _, claudeMessage := range claudeRequest.Messages {
 		openAIMessage := dto.Message{
 			Role: claudeMessage.Role,
@@ -148,6 +154,9 @@ func ClaudeMessagesRequestToOpenAIChat(claudeRequest dto.ClaudeRequest, info con
 			mediaMessages := make([]dto.MediaContent, 0, len(content))
 
 			for _, mediaMsg := range content {
+				if _, exists := toolNames[mediaMsg.Id]; !exists {
+					toolNames[mediaMsg.Id] = mediaMsg.Name
+				}
 				switch mediaMsg.Type {
 				case "text", "input_text":
 					message := dto.MediaContent{
@@ -176,7 +185,7 @@ func ClaudeMessagesRequestToOpenAIChat(claudeRequest dto.ClaudeRequest, info con
 				case "tool_result":
 					toolName := mediaMsg.Name
 					if toolName == "" {
-						toolName = claudeRequest.SearchToolNameByToolCallId(mediaMsg.ToolUseId)
+						unnamedToolResults = append(unnamedToolResults, unnamedToolResult{index: len(openAIMessages), id: mediaMsg.ToolUseId})
 					}
 					oaiToolMessage := dto.Message{
 						Role:       "tool",
@@ -186,9 +195,12 @@ func ClaudeMessagesRequestToOpenAIChat(claudeRequest dto.ClaudeRequest, info con
 					if mediaMsg.IsStringContent() {
 						oaiToolMessage.SetStringContent(mediaMsg.GetStringContent())
 					} else {
-						mediaContents := mediaMsg.ParseMediaContent()
-						encodedJSON, _ := kitutil.Marshal(mediaContents)
-						oaiToolMessage.SetStringContent(string(encodedJSON))
+						content, media := claudeToolResultToChat(mediaMsg.ParseMediaContent())
+						oaiToolMessage.SetStringContent(content)
+						// A Chat tool message only carries text. Images from the tool result
+						// join the user message this Claude message becomes, which lands right
+						// after the tool batch and keeps the tool messages contiguous.
+						mediaMessages = append(mediaMessages, media...)
 					}
 					openAIMessages = append(openAIMessages, oaiToolMessage)
 				}
@@ -205,12 +217,50 @@ func ClaudeMessagesRequestToOpenAIChat(claudeRequest dto.ClaudeRequest, info con
 			openAIMessages = append(openAIMessages, openAIMessage)
 		}
 	}
+	for _, result := range unnamedToolResults {
+		*openAIMessages[result.index].Name = toolNames[result.id]
+	}
 
 	openAIRequest.Messages = openAIMessages
 	return &openAIRequest, nil
 }
 
-func requestToJSONString(v interface{}) string {
+// claudeToolResultToChat maps a structured tool_result content array onto Chat Completions,
+// where a tool message may only carry text. Text blocks stay on the tool message and image
+// blocks come back in Chat shape for the caller to place on the following user message;
+// stringifying them instead would hand base64 image data to the upstream text tokenizer.
+// Arrays holding any other block type keep the historical stringified form so nothing is lost.
+func claudeToolResultToChat(blocks []dto.ClaudeMediaMessage) (string, []dto.MediaContent) {
+	texts := make([]string, 0, len(blocks))
+	media := make([]dto.MediaContent, 0, len(blocks))
+	for _, block := range blocks {
+		switch {
+		case block.Type == "text" || block.Type == "input_text":
+			if text := block.GetText(); text != "" {
+				texts = append(texts, text)
+			}
+		case block.Type == "image" && block.Source != nil:
+			url := block.Source.Url
+			if url == "" {
+				url = fmt.Sprintf("data:%s;base64,%s", block.Source.MediaType, kitutil.Interface2String(block.Source.Data))
+			}
+			media = append(media, dto.MediaContent{Type: "image_url", ImageUrl: &dto.MessageImageUrl{Url: url}})
+		default:
+			return requestToJSONString(blocks), nil
+		}
+	}
+	switch {
+	case len(texts) == 0 && len(media) == 0:
+		return requestToJSONString(blocks), nil
+	case len(texts) == 0:
+		// Upstreams reject empty tool content; the images ride on the following user message.
+		return "[image]", media
+	default:
+		return strings.Join(texts, "\n"), media
+	}
+}
+
+func requestToJSONString(v any) string {
 	b, err := kitutil.Marshal(v)
 	if err != nil {
 		return "{}"

@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Calcium-Ion/go-epay/epay"
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
@@ -102,16 +104,18 @@ func SubscriptionRequestEpay(c *gin.Context) {
 		common.ApiErrorMsg(c, "创建订单失败")
 		return
 	}
+	// go-epay rejects '&' in signed values; the name is only a label shown by the gateway.
 	uri, params, err := client.Purchase(&epay.PurchaseArgs{
 		Type:           req.PaymentMethod,
 		ServiceTradeNo: tradeNo,
-		Name:           fmt.Sprintf("SUB:%s", plan.Title),
+		Name:           fmt.Sprintf("SUB:%s", strings.ReplaceAll(plan.Title, "&", "＆")),
 		Money:          strconv.FormatFloat(plan.PriceAmount, 'f', 2, 64),
 		Device:         epay.PC,
 		NotifyUrl:      notifyUrl,
 		ReturnUrl:      returnUrl,
 	})
 	if err != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 订阅拉起支付失败 user_id=%d trade_no=%s plan_id=%d gateway_id=%q error=%q", userId, tradeNo, plan.Id, gateway.Id, err.Error()))
 		_ = model.ExpireSubscriptionOrder(tradeNo, model.PaymentProviderEpay)
 		common.ApiErrorMsg(c, "拉起支付失败")
 		return

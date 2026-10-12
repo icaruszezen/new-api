@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -193,7 +194,7 @@ func HandleOAuth(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	user, err := findOrCreateOAuthUser(c, provider, oauthUser, payload.AffiliateCode)
+	user, err := findOrCreateOAuthUser(c, provider, oauthUser, token, payload.AffiliateCode)
 	if err != nil {
 		if errors.Is(err, model.ErrEmailAlreadyTaken) {
 			common.ApiErrorI18n(c, i18n.MsgUserEmailAlreadyTaken)
@@ -206,6 +207,8 @@ func HandleOAuth(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgUserRegisterDisabled)
 		case *OAuthEmailAlreadyTakenError:
 			common.ApiErrorI18n(c, i18n.MsgUserEmailAlreadyTaken)
+		case *OAuthLegacyBindingNotConfirmedError:
+			common.ApiErrorI18n(c, i18n.MsgOAuthNotAutoLinked, providerParams(provider.GetName()))
 		default:
 			common.ApiError(c, err)
 		}
@@ -239,17 +242,10 @@ func handleOAuthBind(c *gin.Context, provider oauth.Provider, pendingFlow *model
 		return
 	}
 
-	// Check if this OAuth account is already bound (check both new ID and legacy ID)
+	// Check if this OAuth account is already bound
 	if provider.IsUserIDTaken(oauthUser.ProviderUserID) {
 		common.ApiErrorI18n(c, i18n.MsgOAuthAlreadyBound, providerParams(provider.GetName()))
 		return
-	}
-	// Also check legacy ID to prevent duplicate bindings during migration period
-	if legacyID, ok := oauthUser.Extra["legacy_id"].(string); ok && legacyID != "" {
-		if provider.IsUserIDTaken(legacyID) {
-			common.ApiErrorI18n(c, i18n.MsgOAuthAlreadyBound, providerParams(provider.GetName()))
-			return
-		}
 	}
 
 	if _, err := model.ConsumeAuthFlow(flowToken, model.AuthFlowMatch{
@@ -289,7 +285,7 @@ func handleOAuthBind(c *gin.Context, provider oauth.Provider, pendingFlow *model
 }
 
 // findOrCreateOAuthUser finds existing user or creates new user
-func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *oauth.OAuthUser, affiliateCode string) (*model.User, error) {
+func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *oauth.OAuthUser, token *oauth.OAuthToken, affiliateCode string) (*model.User, error) {
 	user := &model.User{}
 
 	// Check if user already exists with new ID
@@ -305,23 +301,44 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 		return user, nil
 	}
 
-	// Try to find user with legacy ID (for GitHub migration from login to numeric ID)
-	if legacyID, ok := oauthUser.Extra["legacy_id"].(string); ok && legacyID != "" {
-		if provider.IsUserIDTaken(legacyID) {
-			err := provider.FillUserByProviderID(user, legacyID)
+	// Legacy GitHub bindings stored the login name, which only points at a
+	// candidate account: login names can be renamed and re-registered by
+	// someone else. Values that are all digits are already numeric account IDs
+	// and never take part in the comparison.
+	legacyID, _ := oauthUser.Extra["legacy_id"].(string)
+	if strings.ContainsFunc(legacyID, func(r rune) bool { return r < '0' || r > '9' }) && provider.IsUserIDTaken(legacyID) {
+		if err := provider.FillUserByProviderID(user, legacyID); err != nil {
+			return nil, err
+		}
+		if user.Id != 0 {
+			// One of the addresses the provider has confirmed must match the
+			// account email before the binding is rewritten. The list is
+			// fetched only here and never recorded.
+			reason, matched := "no_matching_evidence", false
+			if emailProvider, ok := provider.(oauth.VerifiedEmailProvider); ok && user.Email != "" {
+				emails, err := emailProvider.GetVerifiedEmails(c.Request.Context(), token)
+				if err != nil {
+					common.SysError(fmt.Sprintf("[OAuth] Failed to load verified emails for user %d: %s", user.Id, err.Error()))
+					reason = "verified_emails_unavailable"
+				}
+				accountEmail := model.NormalizeEmail(user.Email)
+				matched = slices.ContainsFunc(emails, func(email string) bool { return model.NormalizeEmail(email) == accountEmail })
+			}
+			if !matched {
+				common.SysLog(fmt.Sprintf("[OAuth] Declined legacy GitHub binding for user %d: legacy_id=%s, new_id=%s, reason=%s",
+					user.Id, legacyID, oauthUser.ProviderUserID, reason))
+				return nil, &OAuthLegacyBindingNotConfirmedError{}
+			}
+			written, err := model.MigrateLegacyGitHubBinding(user.Id, legacyID, oauthUser.ProviderUserID)
 			if err != nil {
 				return nil, err
 			}
-			if user.Id != 0 {
-				// Found user with legacy ID, migrate to new ID
-				common.SysLog(fmt.Sprintf("[OAuth] Migrating user %d from legacy_id=%s to new_id=%s",
+			if written {
+				user.GitHubId = oauthUser.ProviderUserID
+				common.SysLog(fmt.Sprintf("[OAuth] Migrated user %d from legacy_id=%s to new_id=%s after a verified email match",
 					user.Id, legacyID, oauthUser.ProviderUserID))
-				if err := user.UpdateGitHubId(oauthUser.ProviderUserID); err != nil {
-					common.SysError(fmt.Sprintf("[OAuth] Failed to migrate user %d: %s", user.Id, err.Error()))
-					// Continue with login even if migration fails
-				}
-				return user, nil
 			}
+			return user, nil
 		}
 	}
 
@@ -445,6 +462,14 @@ type OAuthEmailAlreadyTakenError struct{}
 
 func (e *OAuthEmailAlreadyTakenError) Error() string {
 	return "email is already in use"
+}
+
+// OAuthLegacyBindingNotConfirmedError reports a legacy GitHub binding match that
+// no verified provider email confirmed, so it cannot sign the user in.
+type OAuthLegacyBindingNotConfirmedError struct{}
+
+func (e *OAuthLegacyBindingNotConfirmedError) Error() string {
+	return "legacy binding is not confirmed"
 }
 
 // handleOAuthError handles OAuth errors and returns translated message

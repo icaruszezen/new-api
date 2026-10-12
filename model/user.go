@@ -1063,12 +1063,31 @@ func (user *User) FillUserByGitHubId() error {
 	return nil
 }
 
-// UpdateGitHubId updates the user's GitHub ID (used for migration from login to numeric ID)
-func (user *User) UpdateGitHubId(newGitHubId string) error {
-	if user.Id == 0 {
-		return errors.New("user id is empty")
+// MigrateLegacyGitHubBinding rewrites a login-name GitHub binding to the
+// numeric account ID once the login flow has confirmed the account. It reports
+// whether the row was rewritten; a row whose binding changed since it was read
+// is left untouched.
+func MigrateLegacyGitHubBinding(userID int, legacyID, gitHubID string) (bool, error) {
+	if userID <= 0 || legacyID == "" || gitHubID == "" {
+		return false, errors.New("legacy GitHub binding is invalid")
 	}
-	return DB.Model(user).Update("github_id", newGitHubId).Error
+	written := false
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var count int64
+		if err := tx.Unscoped().Model(&User{}).Where("github_id = ? AND id <> ?", gitHubID, userID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count != 0 {
+			return ErrExternalIdentityAlreadyClaimed
+		}
+		result := tx.Model(&User{}).Where("id = ? AND github_id = ?", userID, legacyID).Update("github_id", gitHubID)
+		if result.Error != nil {
+			return result.Error
+		}
+		written = result.RowsAffected == 1
+		return nil
+	})
+	return written, err
 }
 
 func (user *User) FillUserByDiscordId() error {

@@ -191,7 +191,7 @@ func usageFromGeminiBillingUsage(billingUsage *dto.BillingUsage) *dto.Usage {
 		addGeminiInputTokenDetail(&usage.PromptTokensDetails, detail)
 	}
 	for _, detail := range metadata.CandidatesTokensDetails {
-		switch detail.Modality {
+		switch normalizeGeminiModality(detail.Modality) {
 		case "IMAGE":
 			usage.CompletionTokenDetails.ImageTokens += detail.TokenCount
 		case "AUDIO":
@@ -204,7 +204,7 @@ func usageFromGeminiBillingUsage(billingUsage *dto.BillingUsage) *dto.Usage {
 	if usage.TotalTokens == 0 {
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	} else if usage.CompletionTokens <= 0 {
-		usage.CompletionTokens = usage.TotalTokens - usage.PromptTokens
+		usage.CompletionTokens = max(usage.TotalTokens-usage.PromptTokens, 0)
 	}
 	if usage.PromptTokens > 0 && usage.PromptTokensDetails.TextTokens == 0 && usage.PromptTokensDetails.AudioTokens == 0 {
 		usage.PromptTokensDetails.TextTokens = usage.PromptTokens
@@ -213,7 +213,7 @@ func usageFromGeminiBillingUsage(billingUsage *dto.BillingUsage) *dto.Usage {
 }
 
 func addGeminiInputTokenDetail(details *dto.InputTokenDetails, detail dto.GeminiPromptTokensDetails) {
-	switch detail.Modality {
+	switch normalizeGeminiModality(detail.Modality) {
 	case "AUDIO":
 		details.AudioTokens += detail.TokenCount
 	case "IMAGE":
@@ -221,4 +221,8 @@ func addGeminiInputTokenDetail(details *dto.InputTokenDetails, detail dto.Gemini
 	case "TEXT":
 		details.TextTokens += detail.TokenCount
 	}
+}
+
+func normalizeGeminiModality(modality string) string {
+	return strings.ToUpper(strings.TrimSpace(modality))
 }

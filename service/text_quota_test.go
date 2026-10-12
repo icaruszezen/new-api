@@ -1147,3 +1147,37 @@ func TestAppendToolSurchargeLogInfoWritesOnlyStructuredFields(t *testing.T) {
 	assert.NotContains(t, other, "image_generation_call")
 	assert.NotContains(t, other, "image_generation_call_price")
 }
+
+func TestUsageFromGeminiBillingUsageClampsNegativeDerivedCompletion(t *testing.T) {
+	usage := effectiveBillingUsage(&dto.Usage{
+		BillingUsage: dto.NewGeminiChatBillingUsage(&dto.GeminiUsageMetadata{
+			PromptTokenCount:        50,
+			ToolUsePromptTokenCount: 20,
+			TotalTokenCount:         60,
+		}),
+	})
+
+	require.Equal(t, 70, usage.PromptTokens)
+	require.Zero(t, usage.CompletionTokens)
+}
+
+func TestUsageFromGeminiBillingUsageNormalizesModalityNames(t *testing.T) {
+	usage := effectiveBillingUsage(&dto.Usage{
+		BillingUsage: dto.NewGeminiChatBillingUsage(&dto.GeminiUsageMetadata{
+			PromptTokenCount:     100,
+			CandidatesTokenCount: 10,
+			TotalTokenCount:      110,
+			PromptTokensDetails: []dto.GeminiPromptTokensDetails{
+				{Modality: "text", TokenCount: 60},
+				{Modality: " Audio ", TokenCount: 40},
+			},
+			CandidatesTokensDetails: []dto.GeminiPromptTokensDetails{
+				{Modality: "image", TokenCount: 10},
+			},
+		}),
+	})
+
+	require.Equal(t, 60, usage.PromptTokensDetails.TextTokens)
+	require.Equal(t, 40, usage.PromptTokensDetails.AudioTokens)
+	require.Equal(t, 10, usage.CompletionTokenDetails.ImageTokens)
+}

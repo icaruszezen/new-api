@@ -119,12 +119,9 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var toolCount int
 	var usage = &dto.Usage{}
 	var lastStreamData string
-	var secondLastStreamData string // 存储倒数第二个stream data，用于音频模型
+	var secondLastStreamData string // 保留倒数第二个stream data；部分兼容网关把完整usage放在倒数第二个事件
 	seenStreamToolCalls := make(map[string]struct{})
 	var streamFunctionCallNames []string
-
-	// 检查是否为音频模型
-	isAudioModel := strings.Contains(strings.ToLower(model), "audio")
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		if lastStreamData != "" {
@@ -134,8 +131,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			}
 		}
 		if len(data) > 0 {
-			// 对音频模型，保存倒数第二个stream data
-			if isAudioModel && lastStreamData != "" {
+			if lastStreamData != "" {
 				secondLastStreamData = lastStreamData
 			}
 
@@ -148,24 +144,6 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		}
 	})
 
-	// 对音频模型，从倒数第二个stream data中提取usage信息
-	if isAudioModel && secondLastStreamData != "" {
-		var streamResp struct {
-			Usage *dto.Usage `json:"usage"`
-		}
-		err := common.Unmarshal([]byte(secondLastStreamData), &streamResp)
-		if err == nil && streamResp.Usage != nil && service.ValidUsage(streamResp.Usage) {
-			usage = streamResp.Usage
-			containStreamUsage = true
-
-			if common.DebugEnabled {
-				logger.LogDebug(c, "Audio model usage extracted from second last SSE: PromptTokens=%d, CompletionTokens=%d, TotalTokens=%d, InputTokens=%d, OutputTokens=%d",
-					usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens,
-					usage.InputTokens, usage.OutputTokens)
-			}
-		}
-	}
-
 	// 处理最后的响应
 	shouldSendLastResp := true
 	if err := handleLastResponse(lastStreamData, &responseId, &createAt, &systemFingerprint, &model, &usage,
@@ -173,13 +151,37 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		logger.LogError(c, fmt.Sprintf("error handling last response: %s, lastStreamData: [%s]", err.Error(), lastStreamData))
 	}
 
+	// 部分兼容网关把完整的累计usage附在倒数第二个事件上，随后发送一个空的最后事件。
+	// 仅当最后一个事件没有有效usage时，回退到倒数第二个事件的完整快照。
+	// 只接受同时带输入和输出token的快照：只有输入token的占位usage会把输出记成0，
+	// 这种情况仍然走本地文本估算。
+	usageFrame := lastStreamData
+	if !containStreamUsage && secondLastStreamData != "" {
+		var streamResp struct {
+			Usage *dto.Usage `json:"usage"`
+		}
+		err := common.Unmarshal([]byte(secondLastStreamData), &streamResp)
+		if err == nil && streamResp.Usage != nil &&
+			streamResp.Usage.PromptTokens > 0 && streamResp.Usage.CompletionTokens > 0 {
+			usage = streamResp.Usage
+			containStreamUsage = true
+			usageFrame = secondLastStreamData
+
+			if common.DebugEnabled {
+				logger.LogDebug(c, "usage extracted from second last SSE: PromptTokens=%d, CompletionTokens=%d, TotalTokens=%d, InputTokens=%d, OutputTokens=%d",
+					usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens,
+					usage.InputTokens, usage.OutputTokens)
+			}
+		}
+	}
+
 	if !containStreamUsage {
 		usage = service.ResponseText2Usage(c, responseTextBuilder.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
 		usage.CompletionTokens += toolCount * 7
 	}
 
+	applyUsagePostProcessing(info, usage, common.StringToByteSlice(usageFrame))
 	lastStreamBytes := common.StringToByteSlice(lastStreamData)
-	applyUsagePostProcessing(info, usage, lastStreamBytes)
 	service.ApplyChannelCacheReadBillingRatio(info, usage, &lastStreamBytes)
 	lastStreamData = string(lastStreamBytes)
 

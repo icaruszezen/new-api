@@ -40,11 +40,11 @@ func getAwsErrorStatusCode(err error) int {
 	return http.StatusInternalServerError
 }
 
-func newAwsInvokeContext(parent context.Context, info *relaycommon.RelayInfo) (context.Context, context.CancelFunc) {
+func newAwsInvokeContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if common.RelayTimeout <= 0 {
 		return context.WithCancel(parent)
 	}
-	return context.WithTimeout(parent, info.UpstreamTimeout(time.Duration(common.RelayTimeout)*time.Second))
+	return context.WithTimeout(parent, time.Duration(common.RelayTimeout)*time.Second)
 }
 
 func newAwsInvokeError(requestContext context.Context, err error, operation string) *types.NewAPIError {
@@ -64,12 +64,6 @@ func newAwsClient(c *gin.Context, info *relaycommon.RelayInfo) (*bedrockruntime.
 	httpClient, err := service.GetHttpClientWithProxySettings(info.ChannelSetting.Proxy, info.ChannelSetting)
 	if err != nil {
 		return nil, fmt.Errorf("new proxy http client failed: %w", err)
-	}
-	if timeout := info.UpstreamTimeout(httpClient.Timeout); timeout != httpClient.Timeout {
-		// 缓存的客户端被各渠道共享，只在副本上放宽超时。
-		relaxedClient := *httpClient
-		relaxedClient.Timeout = timeout
-		httpClient = &relaxedClient
 	}
 
 	awsSecret := strings.Split(info.ApiKey, "|")
@@ -235,7 +229,7 @@ func getAwsModelID(requestModel string) string {
 func awsHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types.NewAPIError, *dto.Usage) {
 
 	requestContext := c.Request.Context()
-	ctx, cancel := newAwsInvokeContext(requestContext, info)
+	ctx, cancel := newAwsInvokeContext(requestContext)
 	defer cancel()
 
 	awsResp, err := a.AwsClient.InvokeModel(ctx, a.AwsReq.(*bedrockruntime.InvokeModelInput))
@@ -265,7 +259,7 @@ func awsHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types
 
 func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types.NewAPIError, *dto.Usage) {
 	requestContext := c.Request.Context()
-	ctx, cancel := newAwsInvokeContext(requestContext, info)
+	ctx, cancel := newAwsInvokeContext(requestContext)
 	defer cancel()
 
 	awsResp, err := a.AwsClient.InvokeModelWithResponseStream(ctx, a.AwsReq.(*bedrockruntime.InvokeModelWithResponseStreamInput))
@@ -323,7 +317,7 @@ streamLoop:
 func handleNovaRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types.NewAPIError, *dto.Usage) {
 
 	requestContext := c.Request.Context()
-	ctx, cancel := newAwsInvokeContext(requestContext, info)
+	ctx, cancel := newAwsInvokeContext(requestContext)
 	defer cancel()
 
 	awsResp, err := a.AwsClient.InvokeModel(ctx, a.AwsReq.(*bedrockruntime.InvokeModelInput))

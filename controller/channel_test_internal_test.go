@@ -463,3 +463,45 @@ func TestTestAllChannelsRejectsExistingActiveTask(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), existing.TaskID)
 	require.Contains(t, recorder.Body.String(), "已有通道测试任务正在运行或等待中")
 }
+
+// Channels that write through gin's c.Stream (Cohere, Zhipu, Xunfei) need a
+// CloseNotify on the channel test recorder; without it the stream test panics.
+func TestTestChannelStreamsThroughGinStreamChannels(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.Log{}))
+	previousStreamingTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 300
+	t.Cleanup(func() { constant.StreamingTimeout = previousStreamingTimeout })
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"is_finished":false,"event_type":"text-generation","text":"hi"}` + "\n"))
+		_, _ = w.Write([]byte(`{"is_finished":true,"event_type":"stream-end","finish_reason":"COMPLETE","response":{"meta":{"billed_units":{"input_tokens":3,"output_tokens":1}}}}` + "\n"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	require.NoError(t, db.Create(&model.User{
+		Id:       1,
+		Username: "root",
+		Role:     common.RoleRootUser,
+		Status:   common.UserStatusEnabled,
+		Group:    "default",
+		Setting:  `{"accept_unset_model_ratio_model":true}`,
+	}).Error)
+	baseURL := upstream.URL
+	channel := &model.Channel{
+		Id:      1,
+		Type:    constant.ChannelTypeCohere,
+		Key:     "sk-test",
+		Name:    "cohere",
+		Status:  common.ChannelStatusEnabled,
+		Models:  "command-r",
+		Group:   "default",
+		BaseURL: &baseURL,
+	}
+	require.NoError(t, db.Create(channel).Error)
+
+	result := testChannel(context.Background(), channel, 1, "command-r", "", true, channelTestOptions{group: "default", skipConsumeLog: true})
+
+	require.NoError(t, result.localErr)
+	assert.Nil(t, result.newAPIError)
+}

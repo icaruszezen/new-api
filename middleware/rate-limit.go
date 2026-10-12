@@ -265,46 +265,13 @@ const channelMonitoringStatusUserRateLimitMark = "CMU"
 // CHANNEL_MONITORING_STATUS_RATE_LIMIT / CHANNEL_MONITORING_STATUS_USER_RATE_LIMIT /
 // CHANNEL_MONITORING_STATUS_RATE_LIMIT_DURATION.
 func ChannelMonitoringStatusRateLimit() func(c *gin.Context) {
-	return publicPollRateLimitFactory(
-		common.ChannelMonitoringStatusRateLimitEnable,
-		common.ChannelMonitoringStatusRateLimitNum,
-		common.ChannelMonitoringStatusUserRateLimitNum,
-		common.ChannelMonitoringStatusRateLimitDuration,
-		channelMonitoringStatusRateLimitMark,
-		channelMonitoringStatusUserRateLimitMark,
-	)
-}
-
-const modelIQCheckRateLimitMark = "IQ"
-const modelIQCheckUserRateLimitMark = "IQU"
-
-// ModelIQCheckRateLimit limits the public /api/iq-check/* endpoints.
-// Guests use mark IQ keyed by IP; signed-in users use mark IQU keyed by user
-// ID, isolated from the channel-monitoring buckets so polling one page never
-// starves the other.
-// Configurable via MODEL_IQ_CHECK_RATE_LIMIT_ENABLE / MODEL_IQ_CHECK_RATE_LIMIT /
-// MODEL_IQ_CHECK_USER_RATE_LIMIT / MODEL_IQ_CHECK_RATE_LIMIT_DURATION.
-func ModelIQCheckRateLimit() func(c *gin.Context) {
-	return publicPollRateLimitFactory(
-		common.ModelIQCheckRateLimitEnable,
-		common.ModelIQCheckRateLimitNum,
-		common.ModelIQCheckUserRateLimitNum,
-		common.ModelIQCheckRateLimitDuration,
-		modelIQCheckRateLimitMark,
-		modelIQCheckUserRateLimitMark,
-	)
-}
-
-// publicPollRateLimitFactory limits a public page poll that both guests and
-// signed-in users hit. Guests are keyed by IP under guestMark; a request
-// carrying a valid dashboard session is keyed by user ID under userMark so a
-// shared NAT cannot exhaust a logged-in quota. Invalid credentials fall back
-// to the guest bucket and never return 401.
-func publicPollRateLimitFactory(enabled bool, guestNum int, userNum int, duration int64, guestMark string, userMark string) func(c *gin.Context) {
-	if !enabled {
+	if !common.ChannelMonitoringStatusRateLimitEnable {
 		return defNext
 	}
-	guestLimit := rateLimitFactory(guestNum, duration, guestMark)
+	guestNum := common.ChannelMonitoringStatusRateLimitNum
+	userNum := common.ChannelMonitoringStatusUserRateLimitNum
+	duration := common.ChannelMonitoringStatusRateLimitDuration
+	guestLimit := rateLimitFactory(guestNum, duration, channelMonitoringStatusRateLimitMark)
 	if !common.RedisEnabled {
 		inMemoryRateLimiter.Init(common.RateLimitKeyExpirationDuration)
 	}
@@ -315,11 +282,11 @@ func publicPollRateLimitFactory(enabled bool, guestNum int, userNum int, duratio
 					c,
 					userNum,
 					duration,
-					redisUserRateLimitKey(userMark, userID),
+					redisUserRateLimitKey(channelMonitoringStatusUserRateLimitMark, userID),
 				)
 				return
 			}
-			key := fmt.Sprintf("%s:user:%d", userMark, userID)
+			key := fmt.Sprintf("%s:user:%d", channelMonitoringStatusUserRateLimitMark, userID)
 			if !inMemoryRateLimiter.Request(key, userNum, duration) {
 				writeRateLimited(c, duration)
 			}

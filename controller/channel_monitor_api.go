@@ -151,8 +151,24 @@ func ResetChannelMonitor(c *gin.Context) {
 
 // normalizeSubmittedMonitors 校验监控项并补全自动解析出的图标。
 func normalizeSubmittedMonitors(submitted []channelmonitor.Monitor) ([]channelmonitor.Monitor, error) {
-	groupExists, modelInGroup := groupModelValidators()
-	normalized, err := channelmonitor.ValidateMonitors(submitted, groupExists, modelInGroup)
+	groupRatio := ratio_setting.GetGroupRatioCopy()
+	groupModels := make(map[string][]string)
+
+	normalized, err := channelmonitor.ValidateMonitors(
+		submitted,
+		func(group string) bool {
+			_, exists := groupRatio[group]
+			return exists
+		},
+		func(group string, modelName string) bool {
+			models, cached := groupModels[group]
+			if !cached {
+				models = model.GetGroupEnabledModels(group)
+				groupModels[group] = models
+			}
+			return common.StringsContains(models, modelName)
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -164,26 +180,6 @@ func normalizeSubmittedMonitors(submitted []channelmonitor.Monitor) ([]channelmo
 		}
 	}
 	return normalized, nil
-}
-
-// groupModelValidators 返回「分组存在」与「模型在分组内可用」两个校验闭包，
-// 渠道监控与模型智商检查的管理端配置共用同一口径。分组模型列表在一次校验内缓存。
-func groupModelValidators() (func(string) bool, func(string, string) bool) {
-	groupRatio := ratio_setting.GetGroupRatioCopy()
-	groupModels := make(map[string][]string)
-	groupExists := func(group string) bool {
-		_, exists := groupRatio[group]
-		return exists
-	}
-	modelInGroup := func(group string, modelName string) bool {
-		models, cached := groupModels[group]
-		if !cached {
-			models = model.GetGroupEnabledModels(group)
-			groupModels[group] = models
-		}
-		return common.StringsContains(models, modelName)
-	}
-	return groupExists, modelInGroup
 }
 
 // GetGroupModels 返回某个分组下已启用的模型，供监控项表单联动使用。

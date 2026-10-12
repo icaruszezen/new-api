@@ -30,7 +30,6 @@ import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authentica
 import { Route as AuthenticatedSystemSettingsRouteRouteImport } from './routes/_authenticated/system-settings/route'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as ChannelMonitoringIndexRouteImport } from './routes/channel-monitoring/index'
-import { Route as IqCheckIndexRouteImport } from './routes/iq-check/index'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
 import { Route as PricingIndexRouteImport } from './routes/pricing/index'
 import { Route as RankingsIndexRouteImport } from './routes/rankings/index'
@@ -178,11 +177,6 @@ const AboutIndexRoute = AboutIndexRouteImport.update({
 const ChannelMonitoringIndexRoute = ChannelMonitoringIndexRouteImport.update({
   id: '/channel-monitoring/',
   path: '/channel-monitoring/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IqCheckIndexRoute = IqCheckIndexRouteImport.update({
-  id: '/iq-check/',
-  path: '/iq-check/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OauthProviderRoute = OauthProviderRouteImport.update({
@@ -462,7 +456,6 @@ export interface FileRoutesByFullPath {
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/channel-monitoring/': typeof ChannelMonitoringIndexRoute
-  '/iq-check/': typeof IqCheckIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
@@ -527,7 +520,6 @@ export interface FileRoutesByTo {
   '/oauth/$provider': typeof OauthProviderRoute
   '/about': typeof AboutIndexRoute
   '/channel-monitoring': typeof ChannelMonitoringIndexRoute
-  '/iq-check': typeof IqCheckIndexRoute
   '/pricing': typeof PricingIndexRoute
   '/rankings': typeof RankingsIndexRoute
   '/setup': typeof SetupIndexRoute
@@ -596,7 +588,6 @@ export interface FileRoutesById {
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/channel-monitoring/': typeof ChannelMonitoringIndexRoute
-  '/iq-check/': typeof IqCheckIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
@@ -664,7 +655,6 @@ export interface FileRouteTypes {
     | '/oauth/$provider'
     | '/about/'
     | '/channel-monitoring/'
-    | '/iq-check/'
     | '/pricing/'
     | '/rankings/'
     | '/setup/'
@@ -729,7 +719,6 @@ export interface FileRouteTypes {
     | '/oauth/$provider'
     | '/about'
     | '/channel-monitoring'
-    | '/iq-check'
     | '/pricing'
     | '/rankings'
     | '/setup'
@@ -797,7 +786,6 @@ export interface FileRouteTypes {
     | '/oauth/$provider'
     | '/about/'
     | '/channel-monitoring/'
-    | '/iq-check/'
     | '/pricing/'
     | '/rankings/'
     | '/setup/'
@@ -857,7 +845,6 @@ export interface RootRouteChildren {
   OauthProviderRoute: typeof OauthProviderRoute
   AboutIndexRoute: typeof AboutIndexRoute
   ChannelMonitoringIndexRoute: typeof ChannelMonitoringIndexRoute
-  IqCheckIndexRoute: typeof IqCheckIndexRoute
   PricingIndexRoute: typeof PricingIndexRoute
   RankingsIndexRoute: typeof RankingsIndexRoute
   SetupIndexRoute: typeof SetupIndexRoute
@@ -1011,13 +998,6 @@ declare module '@tanstack/react-router' {
       path: '/channel-monitoring'
       fullPath: '/channel-monitoring/'
       preLoaderRoute: typeof ChannelMonitoringIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/iq-check/': {
-      id: '/iq-check/'
-      path: '/iq-check'
-      fullPath: '/iq-check/'
-      preLoaderRoute: typeof IqCheckIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/oauth/$provider': {
@@ -1494,7 +1474,6 @@ const rootRouteChildren: RootRouteChildren = {
   OauthProviderRoute: OauthProviderRoute,
   AboutIndexRoute: AboutIndexRoute,
   ChannelMonitoringIndexRoute: ChannelMonitoringIndexRoute,
-  IqCheckIndexRoute: IqCheckIndexRoute,
   PricingIndexRoute: PricingIndexRoute,
   RankingsIndexRoute: RankingsIndexRoute,
   SetupIndexRoute: SetupIndexRoute,

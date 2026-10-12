@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { isIqCheckEntryUrl } from '@/features/iq-check/lib/entry-url'
 import { useStatus } from '@/hooks/use-status'
 import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 import { parseUiSkin } from '@/skins/registry'
@@ -100,10 +101,15 @@ export function useTopNavLinks(): TopNavLink[] {
     })
   }
 
-  // IQ check follows the same rule: next skin only, once an admin has
-  // published the page.
-  if (uiSkin === 'next' && status?.model_iq_check_enabled === true) {
-    links.push({ title: t('IQ Check'), href: '/iq-check' })
+  // IQ check follows the same rule: next skin only, once an admin has turned
+  // the entry on. It opens the external website that runs the check.
+  const iqCheckUrl = status?.model_iq_check_url
+  if (
+    uiSkin === 'next' &&
+    typeof iqCheckUrl === 'string' &&
+    isIqCheckEntryUrl(iqCheckUrl)
+  ) {
+    links.push({ title: t('IQ Check'), href: iqCheckUrl, external: true })
   }
 
   // Docs (supports external links)

@@ -15,7 +15,6 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	relaytypes "github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream"
 	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream/eventstreamapi"
@@ -190,66 +189,28 @@ func TestNewAwsInvokeContextInheritsParent(t *testing.T) {
 	})
 
 	tests := []struct {
-		name               string
-		relayTimeout       int
-		minUpstreamTimeout time.Duration
-		wantTimeout        time.Duration
+		name         string
+		relayTimeout int
+		wantDeadline bool
 	}{
-		{name: "without relay timeout", relayTimeout: 0, minUpstreamTimeout: 10 * time.Minute},
-		{name: "with relay timeout", relayTimeout: 30, wantTimeout: 30 * time.Second},
-		{name: "relay timeout raised to the request minimum", relayTimeout: 30, minUpstreamTimeout: 10 * time.Minute, wantTimeout: 10 * time.Minute},
-		{name: "longer relay timeout kept", relayTimeout: 1200, minUpstreamTimeout: 10 * time.Minute, wantTimeout: 20 * time.Minute},
+		{name: "without relay timeout", relayTimeout: 0, wantDeadline: false},
+		{name: "with relay timeout", relayTimeout: 30, wantDeadline: true},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			common.RelayTimeout = test.relayTimeout
-			info := &relaycommon.RelayInfo{MinUpstreamTimeout: test.minUpstreamTimeout}
 			parent, cancelParent := context.WithCancel(context.Background())
-			invokeContext, cancelInvoke := newAwsInvokeContext(parent, info)
+			invokeContext, cancelInvoke := newAwsInvokeContext(parent)
 			defer cancelInvoke()
 
-			deadline, hasDeadline := invokeContext.Deadline()
-			if test.wantTimeout == 0 {
-				assert.False(t, hasDeadline)
-			} else {
-				require.True(t, hasDeadline)
-				assert.InDelta(t, test.wantTimeout.Seconds(), time.Until(deadline).Seconds(), 5)
-			}
+			_, hasDeadline := invokeContext.Deadline()
+			assert.Equal(t, test.wantDeadline, hasDeadline)
 
 			cancelParent()
 			require.ErrorIs(t, invokeContext.Err(), context.Canceled)
 		})
 	}
-}
-
-// RELAY_TIMEOUT also bounds reading the Bedrock event stream, so a request with
-// a timeout floor needs a client raised to it, without touching the cached
-// client other channels share.
-func TestNewAwsClientRaisesRelayTimeoutOnACopy(t *testing.T) {
-	originalRelayTimeout := common.RelayTimeout
-	common.RelayTimeout = 30
-	// A non-default transport policy gets its own client built with the RELAY_TIMEOUT above.
-	service.ResetProxyClientCache()
-	t.Cleanup(func() {
-		common.RelayTimeout = originalRelayTimeout
-		service.ResetProxyClientCache()
-	})
-	settings := dto.ChannelSettings{HTTPProtocol: dto.HTTPProtocolHTTP1}
-	info := &relaycommon.RelayInfo{
-		MinUpstreamTimeout: 10 * time.Minute,
-		ChannelMeta:        &relaycommon.ChannelMeta{ApiKey: "ak|sk|us-east-1", ChannelSetting: settings},
-	}
-
-	client, err := newAwsClient(nil, info)
-	require.NoError(t, err)
-	httpClient, ok := client.Options().HTTPClient.(*http.Client)
-	require.True(t, ok)
-	assert.Equal(t, 10*time.Minute, httpClient.Timeout)
-
-	shared, err := service.GetHttpClientWithProxySettings("", settings)
-	require.NoError(t, err)
-	assert.Equal(t, 30*time.Second, shared.Timeout)
 }
 
 func TestNewAwsInvokeErrorSkipsRetryOnlyForClientCancellation(t *testing.T) {

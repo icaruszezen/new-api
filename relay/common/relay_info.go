@@ -152,9 +152,8 @@ type RelayInfo struct {
 	// SubscriptionAmountTotal / SubscriptionAmountUsedAfterPreConsume are used to compute remaining in logs.
 	SubscriptionAmountTotal               int64
 	SubscriptionAmountUsedAfterPreConsume int64
-	IsClaudeBetaQuery                     bool          // /v1/messages?beta=true
-	IsChannelTest                         bool          // channel test request
-	MinUpstreamTimeout                    time.Duration // >0 时 RELAY_TIMEOUT 与流式空闲超时都不早于它，见 UpstreamTimeout
+	IsClaudeBetaQuery                     bool // /v1/messages?beta=true
+	IsChannelTest                         bool // channel test request
 	RetryIndex                            int
 	LastError                             *types.NewAPIError
 	RuntimeHeadersOverride                map[string]interface{}
@@ -917,15 +916,6 @@ func (info *RelayInfo) ApplyResponsesClientDisconnectDrain() {
 		return
 	}
 	info.DrainUpstreamOnClientDisconnect = info.ChannelSetting.ResponsesClientDisconnectDrainEnabled
-}
-
-// UpstreamTimeout 返回本次请求实际生效的上游超时：timeout 不大于 0（不限）时保持原样，
-// 否则不短于 MinUpstreamTimeout。
-func (info *RelayInfo) UpstreamTimeout(timeout time.Duration) time.Duration {
-	if info == nil || timeout <= 0 || timeout >= info.MinUpstreamTimeout {
-		return timeout
-	}
-	return info.MinUpstreamTimeout
 }
 
 // shouldFakeStreamFirstResponseTime 判断是否对记录的首字时间进行伪造：

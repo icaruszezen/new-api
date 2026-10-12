@@ -18,46 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 
-import type {
-  IqCheckConfig,
-  IqCheckConfigUpdate,
-  IqCheckResult,
-  IqCheckStatus,
-} from './types'
+import type { IqCheckConfig } from './types'
 
 type ApiResponse<T> = {
   success: boolean
   message: string
   data: T
-}
-
-export async function getIqCheckStatus(): Promise<IqCheckStatus> {
-  const res = await api.get<ApiResponse<IqCheckStatus>>(
-    '/api/iq-check/status',
-    { skipErrorHandler: true }
-  )
-  return res.data.data
-}
-
-/**
- * Batch-loads run outputs. The backend omits ids that no longer exist or that
- * belong to a disabled check, so callers must not assume one result per id.
- */
-export async function getIqCheckResults(
-  ids: number[]
-): Promise<IqCheckResult[]> {
-  const res = await api.get<ApiResponse<IqCheckResult[] | null>>(
-    '/api/iq-check/results',
-    {
-      params: { ids: ids.join(',') },
-      skipBusinessError: true,
-      skipErrorHandler: true,
-    }
-  )
-  if (!res.data.success) {
-    throw new Error(res.data.message || 'Failed to load IQ check results')
-  }
-  return res.data.data ?? []
 }
 
 export async function getIqCheckConfig(): Promise<IqCheckConfig> {
@@ -66,22 +32,13 @@ export async function getIqCheckConfig(): Promise<IqCheckConfig> {
 }
 
 /**
- * Business errors are reported by the calling hook, so the global toast is
+ * Business errors are reported by the settings page, so the global toast is
  * suppressed to avoid showing the same message twice.
  */
-export async function updateIqCheckConfig(update: IqCheckConfigUpdate) {
+export async function updateIqCheckConfig(config: IqCheckConfig) {
   const res = await api.put<ApiResponse<IqCheckConfig>>(
     '/api/iq-check/config',
-    update,
-    { skipBusinessError: true }
-  )
-  return res.data
-}
-
-export async function runIqCheck(id: string) {
-  const res = await api.post<ApiResponse<null>>(
-    `/api/iq-check/${encodeURIComponent(id)}/run`,
-    undefined,
+    config,
     { skipBusinessError: true }
   )
   return res.data

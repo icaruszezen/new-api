@@ -57,7 +57,6 @@ describe('isAdminConsolePath', () => {
     '/playground',
     '/pricing',
     '/channel-monitoring',
-    '/iq-check',
     '/users-extra',
   ])('leaves shared or public path %s alone', (pathname) => {
     expect(isAdminConsolePath(pathname)).toBe(false)

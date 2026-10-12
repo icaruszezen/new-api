@@ -23,6 +23,7 @@ const ADMIN_CONSOLE_PATHS = [
   '/iq-check-settings',
   '/error-message-overrides',
   '/billing-corrections',
+  '/ticket-management',
   '/models',
   '/users',
   '/redemption-codes',

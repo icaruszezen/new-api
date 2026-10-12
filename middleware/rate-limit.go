@@ -253,6 +253,18 @@ func SearchRateLimit() func(c *gin.Context) {
 	return userRateLimitFactory(common.SearchRateLimitNum, common.SearchRateLimitDuration, "SR")
 }
 
+const (
+	ticketWriteRateLimitNum      = 20
+	ticketWriteRateLimitDuration = 600
+)
+
+// TicketWriteRateLimit limits ticket create / reply / close requests per user
+// (shared bucket, mark TK). It is always on because uploads are expensive to
+// decode and store. Must be used after UserAuth.
+func TicketWriteRateLimit() func(c *gin.Context) {
+	return userRateLimitFactory(ticketWriteRateLimitNum, ticketWriteRateLimitDuration, "TK")
+}
+
 const channelMonitoringStatusRateLimitMark = "CM"
 const channelMonitoringStatusUserRateLimitMark = "CMU"
 

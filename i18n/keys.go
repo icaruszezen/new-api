@@ -370,3 +370,29 @@ const (
 	MsgModelIQCheckURLInvalid  = "model_iq_check.url_invalid"
 	MsgModelIQCheckURLRequired = "model_iq_check.url_required"
 )
+
+// Ticket messages
+const (
+	MsgTicketNotFound                = "ticket.not_found"
+	MsgTicketSubjectRequired         = "ticket.subject_required"
+	MsgTicketSubjectTooLong          = "ticket.subject_too_long"
+	MsgTicketContentRequired         = "ticket.content_required"
+	MsgTicketContentTooLong          = "ticket.content_too_long"
+	MsgTicketClosed                  = "ticket.closed"
+	MsgTicketTooManyOpen             = "ticket.too_many_open"
+	MsgTicketTooManyImages           = "ticket.too_many_images"
+	MsgTicketImageTooLarge           = "ticket.image_too_large"
+	MsgTicketImageInvalidType        = "ticket.image_invalid_type"
+	MsgTicketImageInvalid            = "ticket.image_invalid"
+	MsgTicketImageDimensionsTooLarge = "ticket.image_dimensions_too_large"
+	MsgTicketDailyImageLimit         = "ticket.daily_image_limit"
+	MsgTicketMessageLimit            = "ticket.message_limit"
+	MsgTicketAttachmentLimit         = "ticket.attachment_limit"
+	MsgTicketRequestTooLarge         = "ticket.request_too_large"
+	MsgTicketInvalidStatus           = "ticket.invalid_status"
+	MsgTicketInvalidForm             = "ticket.invalid_form"
+	MsgTicketAttachmentNotFound      = "ticket.attachment_not_found"
+	MsgTicketImageTooComplex         = "ticket.image_too_complex"
+	MsgTicketImageBusy               = "ticket.image_busy"
+	MsgTicketRequestInProgress       = "ticket.request_in_progress"
+)

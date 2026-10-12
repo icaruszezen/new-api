@@ -57,6 +57,10 @@ vi.mock('../preview-banner', () => ({
   NextConsolePreviewBanner: () => <div data-testid='preview-banner' />,
 }))
 
+vi.mock('../components/ticket-fab', () => ({
+  NextTicketFab: () => <div data-testid='ticket-fab' />,
+}))
+
 vi.mock('../../use-user-console-preview', () => ({
   useUserConsolePreview: () => ({
     canPreview: false,
@@ -104,17 +108,16 @@ describe('next authenticated layout chrome', () => {
     '/usage-logs/drawing',
     '/usage-logs/task',
     '/first-token-errors',
-  ])(
-    'uses the standalone console shell on %s',
-    (pathname) => {
-      routerPathRef.location = pathname
-      routerPathRef.resolvedLocation = pathname
-      render(<NextAuthenticatedLayout />)
+    '/tickets',
+    '/tickets/42',
+  ])('uses the standalone console shell on %s', (pathname) => {
+    routerPathRef.location = pathname
+    routerPathRef.resolvedLocation = pathname
+    render(<NextAuthenticatedLayout />)
 
-      expect(screen.getByTestId('console-home-shell')).toBeInTheDocument()
-      expect(screen.queryByTestId('sidebar-shell')).toBeNull()
-    }
-  )
+    expect(screen.getByTestId('console-home-shell')).toBeInTheDocument()
+    expect(screen.queryByTestId('sidebar-shell')).toBeNull()
+  })
 
   test('keeps the sidebar shell on other console routes', () => {
     routerPathRef.location = '/dashboard/models'
@@ -124,6 +127,17 @@ describe('next authenticated layout chrome', () => {
     expect(screen.getByTestId('sidebar-shell')).toBeInTheDocument()
     expect(screen.queryByTestId('console-home-shell')).toBeNull()
   })
+
+  test.each(['/dashboard/overview', '/keys'])(
+    'mounts the support ticket button on %s',
+    (pathname) => {
+      routerPathRef.location = pathname
+      routerPathRef.resolvedLocation = pathname
+      render(<NextAuthenticatedLayout />)
+
+      expect(screen.getByTestId('ticket-fab')).toBeInTheDocument()
+    }
+  )
 
   test('keeps the standalone shell while the model square is still pending', () => {
     routerPathRef.location = '/pricing'

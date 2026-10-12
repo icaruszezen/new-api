@@ -24,6 +24,7 @@ import {
   FileText,
   FlaskConical,
   Gauge,
+  Headset,
   Key,
   LayoutDashboard,
   ListTodo,
@@ -172,6 +173,11 @@ export function useSidebarData(): SidebarData {
             title: t('Users'),
             url: '/users',
             icon: Users,
+          },
+          {
+            title: t('Ticket Management'),
+            url: '/ticket-management',
+            icon: Headset,
           },
           {
             title: t('Redemption Codes'),

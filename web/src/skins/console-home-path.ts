@@ -39,11 +39,16 @@ export function isNextFirstTokenErrorsPath(pathname: string): boolean {
   )
 }
 
+/** Support-ticket list and detail pages of the Next user console. */
+export function isNextTicketsPath(pathname: string): boolean {
+  return pathname === '/tickets' || pathname.startsWith('/tickets/')
+}
+
 /**
  * Authenticated routes that keep the Next standalone chrome (top bar, no
- * sidebar). The homepage, personal center, wallet, referral page, and usage
- * logs share this shell; other console pages stay on the classic sidebar
- * layout.
+ * sidebar). The homepage, personal center, wallet, referral page, usage
+ * logs, and support tickets share this shell; other console pages stay on
+ * the classic sidebar layout.
  */
 export function isNextStandaloneShellPath(pathname: string): boolean {
   return (
@@ -52,7 +57,8 @@ export function isNextStandaloneShellPath(pathname: string): boolean {
     pathname === '/wallet' ||
     pathname === '/invite' ||
     isNextUsageLogsPath(pathname) ||
-    isNextFirstTokenErrorsPath(pathname)
+    isNextFirstTokenErrorsPath(pathname) ||
+    isNextTicketsPath(pathname)
   )
 }
 
@@ -67,6 +73,7 @@ const NEXT_CONSOLE_PATH_PREFIXES = [
   '/invite',
   '/usage-logs',
   '/first-token-errors',
+  '/tickets',
   '/keys',
   '/playground',
   '/chat',
@@ -76,6 +83,7 @@ const NEXT_CONSOLE_PATH_PREFIXES = [
   '/iq-check-settings',
   '/error-message-overrides',
   '/billing-corrections',
+  '/ticket-management',
   '/models',
   '/users',
   '/redemption-codes',

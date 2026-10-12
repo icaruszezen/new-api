@@ -37,6 +37,9 @@ const apiMocks = vi.hoisted(() => ({
   getBillingCorrectionRecords: vi.fn(),
   markBillingCorrectionRecordsRefunded: vi.fn(),
   unmarkBillingCorrectionRecordsRefunded: vi.fn(),
+  creditBillingCorrectionRecords: vi.fn(),
+  checkBillingCorrectionRecordsUpstream: vi.fn(),
+  testBillingCorrectionUpstream: vi.fn(),
 }))
 
 vi.mock('../api', () => apiMocks)
@@ -51,11 +54,24 @@ function buildRule(
     channel_id: 5,
     prompt_tokens_threshold: 2_000_000,
     enabled: true,
+    upstream_check_enabled: false,
+    upstream_base_url: '',
+    upstream_user_id: 0,
+    upstream_access_token_set: false,
+    upstream_check_since: 0,
+    auto_refund: false,
     created_time: 0,
     updated_time: 0,
     channel_name: 'heartbeat-upstream',
     ...overrides,
   }
+}
+
+const NO_UPSTREAM_PAYLOAD = {
+  upstream_check_enabled: false,
+  upstream_base_url: '',
+  upstream_user_id: 0,
+  auto_refund: false,
 }
 
 function renderPage() {
@@ -163,6 +179,7 @@ describe('billing correction page', () => {
         channel_id: 5,
         prompt_tokens_threshold: 1_000_000,
         enabled: true,
+        ...NO_UPSTREAM_PAYLOAD,
       })
     })
   })
@@ -218,6 +235,7 @@ describe('billing correction page', () => {
       channel_id: 5,
       prompt_tokens_threshold: 2_000_000,
       enabled: true,
+      ...NO_UPSTREAM_PAYLOAD,
     })
     expect(
       screen.getByRole('heading', { name: 'Edit Correction Rule' })
@@ -318,11 +336,17 @@ describe('billing correction page', () => {
         stats: {
           charged_count: 0,
           charged_quota: 0,
+          rule_matched_count: 0,
+          rule_matched_quota: 0,
           pending_count: 0,
           pending_quota: 0,
           refunded_count: 0,
           refunded_quota: 0,
+          credited_count: 0,
+          credited_quota: 0,
           corrected_count: 0,
+          upstream_not_charged_count: 0,
+          upstream_not_charged_quota: 0,
         },
       },
     })
@@ -343,6 +367,124 @@ describe('billing correction page', () => {
     expect(
       screen.getByRole('button', { name: 'Mark all pending as refunded' })
     ).toBeDisabled()
+  })
+
+  test('shows whether each rule checks the upstream and returns quota automatically', async () => {
+    apiMocks.getBillingCorrectionRules.mockResolvedValue([
+      buildRule({ upstream_check_enabled: true, auto_refund: true }),
+    ])
+
+    renderPage()
+
+    expect(
+      await screen.findByText('On, returns quota automatically')
+    ).toBeInTheDocument()
+  })
+
+  test('turning on the upstream check asks for the user id and token, then saves them', async () => {
+    const user = userEvent.setup()
+    apiMocks.getBillingCorrectionRules.mockResolvedValue([buildRule()])
+    apiMocks.getChannelOptions.mockResolvedValue([
+      { id: 5, name: 'heartbeat-upstream' },
+    ])
+    apiMocks.updateBillingCorrectionRule.mockResolvedValue({
+      success: true,
+      message: '',
+      data: buildRule({ upstream_check_enabled: true }),
+    })
+
+    renderPage()
+    await screen.findByText('heartbeat-upstream')
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await waitFor(() => {
+      expect(screen.getByLabelText('Input token threshold')).toHaveValue(
+        2_000_000
+      )
+    })
+    expect(screen.queryByLabelText('Upstream user ID')).not.toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('switch', {
+        name: 'Check charges on the upstream new-api (experimental)',
+      })
+    )
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(
+      await screen.findByText('Enter the upstream user ID')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Enter the upstream access token')
+    ).toBeInTheDocument()
+    expect(apiMocks.updateBillingCorrectionRule).not.toHaveBeenCalled()
+
+    await user.type(screen.getByLabelText('Upstream user ID'), '9')
+    await user.type(
+      screen.getByLabelText('Upstream system access token'),
+      'secret-token'
+    )
+    await user.click(
+      screen.getByRole('switch', { name: 'Return quota automatically' })
+    )
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(apiMocks.updateBillingCorrectionRule).toHaveBeenCalledWith(1, {
+        channel_id: 5,
+        prompt_tokens_threshold: 2_000_000,
+        enabled: true,
+        upstream_check_enabled: true,
+        upstream_base_url: '',
+        upstream_user_id: 9,
+        upstream_access_token: 'secret-token',
+        auto_refund: true,
+      })
+    })
+  })
+
+  test('a saved access token can stay empty and is used to test the connection', async () => {
+    const user = userEvent.setup()
+    apiMocks.getBillingCorrectionRules.mockResolvedValue([
+      buildRule({
+        upstream_check_enabled: true,
+        upstream_user_id: 9,
+        upstream_access_token_set: true,
+      }),
+    ])
+    apiMocks.getChannelOptions.mockResolvedValue([
+      { id: 5, name: 'heartbeat-upstream' },
+    ])
+    apiMocks.testBillingCorrectionUpstream.mockResolvedValue({
+      success: true,
+      message: '',
+      data: { username: 'relay-bot' },
+    })
+
+    renderPage()
+    await screen.findByText('heartbeat-upstream')
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    const tokenInput = await screen.findByLabelText(
+      'Upstream system access token'
+    )
+    expect(tokenInput).toHaveValue('')
+    expect(tokenInput).toHaveAttribute(
+      'placeholder',
+      'Saved. Leave empty to keep it.'
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Test connection' }))
+
+    await waitFor(() => {
+      expect(apiMocks.testBillingCorrectionUpstream).toHaveBeenCalledWith({
+        rule_id: 1,
+        channel_id: 5,
+        upstream_base_url: '',
+        upstream_user_id: 9,
+        upstream_access_token: undefined,
+      })
+    })
+    expect(
+      await screen.findByText('Connected to the upstream as relay-bot')
+    ).toBeInTheDocument()
   })
 
   test('renders the Chinese page title when zh is active', async () => {

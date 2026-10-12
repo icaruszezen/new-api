@@ -32,9 +32,12 @@ import { getChannelLabel, isRecordSelectable } from '../lib/records'
 import type {
   BillingCorrectionRecord,
   BillingCorrectionRecordStatus,
+  BillingCorrectionUpstreamStatus,
 } from '../types'
 
 type RecordsTableProps = {
+  /** Shows the upstream result column when any rule checks the upstream. */
+  upstreamEnabled: boolean
   records: BillingCorrectionRecord[]
   selected: ReadonlyMap<string, BillingCorrectionRecord>
   onSelect: (records: BillingCorrectionRecord[], checked: boolean) => void
@@ -50,15 +53,39 @@ const STATUS_BADGE_VARIANTS: Record<
 > = {
   pending: 'warning',
   refunded: 'success',
+  credited: 'success',
   corrected: 'neutral',
+}
+
+const UPSTREAM_BADGE_VARIANTS: Record<
+  BillingCorrectionUpstreamStatus,
+  StatusVariant
+> = {
+  charged: 'neutral',
+  not_charged: 'warning',
+  not_found: 'neutral',
+  failed: 'danger',
+  unsupported: 'neutral',
+  unchecked: 'neutral',
+  unavailable: 'neutral',
 }
 
 export function RecordsTable(props: RecordsTableProps) {
   const { t } = useTranslation()
   const statusLabels: Record<BillingCorrectionRecordStatus, string> = {
     pending: t('Pending refund'),
-    refunded: t('Refunded'),
+    refunded: t('Marked as refunded'),
+    credited: t('Quota returned'),
     corrected: t('Corrected'),
+  }
+  const upstreamLabels: Record<BillingCorrectionUpstreamStatus, string> = {
+    charged: t('Upstream charged'),
+    not_charged: t('Upstream not charged'),
+    not_found: t('Not found upstream'),
+    failed: t('Upstream check failed'),
+    unsupported: t('Upstream unsupported'),
+    unchecked: t('Not checked'),
+    unavailable: t('Cannot check'),
   }
   const selectableRecords = props.records.filter(isRecordSelectable)
   const selectedOnPage = selectableRecords.filter((record) =>
@@ -155,19 +182,58 @@ export function RecordsTable(props: RecordsTableProps) {
             ),
           },
           {
+            id: 'match',
+            header: t('Condition'),
+            cell: (record) =>
+              record.match === 'rule'
+                ? t('Matches rule')
+                : t('Zero output only'),
+          },
+          {
             id: 'status',
             header: t('Status'),
             cell: (record) => (
               <StatusBadge
-                label={statusLabels[record.status]}
+                label={
+                  record.refund_kind === 'auto'
+                    ? t('Returned automatically')
+                    : statusLabels[record.status]
+                }
                 variant={STATUS_BADGE_VARIANTS[record.status]}
                 copyable={false}
               />
             ),
           },
+          ...(props.upstreamEnabled
+            ? [
+                {
+                  id: 'upstream',
+                  header: t('Upstream result'),
+                  cell: (record: BillingCorrectionRecord) => {
+                    if (!record.upstream_status) return '-'
+                    return (
+                      <div title={record.upstream_message || undefined}>
+                        <StatusBadge
+                          label={upstreamLabels[record.upstream_status]}
+                          variant={
+                            UPSTREAM_BADGE_VARIANTS[record.upstream_status]
+                          }
+                          copyable={false}
+                        />
+                        {record.upstream_status === 'charged' && (
+                          <div className='text-muted-foreground mt-1 text-xs tabular-nums'>
+                            {formatLogQuota(record.upstream_quota ?? 0)}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  },
+                },
+              ]
+            : []),
           {
             id: 'refunded_at',
-            header: t('Marked refunded at'),
+            header: t('Refunded at'),
             cellClassName: 'font-mono whitespace-nowrap',
             cell: (record) => formatTimestampToDate(record.refunded_at),
           },

@@ -25,6 +25,7 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
 	service.RegisterSystemTaskHandler(channelMonitorProbeHandler{})
+	service.RegisterSystemTaskHandler(billingCorrectionCheckHandler{})
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and
@@ -173,6 +174,29 @@ func (channelMonitorProbeHandler) NewPayload() any { return nil }
 
 func (channelMonitorProbeHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
 	summary, err := runChannelMonitorProbeTask(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
+	if err != nil {
+		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, nil, err)
+		return
+	}
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+}
+
+// billingCorrectionCheckHandler 到上游 new-api 核对计费修正监控渠道上的 0 输出扣费记录，
+// 规则开启自动返还时退回上游没有扣费的记录。没有规则配置上游核对时不建任务行。
+type billingCorrectionCheckHandler struct{}
+
+func (billingCorrectionCheckHandler) Type() string { return model.SystemTaskTypeBillingCorrectionCheck }
+
+func (billingCorrectionCheckHandler) Enabled() bool {
+	return service.HasBillingCorrectionUpstreamChecks()
+}
+
+func (billingCorrectionCheckHandler) Interval() time.Duration { return 5 * time.Minute }
+
+func (billingCorrectionCheckHandler) NewPayload() any { return nil }
+
+func (billingCorrectionCheckHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	summary, err := service.RunBillingCorrectionAutoCheck(ctx)
 	if err != nil {
 		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, nil, err)
 		return

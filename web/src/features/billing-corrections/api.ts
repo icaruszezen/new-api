@@ -21,12 +21,15 @@ import { api, type ApiRequestConfig } from '@/lib/api'
 
 import type {
   ApiResponse,
+  BillingCorrectionCreditResult,
   BillingCorrectionRecordPage,
   BillingCorrectionRecordQuery,
-  BillingCorrectionRefundPayload,
+  BillingCorrectionRecordsPayload,
   BillingCorrectionRefundResult,
   BillingCorrectionRule,
   BillingCorrectionRulePayload,
+  BillingCorrectionUpstreamCheckResult,
+  BillingCorrectionUpstreamTestPayload,
   ChannelOption,
 } from './types'
 
@@ -98,7 +101,7 @@ export async function getBillingCorrectionRecords(
 
 /** Only records the refund; it never changes any balance. */
 export async function markBillingCorrectionRecordsRefunded(
-  payload: BillingCorrectionRefundPayload
+  payload: BillingCorrectionRecordsPayload
 ) {
   const res = await api.post<ApiResponse<BillingCorrectionRefundResult>>(
     `${BASE_URL}/records/refund`,
@@ -114,6 +117,41 @@ export async function unmarkBillingCorrectionRecordsRefunded(
   const res = await api.post<ApiResponse<{ unmarked: number }>>(
     `${BASE_URL}/records/unrefund`,
     { request_ids: requestIds },
+    WRITE_REQUEST_CONFIG
+  )
+  return res.data
+}
+
+/** Returns the charged quota to each user's wallet; at most once per record. */
+export async function creditBillingCorrectionRecords(
+  payload: BillingCorrectionRecordsPayload
+) {
+  const res = await api.post<ApiResponse<BillingCorrectionCreditResult>>(
+    `${BASE_URL}/records/credit`,
+    payload,
+    WRITE_REQUEST_CONFIG
+  )
+  return res.data
+}
+
+/** Looks the records up upstream again; it never refunds anything. */
+export async function checkBillingCorrectionRecordsUpstream(
+  payload: BillingCorrectionRecordsPayload
+) {
+  const res = await api.post<ApiResponse<BillingCorrectionUpstreamCheckResult>>(
+    `${BASE_URL}/records/upstream-check`,
+    payload,
+    WRITE_REQUEST_CONFIG
+  )
+  return res.data
+}
+
+export async function testBillingCorrectionUpstream(
+  payload: BillingCorrectionUpstreamTestPayload
+) {
+  const res = await api.post<ApiResponse<{ username: string }>>(
+    `${BASE_URL}/upstream/test`,
+    payload,
     WRITE_REQUEST_CONFIG
   )
   return res.data

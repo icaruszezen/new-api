@@ -39,6 +39,12 @@ function buildRule(
     channel_id: 42,
     prompt_tokens_threshold: 2_000_000,
     enabled: false,
+    upstream_check_enabled: false,
+    upstream_base_url: '',
+    upstream_user_id: 0,
+    upstream_access_token_set: false,
+    upstream_check_since: 0,
+    auto_refund: false,
     created_time: 1_700_000_000,
     updated_time: 1_700_000_100,
     channel_name: 'azure-east',
@@ -53,16 +59,26 @@ function buildFormValues(
     channel_id: 42,
     prompt_tokens_threshold: DEFAULT_PROMPT_TOKENS_THRESHOLD,
     enabled: true,
+    upstream_check_enabled: false,
+    upstream_base_url: '',
+    upstream_user_id: '',
+    upstream_access_token: '',
+    auto_refund: false,
     ...overrides,
   }
 }
 
 describe('billing correction rule form defaults', () => {
-  test('a new rule starts with no channel, a 1,000,000 token threshold and enabled', () => {
+  test('a new rule starts with no channel, a 1,000,000 token threshold, enabled, and no upstream check', () => {
     expect(RULE_FORM_DEFAULT_VALUES).toEqual({
       channel_id: UNSELECTED_CHANNEL_ID,
       prompt_tokens_threshold: 1_000_000,
       enabled: true,
+      upstream_check_enabled: false,
+      upstream_base_url: '',
+      upstream_user_id: '',
+      upstream_access_token: '',
+      auto_refund: false,
     })
   })
 })
@@ -134,16 +150,90 @@ describe('billing correction rule form validation', () => {
   })
 })
 
+describe('billing correction upstream check validation', () => {
+  const upstream = {
+    upstream_check_enabled: true,
+    upstream_user_id: '9',
+    upstream_access_token: 'token',
+  }
+
+  test('hidden upstream fields are not validated while the check is off', () => {
+    const result = getRuleFormSchema(identityT).safeParse(
+      buildFormValues({ upstream_base_url: 'not a url', upstream_user_id: 'x' })
+    )
+
+    expect(result.success).toBe(true)
+  })
+
+  test.each([
+    {
+      name: 'a missing user id',
+      values: { ...upstream, upstream_user_id: '' },
+      path: 'upstream_user_id',
+      message: 'Enter the upstream user ID',
+    },
+    {
+      name: 'a user id of zero',
+      values: { ...upstream, upstream_user_id: '0' },
+      path: 'upstream_user_id',
+      message: 'Enter the upstream user ID',
+    },
+    {
+      name: 'a missing access token',
+      values: { ...upstream, upstream_access_token: ' ' },
+      path: 'upstream_access_token',
+      message: 'Enter the upstream access token',
+    },
+    {
+      name: 'an address without a scheme',
+      values: { ...upstream, upstream_base_url: 'relay.example.com' },
+      path: 'upstream_base_url',
+      message: 'Enter a full URL starting with http:// or https://',
+    },
+  ])('rejects $name once the check is on', (row) => {
+    const result = getRuleFormSchema(identityT).safeParse(
+      buildFormValues(row.values)
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.error?.issues[0]?.path).toEqual([row.path])
+    expect(result.error?.issues[0]?.message).toBe(row.message)
+  })
+
+  test('a saved access token lets the field stay empty', () => {
+    const result = getRuleFormSchema(identityT, {
+      upstreamTokenSaved: true,
+    }).safeParse(buildFormValues({ ...upstream, upstream_access_token: '' }))
+
+    expect(result.success).toBe(true)
+  })
+})
+
 describe('billing correction rule transforms', () => {
-  test('editing a rule loads its channel, threshold and enabled state', () => {
-    expect(transformRuleToFormValues(buildRule())).toEqual({
+  test('editing a rule loads its settings but never a saved access token', () => {
+    expect(
+      transformRuleToFormValues(
+        buildRule({
+          upstream_check_enabled: true,
+          upstream_base_url: 'https://relay.example.com',
+          upstream_user_id: 9,
+          upstream_access_token_set: true,
+          auto_refund: true,
+        })
+      )
+    ).toEqual({
       channel_id: 42,
       prompt_tokens_threshold: 2_000_000,
       enabled: false,
+      upstream_check_enabled: true,
+      upstream_base_url: 'https://relay.example.com',
+      upstream_user_id: '9',
+      upstream_access_token: '',
+      auto_refund: true,
     })
   })
 
-  test('the payload carries only the fields the API accepts', () => {
+  test('the payload carries only the fields the API accepts and leaves an empty token out', () => {
     const payload = transformFormValuesToPayload(
       buildFormValues({ channel_id: 9, prompt_tokens_threshold: 5_000_000 })
     )
@@ -152,6 +242,38 @@ describe('billing correction rule transforms', () => {
       channel_id: 9,
       prompt_tokens_threshold: 5_000_000,
       enabled: true,
+      upstream_check_enabled: false,
+      upstream_base_url: '',
+      upstream_user_id: 0,
+      auto_refund: false,
     })
+  })
+
+  test('the payload trims the upstream settings and sends a typed token', () => {
+    const payload = transformFormValuesToPayload(
+      buildFormValues({
+        upstream_check_enabled: true,
+        upstream_base_url: ' https://relay.example.com ',
+        upstream_user_id: ' 9 ',
+        upstream_access_token: ' token ',
+        auto_refund: true,
+      })
+    )
+
+    expect(payload).toMatchObject({
+      upstream_check_enabled: true,
+      upstream_base_url: 'https://relay.example.com',
+      upstream_user_id: 9,
+      upstream_access_token: 'token',
+      auto_refund: true,
+    })
+  })
+
+  test('turning the check off also turns automatic returns off', () => {
+    const payload = transformFormValuesToPayload(
+      buildFormValues({ upstream_check_enabled: false, auto_refund: true })
+    )
+
+    expect(payload.auto_refund).toBe(false)
   })
 })

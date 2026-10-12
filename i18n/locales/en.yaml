@@ -176,8 +176,12 @@ billing_correction.channel_id_invalid: "Invalid channel, please select again"
 billing_correction.channel_taken: "This channel already has a billing correction rule"
 billing_correction.threshold_invalid: "Input token threshold must be an integer between {{.Min}} and {{.Max}}"
 billing_correction.records_too_many: "More than {{.Limit}} records match. Narrow the time range or add filters"
-billing_correction.records_no_selection: "Select the records to mark"
+billing_correction.records_no_selection: "Select records first"
 billing_correction.records_selection_too_large: "At most {{.Limit}} records can be selected at once"
+billing_correction.upstream_user_id_invalid: "Enter the upstream new-api user ID (a positive integer)"
+billing_correction.upstream_token_invalid: "Enter the upstream new-api system access token (at most {{.Max}} characters)"
+billing_correction.upstream_base_url_invalid: "The upstream address must be a full URL starting with http:// or https://"
+billing_correction.upstream_test_failed: "Could not connect to the upstream: {{.Error}}"
 
 # Model messages
 model.name_empty: "Model name cannot be empty"

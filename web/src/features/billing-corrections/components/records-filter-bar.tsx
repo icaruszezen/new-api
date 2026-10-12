@@ -35,6 +35,8 @@ type RecordsFilterBarProps = {
   rules: BillingCorrectionRule[]
   filters: BillingCorrectionRecordFilters
   onApply: (filters: BillingCorrectionRecordFilters) => void
+  /** Shows the upstream result filter when any rule checks the upstream. */
+  upstreamEnabled: boolean
 }
 
 /** Edits a draft of the filters; nothing is queried until Search or Enter. */
@@ -120,13 +122,73 @@ export function RecordsFilterBar(props: RecordsFilterBarProps) {
         <NativeSelectOption value='pending'>
           {t('Pending refund')}
         </NativeSelectOption>
+        <NativeSelectOption value='credited'>
+          {t('Quota returned')}
+        </NativeSelectOption>
         <NativeSelectOption value='refunded'>
-          {t('Refunded')}
+          {t('Marked as refunded')}
         </NativeSelectOption>
         <NativeSelectOption value='corrected'>
           {t('Corrected')}
         </NativeSelectOption>
       </NativeSelect>
+      <NativeSelect
+        size='sm'
+        aria-label={t('Condition')}
+        value={draft.match}
+        onChange={(event) =>
+          updateDraft({
+            match: event.target
+              .value as BillingCorrectionRecordFilters['match'],
+          })
+        }
+      >
+        <NativeSelectOption value=''>{t('All conditions')}</NativeSelectOption>
+        <NativeSelectOption value='rule'>
+          {t('Matches rule')}
+        </NativeSelectOption>
+        <NativeSelectOption value='zero_output'>
+          {t('Zero output only')}
+        </NativeSelectOption>
+      </NativeSelect>
+      {props.upstreamEnabled && (
+        <NativeSelect
+          size='sm'
+          aria-label={t('Upstream result')}
+          value={draft.upstream}
+          onChange={(event) =>
+            updateDraft({
+              upstream: event.target
+                .value as BillingCorrectionRecordFilters['upstream'],
+            })
+          }
+        >
+          <NativeSelectOption value=''>
+            {t('All upstream results')}
+          </NativeSelectOption>
+          <NativeSelectOption value='not_charged'>
+            {t('Upstream not charged')}
+          </NativeSelectOption>
+          <NativeSelectOption value='charged'>
+            {t('Upstream charged')}
+          </NativeSelectOption>
+          <NativeSelectOption value='unchecked'>
+            {t('Not checked')}
+          </NativeSelectOption>
+          <NativeSelectOption value='not_found'>
+            {t('Not found upstream')}
+          </NativeSelectOption>
+          <NativeSelectOption value='failed'>
+            {t('Upstream check failed')}
+          </NativeSelectOption>
+          <NativeSelectOption value='unsupported'>
+            {t('Upstream unsupported')}
+          </NativeSelectOption>
+          <NativeSelectOption value='unavailable'>
+            {t('Cannot check')}
+          </NativeSelectOption>
+        </NativeSelect>
+      )}
       <Button size='sm' onClick={() => props.onApply(draft)}>
         <Search className='mr-1 h-4 w-4' />
         {t('Search')}

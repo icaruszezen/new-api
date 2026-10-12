@@ -177,8 +177,12 @@ billing_correction.channel_id_invalid: "渠道无效，请重新选择"
 billing_correction.channel_taken: "该渠道已存在计费修正规则"
 billing_correction.threshold_invalid: "输入 token 阈值必须是 {{.Min}} 到 {{.Max}} 之间的整数"
 billing_correction.records_too_many: "匹配的记录超过 {{.Limit}} 条，请缩小时间范围或增加筛选条件"
-billing_correction.records_no_selection: "请选择要标记的记录"
+billing_correction.records_no_selection: "请先选择记录"
 billing_correction.records_selection_too_large: "一次最多选择 {{.Limit}} 条记录"
+billing_correction.upstream_user_id_invalid: "请填写上游 new-api 的用户 ID（正整数）"
+billing_correction.upstream_token_invalid: "请填写上游 new-api 的系统访问令牌（不超过 {{.Max}} 个字符）"
+billing_correction.upstream_base_url_invalid: "上游地址必须是以 http:// 或 https:// 开头的完整地址"
+billing_correction.upstream_test_failed: "连接上游失败：{{.Error}}"
 
 # Model messages
 model.name_empty: "模型名称不能为空"

@@ -22,6 +22,17 @@ export type BillingCorrectionRule = {
   /** The rule fires only when prompt tokens are strictly greater than this. */
   prompt_tokens_threshold: number
   enabled: boolean
+  /** Experimental: look the request up in an upstream new-api's usage logs. */
+  upstream_check_enabled: boolean
+  /** Empty means the channel Base URL. */
+  upstream_base_url: string
+  upstream_user_id: number
+  /** The access token itself is never sent back, only whether one is saved. */
+  upstream_access_token_set: boolean
+  /** The background check only looks at requests made after this time. */
+  upstream_check_since: number
+  /** Return the quota when the background check finds no upstream charge. */
+  auto_refund: boolean
   created_time: number
   updated_time: number
   /** Empty or absent when the channel has been deleted. */
@@ -32,6 +43,21 @@ export type BillingCorrectionRulePayload = {
   channel_id: number
   prompt_tokens_threshold: number
   enabled: boolean
+  upstream_check_enabled: boolean
+  upstream_base_url: string
+  upstream_user_id: number
+  /** Left out to keep the saved token. */
+  upstream_access_token?: string
+  auto_refund: boolean
+}
+
+export type BillingCorrectionUpstreamTestPayload = {
+  /** Lets the server fall back to the saved token when none is typed. */
+  rule_id?: number
+  channel_id: number
+  upstream_base_url: string
+  upstream_user_id: number
+  upstream_access_token?: string
 }
 
 export type ApiResponse<T> = {
@@ -46,15 +72,42 @@ export type ChannelOption = {
 }
 
 /**
- * pending: charged and not yet marked as refunded.
+ * pending: charged and not yet refunded.
  * refunded: charged, and an admin marked it as refunded elsewhere.
+ * credited: charged, and the quota was returned to the user's balance.
  * corrected: a rule already waived the charge at settlement.
  */
-export type BillingCorrectionRecordStatus = 'pending' | 'refunded' | 'corrected'
+export type BillingCorrectionRecordStatus =
+  | 'pending'
+  | 'refunded'
+  | 'credited'
+  | 'corrected'
 
-/** A consume log that matches the large-context mis-billing conditions. */
+/**
+ * rule: above the threshold and billed on a local estimate.
+ * zero_output: charged with zero output, but the rule does not cover it.
+ */
+export type BillingCorrectionRecordMatch = 'rule' | 'zero_output'
+
+/**
+ * The upstream new-api check result. unchecked and unavailable are never
+ * stored: the first means not checked yet, the second that the log has no
+ * upstream request id.
+ */
+export type BillingCorrectionUpstreamStatus =
+  | 'charged'
+  | 'not_charged'
+  | 'not_found'
+  | 'failed'
+  | 'unsupported'
+  | 'unchecked'
+  | 'unavailable'
+
+export type BillingCorrectionRefundKind = 'mark' | 'credit' | 'auto'
+
+/** A zero-output text request on a channel with an enabled rule. */
 export type BillingCorrectionRecord = {
-  /** Empty only for legacy logs, which cannot be marked. */
+  /** Empty only for legacy logs, which cannot be selected. */
   request_id: string
   created_at: number
   user_id: number
@@ -70,19 +123,35 @@ export type BillingCorrectionRecord = {
   original_quota?: number
   use_time: number
   is_stream: boolean
+  match: BillingCorrectionRecordMatch
   status: BillingCorrectionRecordStatus
+  refund_kind?: BillingCorrectionRefundKind
   refunded_at?: number
   refund_operator_id?: number
+  upstream_request_id?: string
+  /** Absent when the channel has no upstream check and none was run. */
+  upstream_status?: BillingCorrectionUpstreamStatus
+  upstream_quota?: number
+  upstream_message?: string
+  upstream_checked_at?: number
 }
 
 export type BillingCorrectionRecordStats = {
+  /** Every charged record: pending + refunded (which includes credited). */
   charged_count: number
   charged_quota: number
+  rule_matched_count: number
+  rule_matched_quota: number
   pending_count: number
   pending_quota: number
   refunded_count: number
   refunded_quota: number
+  credited_count: number
+  credited_quota: number
   corrected_count: number
+  /** Pending records the upstream confirmed it did not charge. */
+  upstream_not_charged_count: number
+  upstream_not_charged_quota: number
 }
 
 export type BillingCorrectionRecordPage = {
@@ -104,6 +173,8 @@ export type BillingCorrectionRecordFilters = {
   /** Channel id as a string, empty for every channel with an enabled rule. */
   channel: string
   status: '' | BillingCorrectionRecordStatus
+  match: '' | BillingCorrectionRecordMatch
+  upstream: '' | BillingCorrectionUpstreamStatus
 }
 
 export type BillingCorrectionRecordQuery = {
@@ -116,10 +187,12 @@ export type BillingCorrectionRecordQuery = {
   model_name?: string
   channel?: number
   status?: BillingCorrectionRecordStatus
+  match?: BillingCorrectionRecordMatch
+  upstream?: BillingCorrectionUpstreamStatus
 }
 
 /** Either the selected request ids, or `all` with the current filters. */
-export type BillingCorrectionRefundPayload = {
+export type BillingCorrectionRecordsPayload = {
   request_ids?: string[]
   all?: boolean
   start_timestamp?: number
@@ -128,10 +201,33 @@ export type BillingCorrectionRefundPayload = {
   token_name?: string
   model_name?: string
   channel?: number
+  match?: BillingCorrectionRecordMatch
+  upstream?: BillingCorrectionUpstreamStatus
 }
 
 export type BillingCorrectionRefundResult = {
   marked: number
   quota: number
   skipped: number
+}
+
+export type BillingCorrectionCreditResult = {
+  credited: number
+  quota: number
+  /** Already refunded, or no request id. */
+  skipped: number
+  failed: number
+}
+
+export type BillingCorrectionUpstreamCheckResult = {
+  checked: number
+  charged: number
+  not_charged: number
+  not_found: number
+  failed: number
+  unsupported: number
+  /** Records that cannot be checked. */
+  skipped: number
+  /** Records left for the next run when checking every filtered record. */
+  remaining: number
 }

@@ -23,11 +23,14 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { api } from '@/lib/api'
 
 import {
+  checkBillingCorrectionRecordsUpstream,
   createBillingCorrectionRule,
+  creditBillingCorrectionRecords,
   deleteBillingCorrectionRule,
   getBillingCorrectionRecords,
   getBillingCorrectionRules,
   markBillingCorrectionRecordsRefunded,
+  testBillingCorrectionUpstream,
   unmarkBillingCorrectionRecordsRefunded,
   updateBillingCorrectionRule,
 } from '../api'
@@ -42,6 +45,10 @@ const PAYLOAD = {
   channel_id: 5,
   prompt_tokens_threshold: 1_000_000,
   enabled: true,
+  upstream_check_enabled: false,
+  upstream_base_url: '',
+  upstream_user_id: 0,
+  auto_refund: false,
 }
 
 const originalAdapter = api.defaults.adapter
@@ -121,6 +128,29 @@ describe('billing correction api', () => {
       send: () => unmarkBillingCorrectionRecordsRefunded(['r']),
       method: 'post',
       url: '/api/billing-correction/records/unrefund',
+    },
+    {
+      action: 'quota return',
+      send: () => creditBillingCorrectionRecords({ request_ids: ['r'] }),
+      method: 'post',
+      url: '/api/billing-correction/records/credit',
+    },
+    {
+      action: 'upstream re-check',
+      send: () => checkBillingCorrectionRecordsUpstream({ all: true }),
+      method: 'post',
+      url: '/api/billing-correction/records/upstream-check',
+    },
+    {
+      action: 'upstream connection test',
+      send: () =>
+        testBillingCorrectionUpstream({
+          channel_id: 5,
+          upstream_base_url: '',
+          upstream_user_id: 9,
+        }),
+      method: 'post',
+      url: '/api/billing-correction/upstream/test',
     },
   ])(
     'a rejected $action hands the server message to the page without a second global toast',

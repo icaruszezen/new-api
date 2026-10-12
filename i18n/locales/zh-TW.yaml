@@ -177,8 +177,12 @@ billing_correction.channel_id_invalid: "管道無效，請重新選擇"
 billing_correction.channel_taken: "該管道已存在計費修正規則"
 billing_correction.threshold_invalid: "輸入 token 閾值必須是 {{.Min}} 到 {{.Max}} 之間的整數"
 billing_correction.records_too_many: "符合的記錄超過 {{.Limit}} 筆，請縮小時間範圍或增加篩選條件"
-billing_correction.records_no_selection: "請選擇要標記的記錄"
+billing_correction.records_no_selection: "請先選擇記錄"
 billing_correction.records_selection_too_large: "一次最多選擇 {{.Limit}} 筆記錄"
+billing_correction.upstream_user_id_invalid: "請填寫上游 new-api 的使用者 ID（正整數）"
+billing_correction.upstream_token_invalid: "請填寫上游 new-api 的系統存取權杖（不超過 {{.Max}} 個字元）"
+billing_correction.upstream_base_url_invalid: "上游位址必須是以 http:// 或 https:// 開頭的完整位址"
+billing_correction.upstream_test_failed: "連線上游失敗：{{.Error}}"
 
 # Model messages
 model.name_empty: "模型名稱不能為空"

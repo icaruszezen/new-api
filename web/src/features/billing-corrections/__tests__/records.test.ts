@@ -19,14 +19,17 @@ For commercial licensing, please contact support@quantumnous.com
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import {
-  buildMarkAllPayload,
+  buildAllRecordsPayload,
   buildRecordQuery,
   getDefaultRecordFilters,
+  hasUpstreamCheck,
   isRecordSelectable,
+  isRecordUpstreamCheckable,
 } from '../lib/records'
 import type {
   BillingCorrectionRecord,
   BillingCorrectionRecordFilters,
+  BillingCorrectionRule,
 } from '../types'
 
 const START = new Date(2026, 9, 3, 0, 0, 0)
@@ -43,6 +46,8 @@ function buildFilters(
     model: '',
     channel: '',
     status: '',
+    match: '',
+    upstream: '',
     ...overrides,
   }
 }
@@ -64,6 +69,7 @@ function buildRecord(
     quota: 750_000,
     use_time: 30,
     is_stream: true,
+    match: 'rule',
     status: 'pending',
     ...overrides,
   }
@@ -83,6 +89,8 @@ describe('billing correction records filters', () => {
     expect(filters.start).toEqual(START)
     expect(filters.end).toEqual(END)
     expect(filters.status).toBe('')
+    expect(filters.match).toBe('')
+    expect(filters.upstream).toBe('')
   })
 
   test('the query sends the range in seconds and trims text filters', () => {
@@ -93,6 +101,8 @@ describe('billing correction records filters', () => {
         model: ' gpt-4o',
         channel: '7',
         status: 'pending',
+        match: 'zero_output',
+        upstream: 'not_charged',
       }),
       2,
       20
@@ -108,6 +118,8 @@ describe('billing correction records filters', () => {
       model_name: 'gpt-4o',
       channel: 7,
       status: 'pending',
+      match: 'zero_output',
+      upstream: 'not_charged',
     })
   })
 
@@ -130,9 +142,15 @@ describe('billing correction records filters', () => {
     }
   )
 
-  test('marking everything keeps the filters but drops the status filter', () => {
-    const payload = buildMarkAllPayload(
-      buildFilters({ username: 'alice', channel: '7', status: 'refunded' })
+  test('acting on every record keeps the condition and upstream filters but drops the status filter', () => {
+    const payload = buildAllRecordsPayload(
+      buildFilters({
+        username: 'alice',
+        channel: '7',
+        status: 'refunded',
+        match: 'zero_output',
+        upstream: 'not_charged',
+      })
     )
 
     expect(payload).toEqual({
@@ -141,6 +159,8 @@ describe('billing correction records filters', () => {
       end_timestamp: END.getTime() / 1000,
       username: 'alice',
       channel: 7,
+      match: 'zero_output',
+      upstream: 'not_charged',
     })
   })
 })
@@ -165,5 +185,67 @@ describe('billing correction record selection', () => {
     },
   ])('$name selectable: $selectable', (row) => {
     expect(isRecordSelectable(row.record)).toBe(row.selectable)
+  })
+})
+
+describe('billing correction upstream check', () => {
+  test.each([
+    {
+      name: 'a record not checked yet',
+      record: buildRecord({ upstream_status: 'unchecked' }),
+      checkable: true,
+    },
+    {
+      name: 'a record already checked',
+      record: buildRecord({ status: 'credited', upstream_status: 'charged' }),
+      checkable: true,
+    },
+    {
+      name: 'a record without an upstream request id',
+      record: buildRecord({ upstream_status: 'unavailable' }),
+      checkable: false,
+    },
+    {
+      name: 'a record on a channel without an upstream check',
+      record: buildRecord(),
+      checkable: false,
+    },
+    {
+      name: 'a corrected record',
+      record: buildRecord({
+        status: 'corrected',
+        upstream_status: 'unchecked',
+      }),
+      checkable: false,
+    },
+  ])('$name checkable: $checkable', (row) => {
+    expect(isRecordUpstreamCheckable(row.record)).toBe(row.checkable)
+  })
+
+  test('only an enabled rule with the upstream check turns the upstream tools on', () => {
+    const rule: BillingCorrectionRule = {
+      id: 1,
+      channel_id: 7,
+      prompt_tokens_threshold: 1_000_000,
+      enabled: true,
+      upstream_check_enabled: false,
+      upstream_base_url: '',
+      upstream_user_id: 0,
+      upstream_access_token_set: false,
+      upstream_check_since: 0,
+      auto_refund: false,
+      created_time: 0,
+      updated_time: 0,
+    }
+
+    expect(hasUpstreamCheck([rule])).toBe(false)
+    expect(
+      hasUpstreamCheck([
+        { ...rule, enabled: false, upstream_check_enabled: true },
+      ])
+    ).toBe(false)
+    expect(hasUpstreamCheck([{ ...rule, upstream_check_enabled: true }])).toBe(
+      true
+    )
   })
 })

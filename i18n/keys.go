@@ -207,6 +207,10 @@ const (
 	MsgBillingCorrectionRecordsTooMany           = "billing_correction.records_too_many"
 	MsgBillingCorrectionRecordsNoSelection       = "billing_correction.records_no_selection"
 	MsgBillingCorrectionRecordsSelectionTooLarge = "billing_correction.records_selection_too_large"
+	MsgBillingCorrectionUpstreamUserIdInvalid    = "billing_correction.upstream_user_id_invalid"
+	MsgBillingCorrectionUpstreamTokenInvalid     = "billing_correction.upstream_token_invalid"
+	MsgBillingCorrectionUpstreamBaseUrlInvalid   = "billing_correction.upstream_base_url_invalid"
+	MsgBillingCorrectionUpstreamTestFailed       = "billing_correction.upstream_test_failed"
 )
 
 // Model related messages

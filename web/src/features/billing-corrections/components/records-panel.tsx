@@ -27,6 +27,7 @@ import { getBillingCorrectionRecords } from '../api'
 import {
   buildRecordQuery,
   getDefaultRecordFilters,
+  hasUpstreamCheck,
   RECORDS_QUERY_KEY,
 } from '../lib/records'
 import type {
@@ -46,11 +47,12 @@ type RecordsPanelProps = {
 }
 
 /**
- * Finds charged requests that match the mis-billing conditions so an admin
- * can refund them by hand. Marking a record only records that refund.
+ * Lists zero-output charged requests on monitored channels so an admin can
+ * return the quota, mark an outside refund, or check the upstream charge.
  */
 export function RecordsPanel(props: RecordsPanelProps) {
   const { t } = useTranslation()
+  const upstreamEnabled = hasUpstreamCheck(props.rules)
   const [filters, setFilters] = useState(getDefaultRecordFilters)
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<
@@ -93,12 +95,16 @@ export function RecordsPanel(props: RecordsPanelProps) {
     <div className='space-y-4'>
       <Alert>
         <AlertDescription className='text-xs'>
-          {t(
-            'Lists requests on channels with an enabled rule whose input tokens are above the threshold, with zero output tokens and input estimated locally because the upstream returned no usage. The current thresholds also apply to requests made before a rule was enabled.'
-          )}{' '}
-          {t(
-            'Marking records as refunded only records it; refund the quota to users separately.'
-          )}
+          <span className='block'>
+            {t(
+              'Lists every charged text request with zero output tokens on channels with an enabled rule, including requests made before the rule was enabled. Records above the threshold that were billed on a local estimate match the rule; the rest only had zero output. Listing a record never changes its charge.'
+            )}
+          </span>
+          <span className='block'>
+            {t(
+              "Returning quota credits the charged amount back to the user's wallet. Marking records as refunded only records a refund made elsewhere."
+            )}
+          </span>
         </AlertDescription>
       </Alert>
 
@@ -106,6 +112,7 @@ export function RecordsPanel(props: RecordsPanelProps) {
         rules={props.rules}
         filters={filters}
         onApply={applyFilters}
+        upstreamEnabled={upstreamEnabled}
       />
 
       {response && !response.success && (
@@ -131,15 +138,20 @@ export function RecordsPanel(props: RecordsPanelProps) {
 
       {recordPage && (
         <>
-          <RecordsStats stats={recordPage.stats} />
+          <RecordsStats
+            stats={recordPage.stats}
+            upstreamEnabled={upstreamEnabled}
+          />
           <RecordsRefundActions
             filters={filters}
             stats={recordPage.stats}
             selected={selected}
             onClearSelection={() => setSelected(new Map())}
             statsOutdated={recordsQuery.isPlaceholderData}
+            upstreamEnabled={upstreamEnabled}
           />
           <RecordsTable
+            upstreamEnabled={upstreamEnabled}
             records={recordPage.items}
             selected={selected}
             onSelect={selectRecords}

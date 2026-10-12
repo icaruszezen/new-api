@@ -17,10 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { Dialog } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
@@ -36,18 +37,23 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { handleServerError } from '@/lib/handle-server-error'
 
-import { getChannelOptions } from '../api'
+import { getChannelOptions, testBillingCorrectionUpstream } from '../api'
 import {
   PROMPT_TOKENS_THRESHOLD_MAX,
   PROMPT_TOKENS_THRESHOLD_MIN,
   RULE_FORM_DEFAULT_VALUES,
   UNSELECTED_CHANNEL_ID,
   getRuleFormSchema,
+  transformFormValuesToPayload,
   transformRuleToFormValues,
   type RuleFormValues,
 } from '../lib/rule-form'
-import type { BillingCorrectionRule } from '../types'
+import type {
+  BillingCorrectionRule,
+  BillingCorrectionUpstreamTestPayload,
+} from '../types'
 
 const RULE_FORM_ID = 'billing-correction-rule-form'
 
@@ -63,10 +69,12 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
   const { t } = useTranslation()
   const isUpdate = props.rule !== null
 
+  const upstreamTokenSaved = props.rule?.upstream_access_token_set === true
   const form = useForm<RuleFormValues>({
-    resolver: zodResolver(getRuleFormSchema(t)),
+    resolver: zodResolver(getRuleFormSchema(t, { upstreamTokenSaved })),
     defaultValues: RULE_FORM_DEFAULT_VALUES,
   })
+  const upstreamCheckEnabled = form.watch('upstream_check_enabled')
 
   useEffect(() => {
     if (!props.open) return
@@ -82,6 +90,41 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
     queryFn: getChannelOptions,
     enabled: props.open,
   })
+
+  const testMutation = useMutation({
+    mutationFn: (payload: BillingCorrectionUpstreamTestPayload) =>
+      testBillingCorrectionUpstream(payload),
+    onSuccess: (response) => {
+      if (!response.success) {
+        toast.error(response.message || t('Connection failed'))
+        return
+      }
+      toast.success(
+        t('Connected to the upstream as {{username}}', {
+          username: response.data.username,
+        })
+      )
+    },
+    onError: handleServerError,
+  })
+
+  const testUpstream = async () => {
+    const valid = await form.trigger([
+      'channel_id',
+      'upstream_base_url',
+      'upstream_user_id',
+      'upstream_access_token',
+    ])
+    if (!valid) return
+    const payload = transformFormValuesToPayload(form.getValues())
+    testMutation.mutate({
+      rule_id: props.rule?.id,
+      channel_id: payload.channel_id,
+      upstream_base_url: payload.upstream_base_url,
+      upstream_user_id: payload.upstream_user_id,
+      upstream_access_token: payload.upstream_access_token,
+    })
+  }
 
   const channelComboboxOptions = useMemo(
     () =>
@@ -208,6 +251,136 @@ export function RuleEditorDialog(props: RuleEditorDialogProps) {
               </FormItem>
             )}
           />
+
+          <div className='space-y-4 rounded-lg border p-3'>
+            <FormField
+              control={form.control}
+              name='upstream_check_enabled'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-center justify-between gap-4'>
+                  <div className='space-y-1'>
+                    <FormLabel>
+                      {t(
+                        'Check charges on the upstream new-api (experimental)'
+                      )}
+                    </FormLabel>
+                    <FormDescription>
+                      {t(
+                        'For channels whose upstream is also new-api: looks up zero-output requests in the upstream usage logs by the upstream request ID to see whether the upstream charged them.'
+                      )}
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {upstreamCheckEnabled && (
+              <>
+                <FormField
+                  control={form.control}
+                  name='upstream_base_url'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Upstream address')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder='https://upstream.example.com'
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t('Leave empty to use the channel Base URL.')}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='upstream_user_id'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Upstream user ID')}</FormLabel>
+                      <FormControl>
+                        <Input inputMode='numeric' {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='upstream_access_token'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Upstream system access token')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type='password'
+                          autoComplete='off'
+                          placeholder={
+                            upstreamTokenSaved
+                              ? t('Saved. Leave empty to keep it.')
+                              : ''
+                          }
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t(
+                          "Generate it under personal settings on the upstream. It is used only to read that user's usage logs and is never shown again."
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  disabled={testMutation.isPending}
+                  onClick={() => void testUpstream()}
+                >
+                  {testMutation.isPending
+                    ? t('Testing...')
+                    : t('Test connection')}
+                </Button>
+
+                <FormField
+                  control={form.control}
+                  name='auto_refund'
+                  render={({ field }) => (
+                    <FormItem className='flex flex-row items-center justify-between gap-4'>
+                      <div className='space-y-1'>
+                        <FormLabel>{t('Return quota automatically')}</FormLabel>
+                        <FormDescription>
+                          {t(
+                            'Zero-output requests made after the check is turned on are checked in the background; when the upstream did not charge one, its quota goes straight back to the user. Records checked by hand are never refunded automatically.'
+                          )}
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </>
+            )}
+          </div>
         </form>
       </Form>
     </Dialog>

@@ -4,6 +4,7 @@ import com.newapi.admin.R
 import com.newapi.admin.core.format.QuotaFormatter
 import com.newapi.admin.core.model.QuotaMode
 import com.newapi.admin.ui.common.UiMessage
+import java.text.DecimalFormatSymbols
 
 /** The amount typed into the adjust-balance dialog, converted to raw quota units and checked. */
 sealed interface BalanceInput {
@@ -22,7 +23,11 @@ sealed interface BalanceInput {
          * floor) but not past the negative bound; "set to" accepts 0 up to the maximum.
          */
         fun parse(text: String, mode: QuotaMode, currentQuota: Long, formatter: QuotaFormatter): BalanceInput {
-            val normalized = text.trim().replace(',', '.')
+            // A comma is the decimal mark only where the locale writes it that way (and no '.' is typed);
+            // elsewhere it is a grouping separator, so "1,000" is rejected instead of read as 1.
+            val trimmed = text.trim()
+            val decimalComma = DecimalFormatSymbols.getInstance().decimalSeparator == ','
+            val normalized = if (decimalComma && '.' !in trimmed) trimmed.replace(',', '.') else trimmed
             if (normalized.isEmpty()) return Empty
             val amount = normalized.toDoubleOrNull()?.takeIf { it.isFinite() }
                 ?: return Invalid(UiMessage.Res(R.string.users_quota_error_invalid))

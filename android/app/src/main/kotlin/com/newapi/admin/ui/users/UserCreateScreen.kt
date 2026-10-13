@@ -1,5 +1,6 @@
 package com.newapi.admin.ui.users
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -32,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -41,6 +43,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.newapi.admin.LocalAppContainer
@@ -49,6 +53,7 @@ import com.newapi.admin.core.model.Roles
 import com.newapi.admin.ui.common.errorMessage
 import com.newapi.admin.ui.common.text
 import com.newapi.admin.ui.components.rememberCurrentUser
+import kotlinx.coroutines.flow.first
 
 /** New user form: username, password, optional display name, and (for root) the admin role. */
 @Composable
@@ -61,8 +66,17 @@ fun UserCreateScreen(onBack: () -> Unit, onCreated: () -> Unit) {
     val enabled = !state.isSubmitting && !state.created
     val transformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation()
 
+    // Leaving mid-request would cancel it client-side while the server may still create the user, and the
+    // list would never hear of it; stay until the answer arrives.
+    BackHandler(enabled = state.isSubmitting) {}
+
+    // A pop is ignored unless this entry is RESUMED (for example while the app is paused), so wait for it.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val currentOnCreated by rememberUpdatedState(onCreated)
     LaunchedEffect(state.created) {
-        if (state.created) onCreated()
+        if (!state.created) return@LaunchedEffect
+        lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+        currentOnCreated()
     }
 
     Scaffold(
@@ -70,7 +84,7 @@ fun UserCreateScreen(onBack: () -> Unit, onCreated: () -> Unit) {
             TopAppBar(
                 title = { Text(stringResource(R.string.users_add)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBack, enabled = !state.isSubmitting) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },

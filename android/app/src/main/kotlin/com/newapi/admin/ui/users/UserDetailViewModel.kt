@@ -9,13 +9,17 @@ import com.newapi.admin.AppContainer
 import com.newapi.admin.R
 import com.newapi.admin.core.model.AdminUser
 import com.newapi.admin.core.model.QuotaMode
+import com.newapi.admin.core.model.Roles
 import com.newapi.admin.core.model.UserAction
 import com.newapi.admin.core.model.UserUpdate
 import com.newapi.admin.core.net.ApiError
 import com.newapi.admin.ui.common.UiMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -80,7 +84,7 @@ class UserDetailViewModel(private val container: AppContainer, private val userI
         mutableState.update { it.copy(isLoading = it.user == null, loadError = null) }
         loadJob = viewModelScope.launch {
             try {
-                val user = api.user(userId)
+                val user = fetchUser()
                 mutableState.update { it.copy(user = user, isLoading = false, loadError = null) }
             } catch (e: CancellationException) {
                 throw e
@@ -99,7 +103,7 @@ class UserDetailViewModel(private val container: AppContainer, private val userI
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             try {
-                val user = api.user(userId)
+                val user = fetchUser()
                 mutableState.update { it.copy(user = user, isRefreshing = false) }
             } catch (e: CancellationException) {
                 throw e
@@ -216,11 +220,14 @@ class UserDetailViewModel(private val container: AppContainer, private val userI
             UserOperation.DISABLE -> manage(operation, UserAction.DISABLE, R.string.users_msg_disabled)
             UserOperation.PROMOTE -> manage(operation, UserAction.PROMOTE, R.string.users_msg_promoted)
             UserOperation.DEMOTE -> manage(operation, UserAction.DEMOTE, R.string.users_msg_demoted)
+            // The server's success text is hard-coded Chinese; ours follows the app language.
             UserOperation.RESET_2FA -> mutate(operation) {
-                serverMessage(api.resetUserTwoFactor(userId), R.string.users_msg_2fa_reset)
+                api.resetUserTwoFactor(userId)
+                UiMessage.Res(R.string.users_msg_2fa_reset)
             }
             UserOperation.RESET_PASSKEY -> mutate(operation) {
-                serverMessage(api.resetUserPasskey(userId), R.string.users_msg_passkey_reset)
+                api.resetUserPasskey(userId)
+                UiMessage.Res(R.string.users_msg_passkey_reset)
             }
             UserOperation.DELETE -> delete()
             UserOperation.ADJUST_QUOTA, UserOperation.EDIT_PROFILE, UserOperation.CHANGE_PASSWORD -> Unit
@@ -238,7 +245,7 @@ class UserDetailViewModel(private val container: AppContainer, private val userI
         viewModelScope.launch {
             try {
                 api.deleteUser(userId)
-                container.events.notifyUsersChanged()
+                container.events.notifyUsersChanged(userId)
                 mutableState.update { it.copy(running = null, deleted = true) }
             } catch (e: CancellationException) {
                 throw e
@@ -250,7 +257,7 @@ class UserDetailViewModel(private val container: AppContainer, private val userI
     }
 
     /**
-     * Runs one mutation, then closes the open form, tells the list to refresh, shows [block]'s message
+     * Runs one mutation, then closes the open form, tells the list to update the row, shows [block]'s message
      * and reloads the user. Failures go inline into the open form, or to the snackbar for plain actions.
      */
     private fun mutate(operation: UserOperation, block: suspend () -> UiMessage) {
@@ -259,7 +266,7 @@ class UserDetailViewModel(private val container: AppContainer, private val userI
         viewModelScope.launch {
             try {
                 val message = block()
-                container.events.notifyUsersChanged()
+                container.events.notifyUsersChanged(userId)
                 mutableState.update { it.copy(running = null, dialog = null, dialogError = null, passwordErrors = emptyMap()) }
                 messageChannel.send(message)
             } catch (e: CancellationException) {
@@ -276,13 +283,38 @@ class UserDetailViewModel(private val container: AppContainer, private val userI
 
     private suspend fun reloadAfterChange() {
         try {
-            val user = api.user(userId)
+            val user = fetchUser()
             mutableState.update { it.copy(user = user) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
             // A revoked own session signs the app out; there is nothing left to report on this screen.
             if (e !is ApiError.Unauthorized) messageChannel.send(UiMessage.Error(e))
+        }
+    }
+
+    /**
+     * `GET /api/user/{id}`, or the user's search row when GET refuses it with a business error. GET skips
+     * soft-deleted users and, for a non-root caller, equal or higher roles, but the list shows both; their
+     * row (without `admin_permissions`) renders read-only. A numeric keyword also matches names and emails
+     * containing those digits, so each search is narrowed to deleted users or to one role that GET refuses,
+     * which keeps the row on the first page even for low ids such as root's #1. Nothing found keeps GET's error.
+     */
+    private suspend fun fetchUser(): AdminUser {
+        try {
+            return api.user(userId)
+        } catch (e: ApiError.Business) {
+            val myRole = container.currentUser.value?.role ?: Roles.GUEST
+            val refusedRoles = if (myRole >= Roles.ROOT) emptyList() else listOf(Roles.ADMIN, Roles.ROOT).filter { it >= myRole }
+            val keyword = userId.toString()
+            val rows = coroutineScope {
+                val deleted = async { api.users(page = 1, pageSize = LOOKUP_PAGE_SIZE, keyword = keyword, status = STATUS_DELETED) }
+                val byRole = refusedRoles.map { role ->
+                    async { api.users(page = 1, pageSize = LOOKUP_PAGE_SIZE, keyword = keyword, role = role) }
+                }
+                (listOf(deleted) + byRole).awaitAll().flatMap { it.items.orEmpty() }
+            }
+            return rows.firstOrNull { it.id == userId } ?: throw e
         }
     }
 
@@ -293,8 +325,7 @@ class UserDetailViewModel(private val container: AppContainer, private val userI
     }
 
     private companion object {
-        /** The reset endpoints answer with a (Chinese, hard-coded) message; fall back to ours when empty. */
-        fun serverMessage(message: String, fallback: Int): UiMessage.Res =
-            if (message.isBlank()) UiMessage.Res(fallback) else UiMessage.Res(R.string.users_server_message, listOf(message))
+        /** The largest page the server and `AdminApi` serve. */
+        const val LOOKUP_PAGE_SIZE = 100
     }
 }

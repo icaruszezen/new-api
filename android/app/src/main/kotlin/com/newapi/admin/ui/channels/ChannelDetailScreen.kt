@@ -66,6 +66,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.newapi.admin.LocalAppContainer
@@ -74,7 +76,6 @@ import com.newapi.admin.core.format.Formats
 import com.newapi.admin.core.format.QuotaFormatter
 import com.newapi.admin.core.model.Channel
 import com.newapi.admin.core.model.ChannelStatus
-import com.newapi.admin.core.model.ChannelTypes
 import com.newapi.admin.ui.common.errorMessage
 import com.newapi.admin.ui.components.ConfirmDialog
 import com.newapi.admin.ui.components.FullScreenError
@@ -84,6 +85,7 @@ import com.newapi.admin.ui.components.SectionCard
 import com.newapi.admin.ui.components.rememberQuotaFormatter
 import com.newapi.admin.ui.theme.Tone
 import com.newapi.admin.ui.theme.colors
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 
@@ -108,8 +110,12 @@ fun ChannelDetailScreen(channelId: Int, onBack: () -> Unit, onEdit: (Int) -> Uni
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
 
     ChannelMessagesEffect(viewModel.messages, snackbarHostState)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(state.deleted) {
-        if (state.deleted) onBack()
+        if (!state.deleted) return@LaunchedEffect
+        // Deleted while the admin was on another screen: popping is ignored until the entry is RESUMED again.
+        lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+        onBack()
     }
 
     val channel = state.channel
@@ -229,7 +235,7 @@ private fun ChannelHeader(channel: Channel) {
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "#${channel.id} · ${ChannelTypes.nameOf(channel.type)}",
+                "#${channel.id} · ${channelTypeLabel(channel.type)}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -306,7 +312,7 @@ private fun ChannelActions(
 private fun BasicSection(channel: Channel) {
     SectionCard(stringResource(R.string.channels_section_basic)) {
         InfoRow(stringResource(R.string.channels_label_id), channel.id.toString(), copyable = true)
-        InfoRow(stringResource(R.string.channels_label_type), ChannelTypes.nameOf(channel.type))
+        InfoRow(stringResource(R.string.channels_label_type), channelTypeLabel(channel.type))
         val baseUrl = channel.baseUrl?.trim().orEmpty()
         if (baseUrl.isEmpty()) {
             InfoRow(stringResource(R.string.channels_label_base_url), stringResource(R.string.channels_base_url_default))

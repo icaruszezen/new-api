@@ -80,6 +80,23 @@ internal fun balanceTone(usd: Double): Tone = when {
     else -> Tone.Success
 }
 
+/** Type label as the web shows it: the labels its locales translate are string resources, the other (brand) names stay as in [ChannelTypes]. */
+@Composable
+internal fun channelTypeLabel(type: Int): String = when (type) {
+    0 -> stringResource(R.string.common_unknown)
+    8 -> stringResource(R.string.channels_type_name_custom)
+    15 -> stringResource(R.string.channels_type_name_baidu)
+    16 -> stringResource(R.string.channels_type_name_zhipu)
+    17 -> stringResource(R.string.channels_type_name_ali)
+    18 -> stringResource(R.string.channels_type_name_xunfei)
+    23 -> stringResource(R.string.channels_type_name_tencent)
+    26 -> stringResource(R.string.channels_type_name_zhipu_v4)
+    45 -> stringResource(R.string.channels_type_name_volcengine)
+    46 -> stringResource(R.string.channels_type_name_baidu_v2)
+    58 -> stringResource(R.string.channels_type_name_advanced_custom)
+    else -> ChannelTypes.nameOf(type)
+}
+
 @Composable
 internal fun responseTimeText(ms: Int): String = when {
     ms <= 0 -> stringResource(R.string.channels_not_tested)

@@ -57,9 +57,10 @@ class ChannelDetailViewModel(private val container: AppContainer, private val ch
 
     init {
         load(showIndicator = false)
-        // Mutations here and on the edit screen announce themselves; reload quietly to pick them up.
+        // Mutations here and on the edit screen announce themselves; reload quietly to pick up this channel's.
         viewModelScope.launch {
-            container.events.channelsChanged.collect {
+            container.events.channelsChanged.collect { id ->
+                if (id != null && id != channelId) return@collect
                 if (!mutableState.value.deleted) load(showIndicator = false)
             }
         }
@@ -94,8 +95,8 @@ class ChannelDetailViewModel(private val container: AppContainer, private val ch
                 val status = if (enabled) ChannelStatus.ENABLED else ChannelStatus.MANUALLY_DISABLED
                 mutableState.update { it.copy(channel = it.channel?.copy(status = status)) }
                 messageChannel.send(UiMessage.Res(if (enabled) R.string.channels_enabled_message else R.string.channels_disabled_message))
-                // Reloads this screen (status reason and time) and the list.
-                container.events.notifyChannelsChanged()
+                // Reloads this screen (status reason and time) and the list row.
+                container.events.notifyChannelsChanged(channelId)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -120,7 +121,7 @@ class ChannelDetailViewModel(private val container: AppContainer, private val ch
                     val text = container.quotaFormatter.value.formatUsd(balance)
                     messageChannel.send(UiMessage.Res(R.string.channels_balance_updated, listOf(text)))
                 }
-                container.events.notifyChannelsChanged()
+                container.events.notifyChannelsChanged(channelId)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -140,7 +141,7 @@ class ChannelDetailViewModel(private val container: AppContainer, private val ch
                 val result = api.testChannel(channelId, model)
                 mutableTest.value = ChannelTestRun(result = result)
                 // Only a successful single test updates response_time and test_time.
-                if (result.success) container.events.notifyChannelsChanged()
+                if (result.success) container.events.notifyChannelsChanged(channelId)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -164,7 +165,7 @@ class ChannelDetailViewModel(private val container: AppContainer, private val ch
             try {
                 api.deleteChannel(channelId)
                 mutableState.update { it.copy(deleted = true) }
-                container.events.notifyChannelsChanged()
+                container.events.notifyChannelsChanged(channelId)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {

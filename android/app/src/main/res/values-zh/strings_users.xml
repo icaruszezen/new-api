@@ -116,7 +116,6 @@
     <string name="users_msg_password_changed">密码已修改</string>
     <string name="users_msg_2fa_reset">两因素认证已重置</string>
     <string name="users_msg_passkey_reset">Passkey 已重置</string>
-    <string name="users_server_message">%1$s</string>
 
     <!-- Adjust balance -->
     <string name="users_quota_mode_add">添加</string>

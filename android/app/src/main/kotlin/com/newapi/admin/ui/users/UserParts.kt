@@ -35,8 +35,11 @@ internal val PASSWORD_LENGTH = 8..20
 /** `common.MaxWalletQuota` (2^53-1): the largest balance `/api/user/manage add_quota` accepts. */
 internal const val MAX_WALLET_QUOTA = 9_007_199_254_740_991L
 
-/** `PUT /api/user/` silently treats this exact password as "unchanged". */
-private const val UNCHANGED_PASSWORD_SENTINEL = "\$I_LOVE_U"
+/** `PUT /api/user/` (and the own-password update) silently treat this exact password as "unchanged". */
+internal const val UNCHANGED_PASSWORD_SENTINEL = "\$I_LOVE_U"
+
+/** Status filter value for soft-deleted users (`/api/user/search?status=-1`). */
+internal const val STATUS_DELETED = -1
 
 internal fun String.runeCount(): Int = codePointCount(0, length)
 

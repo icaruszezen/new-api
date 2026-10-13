@@ -144,4 +144,15 @@
     <string name="channels_discard_title">Discard changes?</string>
     <string name="channels_discard_message">You have unsaved changes. Leave without saving?</string>
     <string name="channels_discard_confirm">Discard</string>
+    <!-- Channel type labels the web translates (other types keep their brand names) -->
+    <string name="channels_type_name_custom">Custom</string>
+    <string name="channels_type_name_baidu">Baidu</string>
+    <string name="channels_type_name_zhipu">Zhipu</string>
+    <string name="channels_type_name_ali">Ali</string>
+    <string name="channels_type_name_xunfei">Xunfei</string>
+    <string name="channels_type_name_tencent">Tencent</string>
+    <string name="channels_type_name_zhipu_v4">Zhipu V4</string>
+    <string name="channels_type_name_volcengine">VolcEngine</string>
+    <string name="channels_type_name_baidu_v2">Baidu V2</string>
+    <string name="channels_type_name_advanced_custom">Advanced Custom</string>
 </resources>

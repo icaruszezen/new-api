@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.newapi.admin.AppContainer
 import com.newapi.admin.core.model.AdminUser
+import com.newapi.admin.core.net.ApiError
 import com.newapi.admin.ui.common.PageResult
 import com.newapi.admin.ui.common.Pager
 import com.newapi.admin.ui.common.PagedState
@@ -68,8 +69,29 @@ class UsersViewModel(private val container: AppContainer) : ViewModel() {
     init {
         pager.refresh()
         loadGroups()
+        // A created user (null) reloads from the top. A changed or deleted one is patched in place, so the
+        // list keeps its rows and scroll position when the admin comes back from the detail screen.
         viewModelScope.launch {
-            container.events.usersChanged.collect { pager.refresh() }
+            container.events.usersChanged.collect { id ->
+                if (id == null) {
+                    pager.refresh()
+                    return@collect
+                }
+                val fresh = try {
+                    api.user(id)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: ApiError.Business) {
+                    // GET answers "record not found": the user was deleted.
+                    null
+                } catch (e: Throwable) {
+                    // Keep the old row; the next refresh corrects it.
+                    return@collect
+                }
+                pager.updateItems { items ->
+                    if (fresh == null) items.filter { it.id != id } else items.map { if (it.id == id) fresh else it }
+                }
+            }
         }
         // A failed reload while rows are shown keeps the rows; report it once.
         viewModelScope.launch {
@@ -85,15 +107,23 @@ class UsersViewModel(private val container: AppContainer) : ViewModel() {
         query = value
     }
 
-    /** Applies the search box; searching the same keyword again simply reloads. */
+    /**
+     * Applies the search box; searching the same keyword again simply reloads. A new keyword drops the
+     * old rows first, so a failure shows full screen instead of leaving them under the new search.
+     */
     fun search() {
-        mutableFilters.update { it.copy(keyword = query.trim()) }
-        pager.refresh()
+        val filters = mutableFilters.value.copy(keyword = query.trim())
+        if (filters == mutableFilters.value) return pager.refresh()
+        mutableFilters.value = filters
+        pager.reset()
     }
 
+    /** Like [search]: unchanged filters reload, new ones drop the old rows first. */
     fun applyFilters(role: Int?, status: Int?, group: String) {
-        mutableFilters.update { it.copy(role = role, status = status, group = group) }
-        pager.refresh()
+        val filters = mutableFilters.value.copy(role = role, status = status, group = group)
+        if (filters == mutableFilters.value) return pager.refresh()
+        mutableFilters.value = filters
+        pager.reset()
     }
 
     fun refresh() = pager.refresh()

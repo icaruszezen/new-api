@@ -200,11 +200,12 @@ fun ChannelsScreen(onOpenChannel: (Int) -> Unit, onCreateChannel: () -> Unit) {
                             )
                         }
                         item(key = "footer") {
+                            // A failed refresh keeps the old rows; offer the retry here too (paging waits for it).
                             ListFooter(
                                 isLoadingMore = state.isLoadingMore,
-                                error = state.loadMoreError,
+                                error = state.loadMoreError ?: error,
                                 endReached = state.endReached,
-                                onRetry = viewModel::loadMore,
+                                onRetry = if (state.loadMoreError != null) viewModel::loadMore else viewModel::refresh,
                             )
                         }
                     }
@@ -260,7 +261,7 @@ private fun ChannelRow(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
-                        "#${channel.id} · ${ChannelTypes.nameOf(channel.type)}",
+                        "#${channel.id} · ${channelTypeLabel(channel.type)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -382,7 +383,7 @@ private fun ActiveFilters(filters: ChannelQuery, onChange: (ChannelQuery) -> Uni
             RemovableChip(stringResource(label)) { onChange(filters.copy(status = ChannelStatusFilter.ALL)) }
         }
         filters.type?.let { type ->
-            RemovableChip(ChannelTypes.nameOf(type)) { onChange(filters.copy(type = null)) }
+            RemovableChip(channelTypeLabel(type)) { onChange(filters.copy(type = null)) }
         }
         if (filters.group.isNotEmpty()) {
             RemovableChip(stringResource(R.string.channels_filter_chip_group, filters.group)) { onChange(filters.copy(group = "")) }
@@ -425,16 +426,14 @@ private fun ChannelFilterSheet(
     var group by rememberSaveable { mutableStateOf(filters.group) }
     var model by rememberSaveable { mutableStateOf(filters.model) }
 
-    // With counts: only types that have channels (hidden legacy types included), most used first.
-    val typeOptions: List<Pair<Int, Long?>> = remember(typeCounts) {
-        typeCounts
-            ?.mapNotNull { (key, count) -> key.toIntOrNull()?.takeIf { count > 0 }?.let { it to count } }
-            ?.sortedWith(compareByDescending<Pair<Int, Long>> { it.second }.thenBy { ChannelTypes.nameOf(it.first) })
-            ?: ChannelTypes.selectable.map { it.id to null }
-    }
+    // With counts: only types that have channels (hidden legacy types included), most used first, then by label.
+    val typeOptions: List<Triple<Int, String, Long?>> = typeCounts
+        ?.mapNotNull { (key, count) -> key.toIntOrNull()?.takeIf { count > 0 }?.let { Triple(it, channelTypeLabel(it), count) } }
+        ?.sortedWith(compareByDescending<Triple<Int, String, Long>> { it.third }.thenBy { it.second })
+        ?: ChannelTypes.selectable.map { Triple(it.id, channelTypeLabel(it.id), null) }
     val selectedType = type
     val shownTypes = if (selectedType != null && typeOptions.none { it.first == selectedType }) {
-        listOf(selectedType to typeCounts?.let { 0L }) + typeOptions
+        listOf(Triple(selectedType, channelTypeLabel(selectedType), typeCounts?.let { 0L })) + typeOptions
     } else {
         typeOptions
     }
@@ -469,8 +468,7 @@ private fun ChannelFilterSheet(
                     onClick = { type = null },
                     label = { Text(stringResource(R.string.channels_filter_all_types)) },
                 )
-                shownTypes.forEach { (id, count) ->
-                    val name = ChannelTypes.nameOf(id)
+                shownTypes.forEach { (id, name, count) ->
                     FilterChip(
                         selected = type == id,
                         onClick = { type = id },

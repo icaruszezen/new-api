@@ -28,6 +28,9 @@ import kotlinx.coroutines.channels.Channel as MessageChannel
 /** Channel type the server requires base_url for (`validateChannel`). */
 private const val TYPE_NEW_API = 60
 
+/** Channel type whose key `validateChannel` checks as OAuth JSON, but only when the body carries the type. */
+private const val TYPE_CODEX = 57
+
 /** `group` is a varchar(64) column. */
 private const val MAX_GROUP_LENGTH = 64
 
@@ -261,7 +264,8 @@ class ChannelEditViewModel(private val container: AppContainer, private val chan
                 } else {
                     api.updateChannel(patch)
                 }
-                container.events.notifyChannelsChanged()
+                // A create has no id yet: the list reloads from the top.
+                container.events.notifyChannelsChanged(id)
                 mutableState.update { it.copy(isSaving = false, saved = true) }
             } catch (e: CancellationException) {
                 throw e
@@ -356,7 +360,8 @@ private fun changedFields(id: Int, form: ChannelForm, baseline: ChannelForm): Ch
         testModel = form.testModel.trim().takeIf { it != baseline.testModel.trim() },
         modelMapping = form.modelMapping.trim().takeIf { it != baseline.modelMapping.trim() },
         autoBan = form.autoBan.takeIf { it != baseline.autoBan },
-        type = form.type.takeIf { typeChanged },
+        // An unchanged type is not a sensitive change, and a Codex key is only validated with the type in the body.
+        type = form.type.takeIf { typeChanged || (form.type == TYPE_CODEX && form.key.isNotBlank()) },
         key = form.key.trim().takeIf { it.isNotEmpty() },
         // The server validates type 60 against the request body alone, so a switch to it carries the URL.
         baseUrl = baseUrl.takeIf { it != baseline.baseUrl.trim() || (typeChanged && form.type == TYPE_NEW_API) },

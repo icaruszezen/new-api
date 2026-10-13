@@ -9,17 +9,19 @@ import okhttp3.Response
 /**
  * Adds `Authorization: Bearer <token>` from [AuthManager.accessTokenForRequest]. On a 401 it asks
  * [AuthManager.tokenAfterUnauthorized] for a fresh token and replays the request once; a second 401
- * signs out via [AuthManager.signOutExpired]. Transient refresh failures surface as IOException.
+ * signs out via [AuthManager.signOutExpired] unless the account has moved on meanwhile. Transient
+ * refresh failures surface as IOException.
  *
- * Requests to `/api/user/auth/...`, `/api/user/login...` and `/api/status`, and requests that already
- * carry an `Authorization` header, pass through untouched.
+ * Requests to `/api/user/auth/...`, `/api/user/login...` and `/api/status`, requests that already carry
+ * an `Authorization` header, and requests whose URL is not under the signed-in server (built before the
+ * account changed, then queued) pass through untouched.
  */
 class AuthInterceptor(private val auth: AuthManager) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         if (request.header("Authorization") != null || isAuthExempt(request)) return chain.proceed(request)
 
-        val token = guarded { auth.accessTokenForRequest() } ?: return chain.proceed(request)
+        val token = guarded { auth.accessTokenForRequest(request.url) } ?: return chain.proceed(request)
         val response = chain.proceed(request.withBearer(token))
         if (response.code != 401) return response
 
@@ -28,9 +30,9 @@ class AuthInterceptor(private val auth: AuthManager) : Interceptor {
         val unauthorized = response.newBuilder().body(unauthorizedBody).build()
         response.close()
 
-        val fresh = guarded { auth.tokenAfterUnauthorized(token) } ?: return unauthorized
+        val fresh = guarded { auth.tokenAfterUnauthorized(request.url, token) } ?: return unauthorized
         val replay = chain.proceed(request.withBearer(fresh))
-        if (replay.code == 401) guarded { auth.signOutExpired() }
+        if (replay.code == 401) guarded { auth.signOutExpired(fresh) }
         return replay
     }
 

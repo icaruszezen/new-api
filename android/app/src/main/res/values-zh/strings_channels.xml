@@ -142,4 +142,15 @@
     <string name="channels_discard_title">放弃更改？</string>
     <string name="channels_discard_message">您有未保存的更改。确定要离开吗？</string>
     <string name="channels_discard_confirm">放弃</string>
+    <!-- 渠道类型名称（与网页翻译一致，其余类型保留品牌名） -->
+    <string name="channels_type_name_custom">自定义</string>
+    <string name="channels_type_name_baidu">百度</string>
+    <string name="channels_type_name_zhipu">智谱</string>
+    <string name="channels_type_name_ali">阿里百炼</string>
+    <string name="channels_type_name_xunfei">讯飞</string>
+    <string name="channels_type_name_tencent">腾讯</string>
+    <string name="channels_type_name_zhipu_v4">智谱 V4</string>
+    <string name="channels_type_name_volcengine">火山方舟</string>
+    <string name="channels_type_name_baidu_v2">百度 V2</string>
+    <string name="channels_type_name_advanced_custom">高级自定义</string>
 </resources>

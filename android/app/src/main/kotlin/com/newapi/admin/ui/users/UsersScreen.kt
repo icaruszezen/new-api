@@ -82,9 +82,6 @@ import com.newapi.admin.ui.components.StatusPill
 import com.newapi.admin.ui.components.rememberQuotaFormatter
 import com.newapi.admin.ui.theme.Tone
 
-/** Status filter value for soft-deleted users (`/api/user/search?status=-1`). */
-private const val STATUS_DELETED = -1
-
 private val ROLE_FILTERS = listOf(Roles.COMMON, Roles.ADMIN, Roles.ROOT)
 private val STATUS_FILTERS = listOf(UserStatus.ENABLED, UserStatus.DISABLED, STATUS_DELETED)
 
@@ -114,6 +111,15 @@ fun UsersScreen(onOpenUser: (Int) -> Unit, onCreateUser: () -> Unit) {
         }
     }
 
+    // A new search or filter starts at the top; pull-to-refresh, paging and row updates keep the position.
+    val search = {
+        viewModel.search()
+        listState.requestScrollToItem(0)
+    }
+    val applyFilters: (Int?, Int?, String) -> Unit = { role, status, group ->
+        viewModel.applyFilters(role, status, group)
+        listState.requestScrollToItem(0)
+    }
     LoadMoreEffect(listState, onLoadMore = viewModel::loadMore)
 
     Scaffold(
@@ -146,12 +152,12 @@ fun UsersScreen(onOpenUser: (Int) -> Unit, onCreateUser: () -> Unit) {
             SearchField(
                 query = viewModel.query,
                 onQueryChange = viewModel::onQueryChange,
-                onSearch = viewModel::search,
+                onSearch = search,
                 placeholder = stringResource(R.string.users_search_placeholder),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
             if (filters.hasColumnFilters) {
-                ActiveFilters(filters, onChange = viewModel::applyFilters)
+                ActiveFilters(filters, onChange = applyFilters)
             }
             PullToRefreshBox(
                 isRefreshing = state.isRefreshing,
@@ -191,11 +197,12 @@ fun UsersScreen(onOpenUser: (Int) -> Unit, onCreateUser: () -> Unit) {
                             UserRow(user, formatter, onClick = { onOpenUser(user.id) })
                         }
                         item(key = "footer") {
+                            // A failed refresh keeps the old rows; offer the retry here too (paging waits for it).
                             ListFooter(
                                 isLoadingMore = state.isLoadingMore,
-                                error = state.loadMoreError,
+                                error = state.loadMoreError ?: error,
                                 endReached = state.endReached,
-                                onRetry = viewModel::loadMore,
+                                onRetry = if (state.loadMoreError != null) viewModel::loadMore else viewModel::refresh,
                             )
                         }
                     }
@@ -211,7 +218,7 @@ fun UsersScreen(onOpenUser: (Int) -> Unit, onCreateUser: () -> Unit) {
             onRetryGroups = viewModel::loadGroups,
             onApply = { role, status, group ->
                 showFilters = false
-                viewModel.applyFilters(role, status, group)
+                applyFilters(role, status, group)
             },
             onDismiss = { showFilters = false },
         )

@@ -3,6 +3,7 @@ package com.newapi.admin.core.auth
 import com.newapi.admin.core.ServerUrl
 import com.newapi.admin.core.model.Roles
 import com.newapi.admin.core.net.ApiError
+import com.newapi.admin.core.net.AuthInterceptor
 import com.newapi.admin.core.net.NewApiClient
 import com.newapi.admin.core.net.RefreshFailedException
 import com.newapi.admin.core.testing.FakeServer
@@ -17,6 +18,7 @@ import com.newapi.admin.core.testing.sessionBundleResponse
 import com.newapi.admin.core.testing.statusResponse
 import com.newapi.admin.core.testing.storeWith
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -24,7 +26,10 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -308,11 +313,36 @@ class AuthManagerTest {
         // (Coroutine stack-trace recovery may wrap the original exception, so walk the cause chain.)
         val refreshFailure = generateSequence(error.cause) { it.cause }.filterIsInstance<RefreshFailedException>().first()
         assertEquals(503, refreshFailure.status)
-        assertThrows(IOException::class.java) { client.auth.accessTokenForRequest() }
+        assertThrows(IOException::class.java) { client.auth.accessTokenForRequest(AuthManager.endpoint(base, "/api/group/")) }
 
         assertEquals(AuthState.SignedIn(account), client.auth.state.value)
         assertEquals(account, store.load())
         assertTrue(server.requestsTo("/api/group/").isEmpty())
+    }
+
+    @Test
+    fun refreshWhoseResponseIsLostIsRetriedWithTheSameTokenAndTheSessionSurvives() = runBlocking {
+        val store = storeWith(sessionAccount(base, expiresAtMillis = clock() - 1_000))
+        val refreshes = AtomicInteger()
+        server.handler = { request ->
+            when (request.path) {
+                // The server rotated but the response never arrived. Re-presenting the old token inside the
+                // 30 s replay window returns the same rotation; presenting it later would revoke the session.
+                "/api/user/auth/refresh" ->
+                    if (refreshes.incrementAndGet() == 1) MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST)
+                    else sessionBundleResponse("access-new", "sid-1.secret-new")
+                "/api/group/" -> if (request.header("Authorization") == "Bearer access-new") groupsOk() else authError(401, "AUTH_TOKEN_EXPIRED")
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        val client = client(store)
+        client.auth.sleeper = { clock.advance(it) }
+
+        assertEquals(listOf("default", "vip"), client.admin.groups())
+
+        assertEquals(List(2) { "new_api_refresh=sid-1.secret-old" }, server.requestsTo("/api/user/auth/refresh").map { it.header("Cookie") })
+        assertEquals("sid-1.secret-new", (store.load()!!.credentials as Credentials.Session).refreshToken)
+        assertTrue(client.auth.state.value is AuthState.SignedIn)
     }
 
     @Test
@@ -386,6 +416,58 @@ class AuthManagerTest {
 
         assertEquals(listOf("sid-stale", null), server.requestsTo("/api/user/auth/refresh").map { it.header("X-Auth-Session") })
         assertEquals("sid-1", (store.load()!!.credentials as Credentials.Session).sessionId)
+    }
+
+    // ---- Account binding ----
+
+    @Test
+    fun requestsNotUnderTheSignedInServerGetNoTokenAndTheir401DoesNotSignOut() {
+        val previous = FakeServer()
+        try {
+            val store = storeWith(sessionAccount("$base/newapi", expiresAtMillis = clock() + 600_000))
+            server.handler = { request -> if (request.path == "/newapi/api/group/") groupsOk() else authError(401, "AUTH_UNAUTHORIZED") }
+            previous.handler = { authError(401, "AUTH_UNAUTHORIZED") }
+            val auth = AuthManager(store, OkHttpClient(), clock)
+            val http = OkHttpClient.Builder().addInterceptor(AuthInterceptor(auth)).build()
+
+            // Queued before the admin signed in to this server: another port, a sibling path, the host root.
+            for (url in listOf("${previous.baseUrl}/newapi/api/group/", "$base/newapi2/api/group/", "$base/api/group/", "$base/newapi/api/group/")) {
+                http.newCall(Request.Builder().url(url).build()).execute().close()
+            }
+
+            assertEquals(listOf<String?>(null), previous.requests.map { it.header("Authorization") })
+            assertEquals(
+                listOf("/newapi2/api/group/ null", "/api/group/ null", "/newapi/api/group/ Bearer access-old"),
+                server.requests.map { "${it.path} ${it.header("Authorization")}" },
+            )
+            assertTrue(auth.state.value is AuthState.SignedIn)
+        } finally {
+            previous.close()
+        }
+    }
+
+    @Test
+    fun unauthorizedReplayDoesNotSignOutANewerSignIn() {
+        val store = storeWith(sessionAccount(base, expiresAtMillis = clock() + 600_000))
+        val client = client(store)
+        server.handler = { request ->
+            val bearer = request.header("Authorization")
+            when {
+                request.path == "/api/user/auth/refresh" -> sessionBundleResponse("access-new", "sid-1.secret-new")
+                request.path == "/api/user/self" && bearer == "Bearer pat-2" -> selfResponse()
+                request.path == "/api/group/" && bearer == "Bearer access-new" -> {
+                    // The admin signs in again while the replay is in flight, so this 401 is about a token that is gone.
+                    runBlocking { client.auth.loginWithAccessToken(base, "pat-2") }
+                    authError(401, "AUTH_SESSION_REVOKED")
+                }
+                else -> authError(401, "AUTH_SESSION_REVOKED")
+            }
+        }
+
+        assertThrows(ApiError.Unauthorized::class.java) { runBlocking { client.admin.groups() } }
+
+        assertEquals(Credentials.AccessToken("pat-2"), store.load()!!.credentials)
+        assertEquals(Credentials.AccessToken("pat-2"), (client.auth.state.value as AuthState.SignedIn).account.credentials)
     }
 
     // ---- Logout, password, profile ----

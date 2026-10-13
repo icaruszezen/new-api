@@ -125,7 +125,10 @@ fun ChannelEditScreen(channelId: Int?, onBack: () -> Unit, onSaved: () -> Unit) 
     }
 
     ChannelMessagesEffect(viewModel.messages, snackbarHostState)
-    BackHandler(enabled = guardBack) { confirmDiscard = true }
+    // Leaving during a save would cancel it before the change is announced, although the server may apply it.
+    BackHandler(enabled = guardBack || state.isSaving) {
+        if (!state.isSaving) confirmDiscard = true
+    }
     LaunchedEffect(state.saved) {
         if (state.saved) onSaved()
     }
@@ -136,7 +139,7 @@ fun ChannelEditScreen(channelId: Int?, onBack: () -> Unit, onSaved: () -> Unit) 
             TopAppBar(
                 title = { Text(stringResource(if (viewModel.isCreate) R.string.channels_create_title else R.string.channels_edit_title)) },
                 navigationIcon = {
-                    IconButton(onClick = requestBack) {
+                    IconButton(onClick = requestBack, enabled = !state.isSaving) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
@@ -245,7 +248,7 @@ private fun ChannelFormFields(
         // Type: a read-only field that opens the searchable picker.
         Box {
             OutlinedTextField(
-                value = "${ChannelTypes.nameOf(form.type)} (#${form.type})",
+                value = "${channelTypeLabel(form.type)} (#${form.type})",
                 onValueChange = {},
                 readOnly = true,
                 enabled = sensitiveEditable,
@@ -561,15 +564,19 @@ private fun SwitchRow(label: String, hint: String?, checked: Boolean, enabled: B
 private fun ChannelTypeSheet(selected: Int, onSelect: (Int) -> Unit, onDismiss: () -> Unit) {
     var search by rememberSaveable { mutableStateOf("") }
     // A channel of a type the picker hides keeps its type selectable.
-    val options = remember(selected) {
-        val selectable = ChannelTypes.selectable
-        if (selectable.any { it.id == selected }) selectable else listOf(ChannelType(selected, ChannelTypes.nameOf(selected))) + selectable
-    }
+    val selectableIds = ChannelTypes.selectable.map { it.id }
+    val optionIds = if (selected in selectableIds) selectableIds else listOf(selected) + selectableIds
+    val options = optionIds.map { ChannelType(it, channelTypeLabel(it)) }
     val keyword = search.trim()
     val shown = if (keyword.isEmpty()) {
         options
     } else {
-        options.filter { it.name.contains(keyword, ignoreCase = true) || it.id.toString() == keyword }
+        // The English name also matches, so "baidu" finds 百度.
+        options.filter {
+            it.name.contains(keyword, ignoreCase = true) ||
+                ChannelTypes.nameOf(it.id).contains(keyword, ignoreCase = true) ||
+                it.id.toString() == keyword
+        }
     }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Text(

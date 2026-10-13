@@ -11,6 +11,7 @@ import com.newapi.admin.core.auth.AuthState
 import com.newapi.admin.core.auth.StoredAccount
 import com.newapi.admin.core.net.ApiError
 import com.newapi.admin.ui.common.UiMessage
+import com.newapi.admin.ui.users.UNCHANGED_PASSWORD_SENTINEL
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -114,6 +115,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
             when {
                 replacement.isEmpty() -> put(PasswordField.NEW, R.string.common_required)
                 length !in 8..20 -> put(PasswordField.NEW, R.string.settings_password_length)
+                replacement == UNCHANGED_PASSWORD_SENTINEL -> put(PasswordField.NEW, R.string.users_password_reserved)
                 replacement == original -> put(PasswordField.NEW, R.string.settings_password_same)
             }
             if (confirmPassword != replacement) put(PasswordField.CONFIRM, R.string.settings_password_mismatch)

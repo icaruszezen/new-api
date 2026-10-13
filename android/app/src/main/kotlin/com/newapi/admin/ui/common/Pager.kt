@@ -107,9 +107,12 @@ class Pager<T>(
         }
     }
 
-    /** Applies a local edit (for example after toggling a channel) without reloading. */
+    /** Applies a local edit (for example after toggling a channel) without reloading; removed rows also leave [PagedState.total]. */
     fun updateItems(transform: (List<T>) -> List<T>) {
-        mutableState.update { it.copy(items = transform(it.items)) }
+        mutableState.update {
+            val items = transform(it.items)
+            it.copy(items = items, total = (it.total + items.size - it.items.size).coerceAtLeast(items.size.toLong()))
+        }
     }
 
     private fun isEnd(result: PageResult<T>, loaded: Int): Boolean =

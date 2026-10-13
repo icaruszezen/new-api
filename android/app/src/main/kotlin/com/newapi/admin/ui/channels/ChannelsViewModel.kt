@@ -11,6 +11,7 @@ import com.newapi.admin.core.model.Channel
 import com.newapi.admin.core.model.ChannelQuery
 import com.newapi.admin.core.model.ChannelStatus
 import com.newapi.admin.core.model.ChannelStatusFilter
+import com.newapi.admin.core.net.ApiError
 import com.newapi.admin.ui.common.PageResult
 import com.newapi.admin.ui.common.PagedState
 import com.newapi.admin.ui.common.Pager
@@ -71,8 +72,26 @@ class ChannelsViewModel(private val container: AppContainer) : ViewModel() {
 
     init {
         pager.refresh()
+        // A changed or deleted channel is patched in place so the scroll position survives; null (a create) reloads from the top.
         viewModelScope.launch {
-            container.events.channelsChanged.collect { pager.refresh() }
+            container.events.channelsChanged.collect { id ->
+                if (id == null) {
+                    pager.refresh()
+                    return@collect
+                }
+                if (pager.state.value.items.none { it.id == id }) return@collect
+                try {
+                    val fresh = api.channel(id)
+                    pager.updateItems { items -> items.map { if (it.id == id) fresh else it } }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: ApiError.Business) {
+                    // The server answers a deleted channel with success:false (record not found).
+                    pager.updateItems { items -> items.filter { it.id != id } }
+                } catch (e: Throwable) {
+                    // Keep the row as it was; the next refresh corrects it.
+                }
+            }
         }
         // A failed reload while rows are shown keeps the rows; report it once.
         viewModelScope.launch {
@@ -90,12 +109,12 @@ class ChannelsViewModel(private val container: AppContainer) : ViewModel() {
 
     fun search() {
         mutableFilters.update { it.copy(keyword = query.trim()) }
-        pager.refresh()
+        pager.reset()
     }
 
     fun applyFilters(filters: ChannelQuery) {
         mutableFilters.value = filters.copy(keyword = mutableFilters.value.keyword)
-        pager.refresh()
+        pager.reset()
     }
 
     fun refresh() = pager.refresh()

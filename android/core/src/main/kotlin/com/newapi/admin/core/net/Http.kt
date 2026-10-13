@@ -155,16 +155,27 @@ private fun Response.toResult(receivedAt: Long): HttpResult = use {
     HttpResult(code, headers, body?.string().orEmpty(), receivedAt)
 }
 
+/**
+ * OkHttp silently sends a request again when its connection fails, even after the request was written.
+ * Only reads may be repeated: the server may already have applied a write (add_quota, create, delete,
+ * login), so a write fails with the connection error instead. Writes that are safe to re-send, like the
+ * session refresh, retry explicitly.
+ */
+private fun OkHttpClient.newCallWithoutResendingWrites(request: Request): Call {
+    if (request.method == "GET") return newCall(request)
+    return newBuilder().retryOnConnectionFailure(false).build().newCall(request)
+}
+
 /** Blocking execution, for code that already runs on an OkHttp thread (refresh, logout from the interceptor). */
 internal fun OkHttpClient.executeBlocking(request: Request, clock: () -> Long): HttpResult {
-    val response = newCall(request).execute()
+    val response = newCallWithoutResendingWrites(request).execute()
     return response.toResult(clock())
 }
 
 /** Suspending execution with cancellation; the body is read on the OkHttp dispatcher thread. */
 internal suspend fun OkHttpClient.await(request: Request, clock: () -> Long): HttpResult =
     suspendCancellableCoroutine { continuation ->
-        val call = newCall(request)
+        val call = newCallWithoutResendingWrites(request)
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {

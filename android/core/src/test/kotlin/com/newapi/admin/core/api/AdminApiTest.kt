@@ -20,10 +20,12 @@ import com.newapi.admin.core.testing.jsonResponse
 import com.newapi.admin.core.testing.okData
 import com.newapi.admin.core.testing.storeWith
 import java.util.TimeZone
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -208,6 +210,25 @@ class AdminApiTest {
                 else -> Unit
             }
         }
+    }
+
+    @Test
+    fun writeWhoseConnectionDropsAfterItWasSentIsNotResent() {
+        val adjustments = AtomicInteger()
+        server.handler = { request ->
+            when (request.path) {
+                // The server may have applied it before the connection dropped; a resend would add the quota twice.
+                "/api/user/manage" ->
+                    if (adjustments.incrementAndGet() == 1) MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST) else okData()
+                else -> okData("""["default"]""")
+            }
+        }
+        // Leaves a pooled keep-alive connection, the case OkHttp silently retries on.
+        runBlocking { api.groups() }
+
+        assertThrows(ApiError.Network::class.java) { runBlocking { api.adjustQuota(5, QuotaMode.ADD, 500_000) } }
+
+        assertEquals(1, server.requestsTo("/api/user/manage").size)
     }
 
     @Test

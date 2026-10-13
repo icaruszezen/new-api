@@ -76,6 +76,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.newapi.admin.LocalAppContainer
@@ -100,6 +102,7 @@ import com.newapi.admin.ui.components.rememberCurrentUser
 import com.newapi.admin.ui.components.rememberQuotaFormatter
 import com.newapi.admin.ui.theme.Tone
 import com.newapi.admin.ui.theme.colors
+import kotlinx.coroutines.flow.first
 
 /** One user: profile, quota, invites, bindings and the management actions the signed-in admin may run. */
 @Composable
@@ -124,8 +127,14 @@ fun UserDetailScreen(userId: Int, onBack: () -> Unit, onOpenLogs: (username: Str
             snackbarMessage = null
         }
     }
+    // The admin may have opened the logs while the delete ran. Coming back, this entry stays STARTED until
+    // its enter transition ends and a pop before RESUMED is ignored, so wait for it instead of firing once.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val currentOnBack by rememberUpdatedState(onBack)
     LaunchedEffect(state.deleted) {
-        if (state.deleted) onBack()
+        if (!state.deleted) return@LaunchedEffect
+        lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+        currentOnBack()
     }
 
     val user = state.user

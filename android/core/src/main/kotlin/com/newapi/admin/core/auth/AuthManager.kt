@@ -21,6 +21,8 @@ import com.newapi.admin.core.net.toApiError
 import com.newapi.admin.core.net.toRequestBody
 import java.io.IOException
 import java.io.InterruptedIOException
+import java.net.ConnectException
+import java.net.UnknownHostException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
@@ -87,6 +89,11 @@ class AuthManager(
     /** Logout is best effort and must not hold up signing out for long. */
     private val logoutClient: OkHttpClient by lazy {
         baseClient.newBuilder().callTimeout(10, TimeUnit.SECONDS).build()
+    }
+
+    /** One refresh attempt is short, so a lost response can still be re-presented inside the server's replay window. */
+    private val refreshClient: OkHttpClient by lazy {
+        baseClient.newBuilder().callTimeout(REFRESH_ATTEMPT_TIMEOUT_MS, TimeUnit.MILLISECONDS).build()
     }
 
     /**
@@ -230,9 +237,12 @@ class AuthManager(
 
     // ---- Used by the auth interceptor (blocking, called on OkHttp threads) ----
 
-    /** Bearer value to send now; refreshes first when a session token expires within 60 s. Null when signed out. */
-    fun accessTokenForRequest(): String? {
-        val account = current ?: return null
+    /**
+     * Bearer value to send to [url] now; refreshes first when a session token expires within 60 s. Null when
+     * signed out or when [url] is not under the signed-in server (a request built before the account changed).
+     */
+    fun accessTokenForRequest(url: HttpUrl): String? {
+        val account = accountFor(url) ?: return null
         return when (val credentials = account.credentials) {
             is Credentials.AccessToken -> credentials.token
             is Credentials.Session -> {
@@ -241,7 +251,7 @@ class AuthManager(
                 val stillValid = credentials.accessExpiresAtMillis > now
                 if (stillValid && now < proactiveRefreshPausedUntil) return credentials.accessToken
                 try {
-                    refreshSingleFlight(credentials.accessToken)
+                    refreshSingleFlight(url, credentials.accessToken)
                 } catch (e: IOException) {
                     if (!stillValid) throw e
                     // The token still works for a few more seconds; use it and retry the refresh later.
@@ -254,12 +264,13 @@ class AuthManager(
     }
 
     /**
-     * Called after a 401 that was sent with [staleToken]. Returns a token to retry with, or null when the
-     * credentials are definitively invalid (in which case the manager has already signed out with
-     * SESSION_EXPIRED). Throws [java.io.IOException] for transient refresh failures (network, 429, 5xx).
+     * Called after a 401 from [url] that was sent with [staleToken]. Returns a token to retry with, or null when
+     * the credentials are definitively invalid (in which case the manager has already signed out with
+     * SESSION_EXPIRED) or [url] is no longer under the signed-in server. Throws [java.io.IOException] for
+     * transient refresh failures (network, 429, 5xx).
      */
-    fun tokenAfterUnauthorized(staleToken: String): String? {
-        val account = current ?: return null
+    fun tokenAfterUnauthorized(url: HttpUrl, staleToken: String): String? {
+        val account = accountFor(url) ?: return null
         return when (val credentials = account.credentials) {
             is Credentials.AccessToken -> {
                 if (credentials.token != staleToken) return credentials.token
@@ -267,15 +278,29 @@ class AuthManager(
                 null
             }
             is Credentials.Session -> {
-                if (credentials.accessToken != staleToken) credentials.accessToken else refreshSingleFlight(staleToken)
+                if (credentials.accessToken != staleToken) credentials.accessToken else refreshSingleFlight(url, staleToken)
             }
         }
     }
 
-    /** Clears credentials after a 401 that a fresh token could not fix. */
-    fun signOutExpired() {
-        synchronized(lock) { if (current != null) clearLocked(SignOutReason.SESSION_EXPIRED) }
+    /**
+     * Clears credentials after a 401 that the fresh [usedToken] could not fix. Does nothing when the account
+     * has moved on since (signed in again, or refreshed by another request).
+     */
+    fun signOutExpired(usedToken: String) {
+        synchronized(lock) {
+            val currentToken = when (val credentials = current?.credentials) {
+                is Credentials.Session -> credentials.accessToken
+                is Credentials.AccessToken -> credentials.token
+                null -> null
+            }
+            if (currentToken == usedToken) clearLocked(SignOutReason.SESSION_EXPIRED)
+        }
     }
+
+    /** The signed-in account, when [url] was built for its server. */
+    private fun accountFor(url: HttpUrl): StoredAccount? =
+        current?.takeIf { url.toString().startsWith(it.baseUrl.trimEnd('/') + "/") }
 
     // ---- Login internals ----
 
@@ -325,11 +350,12 @@ class AuthManager(
 
     // ---- Refresh internals ----
 
-    private fun refreshSingleFlight(staleToken: String): String? {
+    private fun refreshSingleFlight(url: HttpUrl, staleToken: String): String? {
+        val account: StoredAccount
         val future: CompletableFuture<String?>
         val owner: Boolean
         synchronized(refreshGate) {
-            val account = current ?: return null
+            account = accountFor(url) ?: return null
             val credentials = account.credentials as? Credentials.Session
                 ?: return (account.credentials as Credentials.AccessToken).token
             if (credentials.accessToken != staleToken) return credentials.accessToken
@@ -345,7 +371,7 @@ class AuthManager(
         }
         if (owner) {
             try {
-                future.complete(performRefresh())
+                future.complete(performRefresh(account))
             } catch (e: Throwable) {
                 future.completeExceptionally(e)
             } finally {
@@ -365,8 +391,7 @@ class AuthManager(
         }
     }
 
-    private fun performRefresh(): String? {
-        val account = current ?: return null
+    private fun performRefresh(account: StoredAccount): String? {
         val start = account.credentials as? Credentials.Session
             ?: return (account.credentials as Credentials.AccessToken).token
         val fallbackOrigin = runCatching { ServerUrl.hostHeaderOrigin(account.baseUrl) }.getOrNull()
@@ -375,12 +400,24 @@ class AuthManager(
         var retriedUnauthorized = false
         var retriedOrigin = false
         var raceRetries = 0
+        var lostResponseRetries = 0
+        val firstSentAt = clock()
         while (true) {
             val request = refreshRequest(account.baseUrl, start, origin, sendSessionHeader)
             val result = try {
-                baseClient.executeBlocking(request, clock)
+                refreshClient.executeBlocking(request, clock)
             } catch (e: IOException) {
-                throw RefreshFailedException("session refresh failed: ${e.message}", cause = e)
+                // The server may have rotated before the response was lost. Re-presenting the same token returns
+                // that same rotation, but only inside the replay window, which opened after the first send; a token
+                // presented later revokes the whole session. So every retry must be able to finish inside it.
+                val neverSent = e is UnknownHostException || e is ConnectException
+                val pause = LOST_RESPONSE_BACKOFF_MS.getOrNull(lostResponseRetries)
+                if (neverSent || pause == null || clock() + pause + REFRESH_ATTEMPT_TIMEOUT_MS - firstSentAt > REFRESH_REPLAY_WINDOW_MS) {
+                    throw RefreshFailedException("session refresh failed: ${e.message}", cause = e)
+                }
+                lostResponseRetries++
+                backoff(pause)
+                continue
             }
             val code = result.errorCode
             when {
@@ -390,14 +427,8 @@ class AuthManager(
                 result.code == 401 && !retriedUnauthorized -> retriedUnauthorized = true
                 result.code == 401 -> return signOutAfterRefresh(account)
                 result.code == 409 && code == "AUTH_SESSION_MISMATCH" && sendSessionHeader -> sendSessionHeader = false
-                result.code == 409 && code == "AUTH_REFRESH_RACE" && raceRetries < RACE_BACKOFF_MS.size -> {
-                    try {
-                        sleeper(RACE_BACKOFF_MS[raceRetries++])
-                    } catch (e: InterruptedException) {
-                        Thread.currentThread().interrupt()
-                        throw InterruptedIOException("interrupted during refresh backoff")
-                    }
-                }
+                result.code == 409 && code == "AUTH_REFRESH_RACE" && raceRetries < RACE_BACKOFF_MS.size ->
+                    backoff(RACE_BACKOFF_MS[raceRetries++])
                 result.code == 403 && code == "AUTH_ORIGIN_FORBIDDEN" && !retriedOrigin &&
                     fallbackOrigin != null && fallbackOrigin != origin -> {
                     origin = fallbackOrigin
@@ -407,6 +438,16 @@ class AuthManager(
                 result.code >= 500 -> throw RefreshFailedException("session refresh failed with HTTP ${result.code}", result.code)
                 else -> return signOutAfterRefresh(account)
             }
+        }
+    }
+
+    /** Waits with [sleeper] on an OkHttp thread, where only IOExceptions may escape. */
+    private fun backoff(millis: Long) {
+        try {
+            sleeper(millis)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw InterruptedIOException("interrupted during refresh backoff")
         }
     }
 
@@ -548,6 +589,11 @@ class AuthManager(
         const val REFRESH_MARGIN_MS = 60_000L
         const val PROACTIVE_RETRY_PAUSE_MS = 10_000L
         val RACE_BACKOFF_MS = longArrayOf(80, 200, 500)
+
+        /** The server accepts the previous refresh token for 30 s after rotating it (`RefreshReplayWindow`). */
+        const val REFRESH_REPLAY_WINDOW_MS = 30_000L
+        const val REFRESH_ATTEMPT_TIMEOUT_MS = 10_000L
+        val LOST_RESPONSE_BACKOFF_MS = longArrayOf(500, 1_500, 3_000)
         const val UNCHANGED_PASSWORD_SENTINEL = "\$I_LOVE_U"
 
         /** `user.password_login_disabled` in en, zh-CN and zh-TW (i18n/locales). */

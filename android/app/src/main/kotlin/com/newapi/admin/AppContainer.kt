@@ -80,20 +80,23 @@ class AppContainer(
     }
 }
 
-/** Lets list screens reload after a detail/edit screen changed something. */
+/**
+ * Lets list screens catch up after a detail/edit screen changed something. The payload is the id of
+ * the changed (or deleted) row, or null when the list should reload from the top (a row was created).
+ */
 class AppEvents {
-    private val users = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
-    private val channels = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
+    private val users = MutableSharedFlow<Int?>(extraBufferCapacity = 8)
+    private val channels = MutableSharedFlow<Int?>(extraBufferCapacity = 8)
 
-    val usersChanged: SharedFlow<Unit> = users.asSharedFlow()
-    val channelsChanged: SharedFlow<Unit> = channels.asSharedFlow()
+    val usersChanged: SharedFlow<Int?> = users.asSharedFlow()
+    val channelsChanged: SharedFlow<Int?> = channels.asSharedFlow()
 
-    fun notifyUsersChanged() {
-        users.tryEmit(Unit)
+    fun notifyUsersChanged(id: Int? = null) {
+        users.tryEmit(id)
     }
 
-    fun notifyChannelsChanged() {
-        channels.tryEmit(Unit)
+    fun notifyChannelsChanged(id: Int? = null) {
+        channels.tryEmit(id)
     }
 }
 

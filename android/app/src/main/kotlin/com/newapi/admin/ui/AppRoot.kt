@@ -14,6 +14,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
@@ -21,6 +23,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -65,10 +69,17 @@ private enum class TopLevelTab(val route: Any, val label: Int, val icon: ImageVe
 fun AppRoot() {
     val container = LocalAppContainer.current
     val authState by container.auth.state.collectAsStateWithLifecycle()
+    val sessionViewModels = viewModel { SessionViewModels() }
+    val account = (authState as? AuthState.SignedIn)?.account
+    sessionViewModels.bind(account?.let { it.baseUrl to it.user.id })
+    // Runs after the previous session's screens were disposed in this same frame.
+    SideEffect { sessionViewModels.clearRetired() }
     when (val state = authState) {
         is AuthState.SignedOut -> LoginScreen(signedOutReason = state.reason)
-        // A different account or server starts from a fresh back stack.
-        is AuthState.SignedIn -> key(state.account.baseUrl, state.account.user.id) { MainScaffold() }
+        // A different account or server starts from a fresh back stack and fresh ViewModels.
+        is AuthState.SignedIn -> key(state.account.baseUrl, state.account.user.id) {
+            CompositionLocalProvider(LocalViewModelStoreOwner provides sessionViewModels) { MainScaffold() }
+        }
     }
 }
 

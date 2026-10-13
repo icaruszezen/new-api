@@ -72,6 +72,13 @@ class Pager<T>(
         }
     }
 
+    /** Drops the current items (they belong to an old filter) and loads page 1 with a full-screen spinner. */
+    fun reset() {
+        job?.cancel()
+        mutableState.value = PagedState()
+        refresh()
+    }
+
     fun loadMore() {
         val current = mutableState.value
         if (current.endReached || current.isLoadingMore || current.isRefreshing || current.isInitialLoading) return

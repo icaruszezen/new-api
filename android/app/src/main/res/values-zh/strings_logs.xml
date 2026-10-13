@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="logs_title">使用记录</string>
+    <string name="logs_empty">没有符合筛选条件的日志，可尝试扩大时间范围。</string>
+    <string name="logs_empty_errors">暂无错误日志。服务端仅在设置 ERROR_LOG_ENABLED=true 时记录错误日志。</string>
+
+    <string name="logs_type_all">所有类型</string>
+    <string name="logs_type_unknown">未知</string>
+    <string name="logs_type_topup">充值</string>
+    <string name="logs_type_consume">消耗</string>
+    <string name="logs_type_manage">管理</string>
+    <string name="logs_type_system">系统</string>
+    <string name="logs_type_error">错误</string>
+    <string name="logs_type_refund">退款</string>
+    <string name="logs_type_login">登录</string>
+
+    <string name="logs_range_today">今天</string>
+    <string name="logs_range_yesterday">昨天</string>
+    <string name="logs_range_last_7_days">最近 7 天</string>
+    <string name="logs_range_last_30_days">最近 30 天</string>
+    <string name="logs_range_custom">自定义</string>
+    <string name="logs_range_custom_value">%1$s 至 %2$s</string>
+    <string name="logs_range_pick_title">选择日期范围</string>
+
+    <string name="logs_filter_title">筛选日志</string>
+    <string name="logs_filter_time">时间范围</string>
+    <string name="logs_filter_type">日志类型</string>
+    <string name="logs_filter_wildcard_hint">精确匹配，可用 %1$s 作通配符</string>
+    <string name="logs_chip_user">用户：%1$s</string>
+    <string name="logs_chip_token">令牌：%1$s</string>
+    <string name="logs_chip_model">模型：%1$s</string>
+    <string name="logs_chip_channel">渠道 #%1$d</string>
+    <string name="logs_chip_group">分组：%1$s</string>
+    <string name="logs_chip_request_id">请求：%1$s</string>
+    <string name="logs_chip_remove">移除筛选</string>
+
+    <string name="logs_stats_quota">用量</string>
+    <string name="logs_stats_rpm">RPM</string>
+    <string name="logs_stats_tpm">TPM</string>
+    <string name="logs_stats_caption">RPM 与 TPM 为最近 60 秒</string>
+    <string name="logs_stats_caption_with_total">共 %1$s 条 · RPM 与 TPM 为最近 60 秒</string>
+    <string name="logs_stats_failed">用量统计加载失败</string>
+
+    <string name="logs_mapped_to">→ %1$s</string>
+    <string name="logs_cache_read_hint">缓存↓ %1$s</string>
+    <string name="logs_first_token_value">首字 %1$s</string>
+    <string name="logs_stream">流</string>
+    <string name="logs_non_stream">非流</string>
+    <string name="logs_stream_ok">正常</string>
+    <string name="logs_stream_error">流异常</string>
+    <string name="logs_billing_subscription">订阅</string>
+    <string name="logs_billing_wallet">钱包</string>
+    <string name="logs_waived">已免扣费</string>
+
+    <string name="logs_detail_title">日志详情</string>
+    <string name="logs_detail_section_request">请求</string>
+    <string name="logs_detail_section_billing">计费详情</string>
+    <string name="logs_detail_section_tokens">Token 明细</string>
+    <string name="logs_detail_section_error">错误</string>
+    <string name="logs_detail_section_stream">流状态</string>
+    <string name="logs_detail_section_audit">操作审计信息</string>
+    <string name="logs_detail_section_content">内容</string>
+    <string name="logs_detail_section_raw">原始 JSON（other）</string>
+    <string name="logs_detail_expand">显示</string>
+    <string name="logs_detail_collapse">隐藏</string>
+    <string name="logs_view_user">查看用户</string>
+    <string name="logs_view_target_user">查看目标用户</string>
+    <string name="logs_view_channel">查看渠道</string>
+    <string name="logs_value_with_id">%1$s（#%2$d）</string>
+    <string name="logs_not_applicable">不适用</string>
+    <string name="logs_price_per_million">%1$s / 1M Token</string>
+    <string name="logs_billing_per_call">每次调用</string>
+    <string name="logs_billing_per_token">按 Token</string>
+    <string name="logs_end_reason_client_gone">客户端主动取消</string>
+
+    <string name="logs_label_time">时间</string>
+    <string name="logs_label_log_id">日志 ID</string>
+    <string name="logs_label_request_id">请求 ID</string>
+    <string name="logs_label_upstream_request_id">上游请求 ID</string>
+    <string name="logs_label_user">用户</string>
+    <string name="logs_label_operator">操作人</string>
+    <string name="logs_label_username">用户名</string>
+    <string name="logs_label_token">令牌</string>
+    <string name="logs_label_token_name">令牌名称</string>
+    <string name="logs_label_model">模型</string>
+    <string name="logs_label_model_name">模型名称</string>
+    <string name="logs_label_upstream_model">实际模型</string>
+    <string name="logs_label_channel">渠道</string>
+    <string name="logs_label_channel_id">渠道 ID</string>
+    <string name="logs_label_retry_chain">重试链路</string>
+    <string name="logs_label_group">分组</string>
+    <string name="logs_label_ip">IP 地址</string>
+    <string name="logs_label_request_path">请求路径</string>
+    <string name="logs_label_stream">响应方式</string>
+    <string name="logs_label_use_time">耗时</string>
+    <string name="logs_label_first_response">首字</string>
+    <string name="logs_label_cost">费用</string>
+    <string name="logs_label_billing_source">计费来源</string>
+    <string name="logs_label_billing_mode">计费模式</string>
+    <string name="logs_label_model_price">模型价格</string>
+    <string name="logs_label_model_ratio">模型倍率</string>
+    <string name="logs_label_completion_ratio">补全倍率</string>
+    <string name="logs_label_input_price">输入价格</string>
+    <string name="logs_label_output_price">输出价格</string>
+    <string name="logs_label_group_ratio">分组倍率</string>
+    <string name="logs_label_user_group_ratio">专属倍率</string>
+    <string name="logs_label_cache_ratio">缓存倍率</string>
+    <string name="logs_label_reasoning_effort">推理强度</string>
+    <string name="logs_label_prompt_tokens">输入 Token</string>
+    <string name="logs_label_completion_tokens">输出 Token</string>
+    <string name="logs_label_cache_read">缓存读取</string>
+    <string name="logs_label_cache_write">缓存写入</string>
+    <string name="logs_label_reject_reason">拒绝原因</string>
+    <string name="logs_label_error_type">错误类型</string>
+    <string name="logs_label_error_code">错误代码</string>
+    <string name="logs_label_status_code">状态码</string>
+    <string name="logs_label_stream_status">状态</string>
+    <string name="logs_label_end_reason">结束原因</string>
+    <string name="logs_label_soft_errors">软错误</string>
+    <string name="logs_label_operation">操作</string>
+</resources>

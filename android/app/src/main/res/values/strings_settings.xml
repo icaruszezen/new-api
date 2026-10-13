@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_role_root">Root</string>
+    <string name="settings_role_admin">Admin</string>
+    <string name="settings_balance">Current balance</string>
+    <string name="settings_used_quota">Total usage</string>
+    <string name="settings_request_count">API requests</string>
+    <string name="settings_user_id">User ID</string>
+    <string name="settings_group">Group</string>
+    <string name="settings_email">Email</string>
+    <string name="settings_sign_in_method">Signed in with</string>
+    <string name="settings_method_session">Password (session)</string>
+    <string name="settings_method_token">Access token</string>
+    <string name="settings_token_note">Access tokens never expire. Regenerating the token in the web console signs this app out.</string>
+
+    <string name="settings_server_title">Server</string>
+    <string name="settings_server_address">Address</string>
+    <string name="settings_cleartext">Unencrypted connection (http://)</string>
+    <string name="settings_system_name">System name</string>
+    <string name="settings_server_version">Version</string>
+    <string name="settings_quota_display">Quota display</string>
+    <string name="settings_display_usd">USD</string>
+    <string name="settings_display_cny">CNY</string>
+    <string name="settings_display_tokens">Tokens only</string>
+    <string name="settings_display_custom">Custom currency (%1$s)</string>
+    <string name="settings_exchange_rate">Exchange rate</string>
+    <string name="settings_exchange_rate_value">1 USD = %1$s %2$s</string>
+    <string name="settings_quota_per_unit">Quota per USD</string>
+
+    <string name="settings_security_title">Security</string>
+    <string name="settings_change_password">Change password</string>
+    <string name="settings_change_password_desc">Other devices signed in to this account will be signed out.</string>
+    <string name="settings_change_password_unavailable">Not available when signed in with an access token. Sign in with your password to change it.</string>
+    <string name="settings_password_dialog_text">This signs out every other device and browser using this account. This app stays signed in.</string>
+    <string name="settings_current_password">Current password</string>
+    <string name="settings_new_password">New password</string>
+    <string name="settings_confirm_password">Confirm new password</string>
+    <string name="settings_show_password">Show passwords</string>
+    <string name="settings_hide_password">Hide passwords</string>
+    <string name="settings_password_length">8 to 20 characters</string>
+    <string name="settings_password_same">The new password must be different from the current one.</string>
+    <string name="settings_password_mismatch">Passwords do not match.</string>
+    <string name="settings_change_password_confirm">Change</string>
+    <string name="settings_password_changed">Password changed. Other sessions were signed out.</string>
+
+    <string name="settings_sign_out">Sign out</string>
+    <string name="settings_sign_out_confirm_title">Sign out?</string>
+    <string name="settings_sign_out_confirm_text">You will need to sign in again to manage %1$s.</string>
+
+    <string name="settings_about_title">About</string>
+    <string name="settings_app_version">App version</string>
+</resources>

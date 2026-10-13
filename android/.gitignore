@@ -1,0 +1,12 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+captures/
+*.jks
+*.keystore
+
+# The repository root ignores every "logs" directory; this one is source code.
+!/app/src/main/kotlin/com/newapi/admin/ui/logs/

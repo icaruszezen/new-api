@@ -20,12 +20,14 @@ import kotlinx.serialization.json.longOrNull
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Headers
+import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import okio.BufferedSink
 
 /** Parser for every server response: tolerant of unknown keys, nulls, missing fields and quoted numbers. */
 internal val ApiJson: Json = Json {
@@ -158,12 +160,20 @@ private fun Response.toResult(receivedAt: Long): HttpResult = use {
 /**
  * OkHttp silently sends a request again when its connection fails, even after the request was written.
  * Only reads may be repeated: the server may already have applied a write (add_quota, create, delete,
- * login), so a write fails with the connection error instead. Writes that are safe to re-send, like the
- * session refresh, retry explicitly.
+ * login). Marking a write's body one-shot makes OkHttp give up once sending started, while it still
+ * tries the next address or a fresh connection when connecting fails. Writes that are safe to re-send,
+ * like the session refresh, retry explicitly.
  */
 private fun OkHttpClient.newCallWithoutResendingWrites(request: Request): Call {
     if (request.method == "GET") return newCall(request)
-    return newBuilder().retryOnConnectionFailure(false).build().newCall(request)
+    val body = request.body ?: ByteArray(0).toRequestBody()
+    val oneShot = object : RequestBody() {
+        override fun contentType(): MediaType? = body.contentType()
+        override fun contentLength(): Long = body.contentLength()
+        override fun writeTo(sink: BufferedSink) = body.writeTo(sink)
+        override fun isOneShot(): Boolean = true
+    }
+    return newCall(request.newBuilder().method(request.method, oneShot).build())
 }
 
 /** Blocking execution, for code that already runs on an OkHttp thread (refresh, logout from the interceptor). */

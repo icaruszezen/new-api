@@ -19,11 +19,15 @@ import com.newapi.admin.core.testing.adminUser
 import com.newapi.admin.core.testing.jsonResponse
 import com.newapi.admin.core.testing.okData
 import com.newapi.admin.core.testing.storeWith
+import java.net.InetAddress
 import java.util.TimeZone
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import okhttp3.Dns
+import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
@@ -227,6 +231,29 @@ class AdminApiTest {
         runBlocking { api.groups() }
 
         assertThrows(ApiError.Network::class.java) { runBlocking { api.adjustQuota(5, QuotaMode.ADD, 500_000) } }
+
+        assertEquals(1, server.requestsTo("/api/user/manage").size)
+    }
+
+    @Test
+    fun writeStillFallsBackToTheNextAddressWhenConnectingFails() = runBlocking {
+        server.handler = { okData() }
+        // A dual-stack host whose first address refuses connections (CI runners resolve localhost to ::1 first).
+        val reachable = InetAddress.getByName(server.server.hostName)
+        val refused = InetAddress.getByAddress(server.server.hostName, byteArrayOf(127, 0, 0, 2))
+        val dualStack = object : Dns {
+            override fun lookup(hostname: String): List<InetAddress> = listOf(refused, reachable)
+        }
+        val account = StoredAccount(server.baseUrl, Credentials.AccessToken("pat-1"), adminUser())
+        val dualStackApi = NewApiClient(
+            storeWith(account),
+            userAgent = "test",
+            acceptLanguage = { "en" },
+            okHttpBuilder = OkHttpClient.Builder().dns(dualStack).connectTimeout(2, TimeUnit.SECONDS),
+            clock = clock,
+        ).admin
+
+        dualStackApi.adjustQuota(5, QuotaMode.ADD, 500_000)
 
         assertEquals(1, server.requestsTo("/api/user/manage").size)
     }

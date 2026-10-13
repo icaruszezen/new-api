@@ -3,13 +3,11 @@ package com.newapi.admin.ui.logs
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,7 +31,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -373,11 +370,13 @@ private fun StatsCard(stats: LogStatsState, total: Long?, formatter: QuotaFormat
                 AppButton(stringResource(R.string.common_retry), onClick = onRetry, variant = ButtonVariant.Ghost, size = ButtonSize.Small)
             }
         } else {
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            // No per-column padding or dividers, so long amounts and TPM values keep their width on 360dp phones.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 StatValue(stringResource(R.string.logs_stats_quota), stat?.let { formatter.formatLog(it.quota) }, Modifier.weight(1.4f))
-                VerticalDivider(color = colors.border)
                 StatValue(stringResource(R.string.logs_stats_rpm), stat?.let { Formats.count(it.rpm) }, Modifier.weight(1f))
-                VerticalDivider(color = colors.border)
                 StatValue(stringResource(R.string.logs_stats_tpm), stat?.let { Formats.count(it.tpm) }, Modifier.weight(1f))
             }
         }
@@ -407,7 +406,7 @@ private fun StatsCard(stats: LogStatsState, total: Long?, formatter: QuotaFormat
 
 @Composable
 private fun StatValue(label: String, value: String?, modifier: Modifier) {
-    Column(modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = AppTheme.colors.mutedForeground, maxLines = 1)
         Text(
             value ?: "–",

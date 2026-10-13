@@ -253,6 +253,8 @@ private fun CustomRangeDialog(startDay: Long?, endDay: Long?, onConfirm: (Long, 
                         onConfirm(Math.floorDiv(selectedStart, MILLIS_PER_DAY), state.selectedEndDateMillis?.let { Math.floorDiv(it, MILLIS_PER_DAY) })
                     }
                 },
+                // The picker insets its buttons for text buttons only (6dp end, 8dp bottom); match AppDialog's 24dp.
+                modifier = Modifier.padding(end = 18.dp, bottom = 12.dp),
                 enabled = selectedStart != null,
             )
         },

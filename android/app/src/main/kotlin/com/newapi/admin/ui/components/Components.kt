@@ -1,40 +1,36 @@
 package com.newapi.admin.ui.components
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Inbox
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.outlined.Clear
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,11 +38,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,6 +53,7 @@ import com.newapi.admin.R
 import com.newapi.admin.core.format.QuotaFormatter
 import com.newapi.admin.core.model.SelfUser
 import com.newapi.admin.ui.common.errorMessage
+import com.newapi.admin.ui.theme.AppTheme
 import com.newapi.admin.ui.theme.Tone
 import com.newapi.admin.ui.theme.colors
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -79,35 +76,52 @@ fun rememberCurrentUser(): SelfUser? {
 @Composable
 fun FullScreenLoading(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
+        CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.5.dp, color = AppTheme.colors.mutedForeground)
     }
 }
 
 @Composable
 fun FullScreenError(error: Throwable, onRetry: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxSize().padding(32.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-        Spacer(Modifier.height(16.dp))
-        Text(errorMessage(error), style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(16.dp))
-        OutlinedButton(onClick = onRetry) { Text(stringResource(R.string.common_retry)) }
-    }
+    StateMessage(
+        icon = Icons.Outlined.ErrorOutline,
+        iconTint = AppTheme.colors.destructive,
+        text = errorMessage(error),
+        modifier = modifier,
+        action = { AppButton(stringResource(R.string.common_retry), onClick = onRetry, variant = ButtonVariant.Outline, size = ButtonSize.Small) },
+    )
 }
 
 @Composable
-fun EmptyState(text: String, modifier: Modifier = Modifier, icon: ImageVector = Icons.Filled.Inbox) {
+fun EmptyState(text: String, modifier: Modifier = Modifier, icon: ImageVector = Icons.Outlined.Inbox) {
+    StateMessage(icon = icon, iconTint = AppTheme.colors.mutedForeground, text = text, modifier = modifier)
+}
+
+/** shadcn "empty" block: an icon in a muted tile above a centred message, with an optional action. */
+@Composable
+private fun StateMessage(
+    icon: ImageVector,
+    iconTint: Color,
+    text: String,
+    modifier: Modifier,
+    action: (@Composable () -> Unit)? = null,
+) {
     Column(
         modifier = modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(48.dp))
-        Spacer(Modifier.height(12.dp))
-        Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        Box(
+            Modifier.size(48.dp).background(AppTheme.colors.muted, MaterialTheme.shapes.medium),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(24.dp))
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = AppTheme.colors.mutedForeground, textAlign = TextAlign.Center)
+        if (action != null) {
+            Spacer(Modifier.height(16.dp))
+            action()
+        }
     }
 }
 
@@ -134,14 +148,16 @@ fun LoadMoreEffect(listState: LazyListState, onLoadMore: () -> Unit, buffer: Int
 /** Footer row for paged lists: spinner while loading, retry on failure, "no more" at the end. */
 @Composable
 fun ListFooter(isLoadingMore: Boolean, error: Throwable?, endReached: Boolean, onRetry: () -> Unit) {
+    val colors = AppTheme.colors
     Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
         when {
-            isLoadingMore -> CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+            isLoadingMore -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = colors.mutedForeground)
             error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(errorMessage(error), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
-                TextButton(onClick = onRetry) { Text(stringResource(R.string.common_retry)) }
+                Text(errorMessage(error), style = MaterialTheme.typography.bodySmall, color = colors.destructive, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(4.dp))
+                AppButton(stringResource(R.string.common_retry), onClick = onRetry, variant = ButtonVariant.Ghost, size = ButtonSize.Small)
             }
-            endReached -> Text(stringResource(R.string.common_no_more), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+            endReached -> Text(stringResource(R.string.common_no_more), style = MaterialTheme.typography.bodySmall, color = colors.mutedForeground)
         }
     }
 }
@@ -155,49 +171,66 @@ fun ConfirmDialog(
     onDismiss: () -> Unit,
     destructive: Boolean = false,
 ) {
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(text) },
+        title = title,
+        description = text,
         confirmButton = {
-            TextButton(
-                onClick = onConfirm,
-                colors = if (destructive) ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error) else ButtonDefaults.textButtonColors(),
-            ) { Text(confirmText) }
+            AppButton(confirmText, onClick = onConfirm, variant = if (destructive) ButtonVariant.Destructive else ButtonVariant.Default)
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
+        dismissButton = { AppButton(stringResource(R.string.common_cancel), onClick = onDismiss, variant = ButtonVariant.Outline) },
     )
 }
 
-/** Small rounded label, e.g. a status or role. */
+/**
+ * shadcn badge, e.g. a status or role: tinted by [tone], or a bordered neutral badge when [outlined].
+ */
 @Composable
-fun StatusPill(text: String, tone: Tone, modifier: Modifier = Modifier) {
+fun StatusPill(text: String, tone: Tone, modifier: Modifier = Modifier, outlined: Boolean = false) {
     val colors = tone.colors()
-    Surface(color = colors.container, contentColor = colors.content, shape = RoundedCornerShape(50), modifier = modifier) {
+    val shape = MaterialTheme.shapes.extraSmall
+    Surface(
+        color = if (outlined) Color.Transparent else colors.container,
+        contentColor = if (outlined) AppTheme.colors.foreground else colors.content,
+        shape = shape,
+        border = if (outlined) BorderStroke(1.dp, AppTheme.colors.border) else null,
+        modifier = modifier,
+    ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
         )
     }
 }
 
-/** Titled card grouping [InfoRow]s or actions. */
+/**
+ * Titled card grouping [InfoRow]s or actions. [action] sits at the end of the title row, for example
+ * an icon button.
+ */
 @Composable
-fun SectionCard(title: String?, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            if (title != null) {
-                Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.height(8.dp))
+fun SectionCard(
+    title: String?,
+    modifier: Modifier = Modifier,
+    description: String? = null,
+    action: (@Composable RowScope.() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    AppCard(modifier = modifier.fillMaxWidth()) {
+        if (title != null || action != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    if (title != null) Text(title, style = MaterialTheme.typography.titleSmall)
+                    if (description != null) {
+                        Text(description, style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.mutedForeground)
+                    }
+                }
+                action?.invoke(this)
             }
-            content()
+            Spacer(Modifier.height(8.dp))
         }
+        content()
     }
 }
 
@@ -205,11 +238,11 @@ fun SectionCard(title: String?, modifier: Modifier = Modifier, content: @Composa
 @Composable
 fun InfoRow(label: String, value: String, modifier: Modifier = Modifier, copyable: Boolean = false) {
     val clipboard = LocalClipboardManager.current
-    Row(modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth().heightIn(min = 36.dp).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             label,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = AppTheme.colors.mutedForeground,
             modifier = Modifier.width(112.dp),
         )
         Text(
@@ -219,9 +252,14 @@ fun InfoRow(label: String, value: String, modifier: Modifier = Modifier, copyabl
             overflow = TextOverflow.Ellipsis,
         )
         if (copyable && value.isNotEmpty()) {
-            IconButton(onClick = { clipboard.setText(AnnotatedString(value)) }, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.ContentCopy, contentDescription = stringResource(R.string.common_copy), modifier = Modifier.size(16.dp))
-            }
+            AppIconButton(
+                icon = Icons.Outlined.ContentCopy,
+                contentDescription = stringResource(R.string.common_copy),
+                onClick = { clipboard.setText(AnnotatedString(value)) },
+                size = 28.dp,
+                iconSize = 14.dp,
+                modifier = Modifier.padding(start = 8.dp),
+            )
         }
     }
 }
@@ -235,22 +273,20 @@ fun SearchField(
     placeholder: String,
     modifier: Modifier = Modifier,
 ) {
-    OutlinedTextField(
+    AppTextField(
         value = query,
         onValueChange = onQueryChange,
         modifier = modifier.fillMaxWidth(),
-        singleLine = true,
-        placeholder = { Text(placeholder) },
-        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-        trailingIcon = {
-            if (query.isNotEmpty()) {
+        placeholder = placeholder,
+        leadingIcon = Icons.Outlined.Search,
+        trailing = if (query.isEmpty()) null else {
+            {
                 IconButton(onClick = { onQueryChange(""); onSearch() }) {
-                    Icon(Icons.Filled.Clear, contentDescription = stringResource(R.string.common_clear))
+                    Icon(Icons.Outlined.Clear, contentDescription = stringResource(R.string.common_clear), modifier = Modifier.size(18.dp))
                 }
             }
         },
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-        shape = RoundedCornerShape(28.dp),
     )
 }

@@ -1,5 +1,6 @@
 package com.newapi.admin.ui.channels
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,38 +21,24 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Hub
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.NetworkCheck
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Hub
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.InputChip
-import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -68,7 +55,6 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -82,6 +68,19 @@ import com.newapi.admin.core.model.ChannelQuery
 import com.newapi.admin.core.model.ChannelStatus
 import com.newapi.admin.core.model.ChannelStatusFilter
 import com.newapi.admin.core.model.ChannelTypes
+import com.newapi.admin.ui.components.AppBottomSheet
+import com.newapi.admin.ui.components.AppButton
+import com.newapi.admin.ui.components.AppCard
+import com.newapi.admin.ui.components.AppFab
+import com.newapi.admin.ui.components.AppFilterChip
+import com.newapi.admin.ui.components.AppIconButton
+import com.newapi.admin.ui.components.AppRemovableChip
+import com.newapi.admin.ui.components.AppSnackbarHost
+import com.newapi.admin.ui.components.AppSwitch
+import com.newapi.admin.ui.components.AppTextField
+import com.newapi.admin.ui.components.AppTopBar
+import com.newapi.admin.ui.components.ButtonSize
+import com.newapi.admin.ui.components.ButtonVariant
 import com.newapi.admin.ui.components.EmptyState
 import com.newapi.admin.ui.components.FullScreenError
 import com.newapi.admin.ui.components.FullScreenLoading
@@ -90,6 +89,7 @@ import com.newapi.admin.ui.components.LoadMoreEffect
 import com.newapi.admin.ui.components.SearchField
 import com.newapi.admin.ui.components.StatusPill
 import com.newapi.admin.ui.components.rememberQuotaFormatter
+import com.newapi.admin.ui.theme.AppTheme
 import com.newapi.admin.ui.theme.Tone
 
 /** The Channels tab: searchable, filterable, infinitely scrolling channel list. */
@@ -114,15 +114,21 @@ fun ChannelsScreen(onOpenChannel: (Int) -> Unit, onCreateChannel: () -> Unit) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.channels_title)) },
+            AppTopBar(
+                title = stringResource(R.string.channels_title),
                 actions = {
                     IconButton(onClick = {
                         viewModel.loadGroups()
                         showFilters = true
                     }) {
-                        BadgedBox(badge = { if (filters.hasColumnFilters) Badge() }) {
-                            Icon(Icons.Filled.FilterList, contentDescription = stringResource(R.string.common_filter))
+                        BadgedBox(
+                            badge = {
+                                if (filters.hasColumnFilters) {
+                                    Badge(containerColor = AppTheme.colors.primary, contentColor = AppTheme.colors.primaryForeground)
+                                }
+                            },
+                        ) {
+                            Icon(Icons.Outlined.FilterList, contentDescription = stringResource(R.string.common_filter))
                         }
                     }
                 },
@@ -130,15 +136,15 @@ fun ChannelsScreen(onOpenChannel: (Int) -> Unit, onCreateChannel: () -> Unit) {
         },
         floatingActionButton = {
             if (permissions.sensitiveWrite) {
-                ExtendedFloatingActionButton(
+                AppFab(
+                    text = stringResource(R.string.channels_add),
+                    icon = Icons.Outlined.Add,
                     onClick = onCreateChannel,
                     expanded = fabExpanded,
-                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    text = { Text(stringResource(R.string.channels_add)) },
                 )
             }
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { AppSnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             SearchField(
@@ -166,7 +172,7 @@ fun ChannelsScreen(onOpenChannel: (Int) -> Unit, onCreateChannel: () -> Unit) {
                             val filtered = filters.hasColumnFilters || filters.keyword.isNotEmpty()
                             EmptyState(
                                 text = stringResource(if (filtered) R.string.channels_empty_filtered else R.string.channels_empty),
-                                icon = Icons.Filled.Hub,
+                                icon = Icons.Outlined.Hub,
                                 modifier = Modifier.fillParentMaxSize(),
                             )
                         }
@@ -176,14 +182,15 @@ fun ChannelsScreen(onOpenChannel: (Int) -> Unit, onCreateChannel: () -> Unit) {
                         modifier = Modifier.fillMaxSize(),
                         // Room below the last card for the floating button.
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 96.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         item(key = "count") {
                             val total = state.total.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
                             Text(
                                 pluralStringResource(R.plurals.channels_count, total, Formats.count(state.total)),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                                color = AppTheme.colors.mutedForeground,
+                                modifier = Modifier.padding(horizontal = 2.dp),
                             )
                         }
                         items(state.items, key = { it.id }) { channel ->
@@ -242,17 +249,16 @@ private fun ChannelRow(
     onTest: () -> Unit,
     onUpdateBalance: () -> Unit,
 ) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp)) {
+    val colors = AppTheme.colors
+    AppCard(onClick = onClick, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) {
+        Row(
+            Modifier.padding(start = 16.dp, top = 12.dp, end = 8.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     channel.displayName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -263,7 +269,7 @@ private fun ChannelRow(
                     Text(
                         "#${channel.id} · ${channelTypeLabel(channel.type)}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = colors.mutedForeground,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.align(Alignment.CenterVertically),
@@ -272,39 +278,40 @@ private fun ChannelRow(
                     val tag = channel.tag?.trim().orEmpty()
                     if (tag.isNotEmpty()) StatusPill(tag, Tone.Info, Modifier.align(Alignment.CenterVertically))
                 }
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Metric(stringResource(R.string.channels_label_priority), channel.priority?.toString() ?: "-")
-                    Metric(stringResource(R.string.channels_label_weight), channel.weight?.toString() ?: "-")
-                    Metric(
-                        stringResource(R.string.channels_label_response),
-                        responseTimeText(channel.responseTime),
-                        toneTextColor(responseTimeTone(channel.responseTime)),
-                    )
-                    if (channel.hasBalance) {
-                        Metric(
-                            stringResource(R.string.channels_label_balance),
-                            formatter.formatUsd(channel.balance),
-                            toneTextColor(balanceTone(channel.balance)),
-                        )
-                    }
-                    Metric(stringResource(R.string.channels_label_used), formatter.format(channel.usedQuota))
-                }
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (permissions.operate) {
-                    val switchLabel = stringResource(R.string.channels_switch_description, channel.displayName)
-                    Switch(
-                        checked = channel.status == ChannelStatus.ENABLED,
-                        onCheckedChange = onToggle,
-                        enabled = !isToggling,
-                        modifier = Modifier.padding(horizontal = 8.dp).semantics { contentDescription = switchLabel },
-                    )
-                }
-                RowActionsMenu(channel, permissions, isBusy, onTest, onUpdateBalance)
+            if (permissions.operate) {
+                val switchLabel = stringResource(R.string.channels_switch_description, channel.displayName)
+                AppSwitch(
+                    checked = channel.status == ChannelStatus.ENABLED,
+                    onCheckedChange = onToggle,
+                    enabled = !isToggling,
+                    modifier = Modifier.semantics { contentDescription = switchLabel },
+                )
             }
+            RowActionsMenu(channel, permissions, isBusy, onTest, onUpdateBalance)
+        }
+        HorizontalDivider(color = colors.border)
+        FlowRow(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            // Health and spend first; routing numbers after them.
+            Metric(
+                stringResource(R.string.channels_label_response),
+                responseTimeText(channel.responseTime),
+                toneTextColor(responseTimeTone(channel.responseTime)),
+            )
+            if (channel.hasBalance) {
+                Metric(
+                    stringResource(R.string.channels_label_balance),
+                    formatter.formatUsd(channel.balance),
+                    toneTextColor(balanceTone(channel.balance)),
+                )
+            }
+            Metric(stringResource(R.string.channels_label_used), formatter.format(channel.usedQuota))
+            Metric(stringResource(R.string.channels_label_priority), channel.priority?.toString() ?: "-")
+            Metric(stringResource(R.string.channels_label_weight), channel.weight?.toString() ?: "-")
         }
     }
 }
@@ -320,22 +327,31 @@ private fun RowActionsMenu(
     val canTest = permissions.operate && channel.isTestable
     val canUpdateBalance = permissions.operate && channel.hasBalance
     if (!canTest && !canUpdateBalance) return
+    // Same footprint as the menu button, so the row does not shift while busy.
     if (isBusy) {
-        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        Box(Modifier.padding(start = 4.dp).size(36.dp), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = AppTheme.colors.mutedForeground)
         }
         return
     }
     var expanded by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.common_more))
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+    Box(Modifier.padding(start = 4.dp)) {
+        AppIconButton(
+            icon = Icons.Outlined.MoreHoriz,
+            contentDescription = stringResource(R.string.common_more),
+            onClick = { expanded = true },
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            shape = MaterialTheme.shapes.medium,
+            containerColor = AppTheme.colors.popover,
+            border = BorderStroke(1.dp, AppTheme.colors.border),
+        ) {
             if (canTest) {
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.channels_action_test)) },
-                    leadingIcon = { Icon(Icons.Filled.NetworkCheck, contentDescription = null) },
+                    text = { Text(stringResource(R.string.channels_action_test), style = MaterialTheme.typography.bodyMedium) },
+                    leadingIcon = { Icon(Icons.Outlined.NetworkCheck, contentDescription = null, modifier = Modifier.size(18.dp)) },
                     onClick = {
                         expanded = false
                         onTest()
@@ -344,8 +360,8 @@ private fun RowActionsMenu(
             }
             if (canUpdateBalance) {
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.channels_action_update_balance)) },
-                    leadingIcon = { Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null) },
+                    text = { Text(stringResource(R.string.channels_action_update_balance), style = MaterialTheme.typography.bodyMedium) },
+                    leadingIcon = { Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(18.dp)) },
                     onClick = {
                         expanded = false
                         onUpdateBalance()
@@ -359,12 +375,11 @@ private fun RowActionsMenu(
 @Composable
 private fun Metric(label: String, value: String, valueColor: Color = Color.Unspecified) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.mutedForeground, maxLines = 1)
         Spacer(Modifier.width(4.dp))
         Text(
             value,
             style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
-            fontWeight = FontWeight.Medium,
             color = valueColor,
             maxLines = 1,
         )
@@ -374,40 +389,41 @@ private fun Metric(label: String, value: String, valueColor: Color = Color.Unspe
 /** Removable chips for the filters set in the sheet. */
 @Composable
 private fun ActiveFilters(filters: ChannelQuery, onChange: (ChannelQuery) -> Unit) {
+    val removeDescription = stringResource(R.string.channels_remove_filter)
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (filters.status != ChannelStatusFilter.ALL) {
             val label = if (filters.status == ChannelStatusFilter.ENABLED) R.string.common_enabled else R.string.common_disabled
-            RemovableChip(stringResource(label)) { onChange(filters.copy(status = ChannelStatusFilter.ALL)) }
+            AppRemovableChip(
+                label = stringResource(label),
+                onRemove = { onChange(filters.copy(status = ChannelStatusFilter.ALL)) },
+                removeDescription = removeDescription,
+            )
         }
         filters.type?.let { type ->
-            RemovableChip(channelTypeLabel(type)) { onChange(filters.copy(type = null)) }
+            AppRemovableChip(
+                label = channelTypeLabel(type),
+                onRemove = { onChange(filters.copy(type = null)) },
+                removeDescription = removeDescription,
+            )
         }
         if (filters.group.isNotEmpty()) {
-            RemovableChip(stringResource(R.string.channels_filter_chip_group, filters.group)) { onChange(filters.copy(group = "")) }
+            AppRemovableChip(
+                label = stringResource(R.string.channels_filter_chip_group, filters.group),
+                onRemove = { onChange(filters.copy(group = "")) },
+                removeDescription = removeDescription,
+            )
         }
         if (filters.model.isNotEmpty()) {
-            RemovableChip(stringResource(R.string.channels_filter_chip_model, filters.model)) { onChange(filters.copy(model = "")) }
+            AppRemovableChip(
+                label = stringResource(R.string.channels_filter_chip_model, filters.model),
+                onRemove = { onChange(filters.copy(model = "")) },
+                removeDescription = removeDescription,
+            )
         }
     }
-}
-
-@Composable
-private fun RemovableChip(label: String, onRemove: () -> Unit) {
-    InputChip(
-        selected = true,
-        onClick = onRemove,
-        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        trailingIcon = {
-            Icon(
-                Icons.Filled.Close,
-                contentDescription = stringResource(R.string.channels_remove_filter),
-                modifier = Modifier.size(InputChipDefaults.AvatarSize),
-            )
-        },
-    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -439,81 +455,91 @@ private fun ChannelFilterSheet(
     }
     val groupNames = if (group.isNotEmpty() && group !in groups.names) listOf(group) + groups.names else groups.names
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    AppBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Text(stringResource(R.string.common_filter), style = MaterialTheme.typography.titleLarge)
 
-            SheetLabel(stringResource(R.string.channels_filter_status))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ChannelStatusFilter.entries.forEach { option ->
-                    val label = when (option) {
-                        ChannelStatusFilter.ALL -> R.string.common_all
-                        ChannelStatusFilter.ENABLED -> R.string.common_enabled
-                        ChannelStatusFilter.DISABLED -> R.string.common_disabled
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SheetLabel(stringResource(R.string.channels_filter_status))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ChannelStatusFilter.entries.forEach { option ->
+                        val label = when (option) {
+                            ChannelStatusFilter.ALL -> R.string.common_all
+                            ChannelStatusFilter.ENABLED -> R.string.common_enabled
+                            ChannelStatusFilter.DISABLED -> R.string.common_disabled
+                        }
+                        AppFilterChip(selected = status == option, onClick = { status = option }, label = stringResource(label))
                     }
-                    FilterChip(selected = status == option, onClick = { status = option }, label = { Text(stringResource(label)) })
                 }
             }
 
-            SheetLabel(stringResource(R.string.channels_filter_type))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = type == null,
-                    onClick = { type = null },
-                    label = { Text(stringResource(R.string.channels_filter_all_types)) },
-                )
-                shownTypes.forEach { (id, name, count) ->
-                    FilterChip(
-                        selected = type == id,
-                        onClick = { type = id },
-                        label = {
-                            Text(if (count != null) stringResource(R.string.channels_type_with_count, name, Formats.count(count)) else name)
-                        },
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SheetLabel(stringResource(R.string.channels_filter_type))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppFilterChip(
+                        selected = type == null,
+                        onClick = { type = null },
+                        label = stringResource(R.string.channels_filter_all_types),
                     )
+                    shownTypes.forEach { (id, name, count) ->
+                        AppFilterChip(
+                            selected = type == id,
+                            onClick = { type = id },
+                            label = if (count != null) stringResource(R.string.channels_type_with_count, name, Formats.count(count)) else name,
+                        )
+                    }
                 }
             }
 
-            SheetLabel(stringResource(R.string.channels_filter_group))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = group.isEmpty(),
-                    onClick = { group = "" },
-                    label = { Text(stringResource(R.string.channels_filter_all_groups)) },
-                )
-                groupNames.forEach { name ->
-                    FilterChip(selected = group == name, onClick = { group = name }, label = { Text(name) })
-                }
-            }
-            when {
-                groups.isLoading -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                groups.failed -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        stringResource(R.string.channels_groups_load_failed),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.weight(1f),
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SheetLabel(stringResource(R.string.channels_filter_group))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppFilterChip(
+                        selected = group.isEmpty(),
+                        onClick = { group = "" },
+                        label = stringResource(R.string.channels_filter_all_groups),
                     )
-                    TextButton(onClick = onRetryGroups) { Text(stringResource(R.string.common_retry)) }
+                    groupNames.forEach { name ->
+                        AppFilterChip(selected = group == name, onClick = { group = name }, label = name)
+                    }
+                }
+                when {
+                    groups.isLoading -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = AppTheme.colors.mutedForeground)
+                    groups.failed -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            stringResource(R.string.channels_groups_load_failed),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTheme.colors.destructive,
+                            modifier = Modifier.weight(1f),
+                        )
+                        AppButton(
+                            stringResource(R.string.common_retry),
+                            onClick = onRetryGroups,
+                            variant = ButtonVariant.Outline,
+                            size = ButtonSize.Small,
+                        )
+                    }
                 }
             }
 
-            SheetLabel(stringResource(R.string.channels_filter_model))
-            OutlinedTextField(
+            AppTextField(
                 value = model,
                 onValueChange = { model = it },
-                singleLine = true,
-                placeholder = { Text(stringResource(R.string.channels_filter_model_placeholder)) },
                 modifier = Modifier.fillMaxWidth(),
+                label = stringResource(R.string.channels_filter_model),
+                placeholder = stringResource(R.string.channels_filter_model_placeholder),
+                singleLine = true,
             )
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                AppButton(
+                    stringResource(R.string.common_reset),
                     onClick = {
                         status = ChannelStatusFilter.ALL
                         type = null
@@ -521,11 +547,13 @@ private fun ChannelFilterSheet(
                         model = ""
                     },
                     modifier = Modifier.weight(1f),
-                ) { Text(stringResource(R.string.common_reset)) }
-                Button(
+                    variant = ButtonVariant.Outline,
+                )
+                AppButton(
+                    stringResource(R.string.common_apply),
                     onClick = { onApply(filters.copy(status = status, type = type, group = group.trim(), model = model.trim())) },
                     modifier = Modifier.weight(1f),
-                ) { Text(stringResource(R.string.common_apply)) }
+                )
             }
         }
     }
@@ -533,5 +561,5 @@ private fun ChannelFilterSheet(
 
 @Composable
 private fun SheetLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(text, style = MaterialTheme.typography.labelLarge)
 }

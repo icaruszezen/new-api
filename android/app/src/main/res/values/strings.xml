@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared strings. Feature screens keep theirs in strings_<feature>.xml. -->
+<resources>
+    <string name="app_name">New API Admin</string>
+
+    <string name="nav_logs">Logs</string>
+    <string name="nav_users">Users</string>
+    <string name="nav_channels">Channels</string>
+    <string name="nav_me">Me</string>
+
+    <string name="common_retry">Retry</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_confirm">Confirm</string>
+    <string name="common_ok">OK</string>
+    <string name="common_save">Save</string>
+    <string name="common_saved">Saved</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_edit">Edit</string>
+    <string name="common_copy">Copy</string>
+    <string name="common_copied">Copied</string>
+    <string name="common_clear">Clear</string>
+    <string name="common_close">Close</string>
+    <string name="common_back">Back</string>
+    <string name="common_refresh">Refresh</string>
+    <string name="common_search">Search</string>
+    <string name="common_filter">Filter</string>
+    <string name="common_reset">Reset</string>
+    <string name="common_apply">Apply</string>
+    <string name="common_all">All</string>
+    <string name="common_more">More</string>
+    <string name="common_enabled">Enabled</string>
+    <string name="common_disabled">Disabled</string>
+    <string name="common_enable">Enable</string>
+    <string name="common_disable">Disable</string>
+    <string name="common_no_more">No more items</string>
+    <string name="common_no_data">Nothing here yet</string>
+    <string name="common_unknown">Unknown</string>
+    <string name="common_required">Required</string>
+
+    <string name="error_unknown">Something went wrong</string>
+    <string name="error_session_expired">Your session has expired. Please sign in again.</string>
+    <string name="error_forbidden">You do not have permission to do this.</string>
+    <string name="error_rate_limited">Too many requests. Try again later.</string>
+    <string name="error_rate_limited_retry">Too many requests. Try again in %1$d s.</string>
+    <string name="error_http">Server error (HTTP %1$d)</string>
+    <string name="error_network">Cannot reach the server. Check the address and your connection.</string>
+    <string name="error_invalid_response">The server returned an unexpected response. Is this a new-api server?</string>
+    <string name="error_not_admin">This account is not an administrator.</string>
+    <string name="error_turnstile">This server requires Turnstile verification for password login. Sign in with an access token instead.</string>
+    <string name="error_password_login_disabled">Password login is disabled on this server. Sign in with an access token instead.</string>
+</resources>

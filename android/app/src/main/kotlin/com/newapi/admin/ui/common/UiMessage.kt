@@ -1,0 +1,36 @@
+package com.newapi.admin.ui.common
+
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
+import com.newapi.admin.R
+import com.newapi.admin.core.net.ApiError
+
+/** A one-off message a ViewModel wants shown in a snackbar; resolved to text in composition. */
+sealed interface UiMessage {
+    data class Res(val id: Int, val args: List<Any> = emptyList()) : UiMessage
+    data class Error(val error: Throwable) : UiMessage
+}
+
+@Composable
+fun UiMessage.text(): String = when (this) {
+    is UiMessage.Res -> if (args.isEmpty()) stringResource(id) else stringResource(id, *args.toTypedArray())
+    is UiMessage.Error -> errorMessage(error)
+}
+
+/** Localised text for any failure thrown by the API layer. */
+@Composable
+fun errorMessage(error: Throwable): String = when (error) {
+    is ApiError.Business -> error.message?.takeIf { it.isNotBlank() } ?: stringResource(R.string.error_unknown)
+    is ApiError.Unauthorized -> stringResource(R.string.error_session_expired)
+    is ApiError.Forbidden -> stringResource(R.string.error_forbidden)
+    is ApiError.RateLimited -> error.retryAfterSeconds
+        ?.let { stringResource(R.string.error_rate_limited_retry, it) }
+        ?: stringResource(R.string.error_rate_limited)
+    is ApiError.Http -> stringResource(R.string.error_http, error.status)
+    is ApiError.Network -> stringResource(R.string.error_network)
+    is ApiError.InvalidResponse -> stringResource(R.string.error_invalid_response)
+    is ApiError.NotAdmin -> stringResource(R.string.error_not_admin)
+    is ApiError.TurnstileRequired -> stringResource(R.string.error_turnstile)
+    is ApiError.PasswordLoginDisabled -> stringResource(R.string.error_password_login_disabled)
+    else -> error.message?.takeIf { it.isNotBlank() } ?: stringResource(R.string.error_unknown)
+}

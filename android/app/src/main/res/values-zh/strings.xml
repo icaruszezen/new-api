@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">New API 管理</string>
+
+    <string name="nav_logs">日志</string>
+    <string name="nav_users">用户</string>
+    <string name="nav_channels">渠道</string>
+    <string name="nav_me">我的</string>
+
+    <string name="common_retry">重试</string>
+    <string name="common_cancel">取消</string>
+    <string name="common_confirm">确定</string>
+    <string name="common_ok">好</string>
+    <string name="common_save">保存</string>
+    <string name="common_saved">已保存</string>
+    <string name="common_delete">删除</string>
+    <string name="common_edit">编辑</string>
+    <string name="common_copy">复制</string>
+    <string name="common_copied">已复制</string>
+    <string name="common_clear">清除</string>
+    <string name="common_close">关闭</string>
+    <string name="common_back">返回</string>
+    <string name="common_refresh">刷新</string>
+    <string name="common_search">搜索</string>
+    <string name="common_filter">筛选</string>
+    <string name="common_reset">重置</string>
+    <string name="common_apply">应用</string>
+    <string name="common_all">全部</string>
+    <string name="common_more">更多</string>
+    <string name="common_enabled">已启用</string>
+    <string name="common_disabled">已禁用</string>
+    <string name="common_enable">启用</string>
+    <string name="common_disable">禁用</string>
+    <string name="common_no_more">没有更多了</string>
+    <string name="common_no_data">暂无数据</string>
+    <string name="common_unknown">未知</string>
+    <string name="common_required">必填</string>
+
+    <string name="error_unknown">出错了</string>
+    <string name="error_session_expired">登录已过期，请重新登录。</string>
+    <string name="error_forbidden">没有权限执行此操作。</string>
+    <string name="error_rate_limited">请求过于频繁，请稍后再试。</string>
+    <string name="error_rate_limited_retry">请求过于频繁，请 %1$d 秒后再试。</string>
+    <string name="error_http">服务器错误（HTTP %1$d）</string>
+    <string name="error_network">无法连接服务器，请检查地址和网络。</string>
+    <string name="error_invalid_response">服务器返回了无法识别的响应，请确认这是 new-api 服务端。</string>
+    <string name="error_not_admin">该账号不是管理员。</string>
+    <string name="error_turnstile">该服务器的密码登录需要 Turnstile 人机验证，请改用访问令牌登录。</string>
+    <string name="error_password_login_disabled">该服务器已关闭密码登录，请改用访问令牌登录。</string>
+</resources>

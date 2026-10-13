@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Usage logs screen. Labels follow the web admin (web/src/features/usage-logs). -->
+<resources>
+    <string name="logs_title">Usage logs</string>
+    <string name="logs_empty">No logs match these filters. Try a wider time range.</string>
+    <string name="logs_empty_errors">No error logs here. The server records them only when it runs with ERROR_LOG_ENABLED=true.</string>
+
+    <!-- Log types (model/log.go); 0 is "all" as a filter and "Unknown" on a row. -->
+    <string name="logs_type_all">All types</string>
+    <string name="logs_type_unknown">Unknown</string>
+    <string name="logs_type_topup">Top-up</string>
+    <string name="logs_type_consume">Consume</string>
+    <string name="logs_type_manage">Manage</string>
+    <string name="logs_type_system">System</string>
+    <string name="logs_type_error">Error</string>
+    <string name="logs_type_refund">Refund</string>
+    <string name="logs_type_login">Login</string>
+
+    <!-- Time range -->
+    <string name="logs_range_today">Today</string>
+    <string name="logs_range_yesterday">Yesterday</string>
+    <string name="logs_range_last_7_days">Last 7 days</string>
+    <string name="logs_range_last_30_days">Last 30 days</string>
+    <string name="logs_range_custom">Custom</string>
+    <string name="logs_range_custom_value">%1$s – %2$s</string>
+    <string name="logs_range_pick_title">Select date range</string>
+
+    <!-- Filter sheet and chips -->
+    <string name="logs_filter_title">Filter logs</string>
+    <string name="logs_filter_time">Time range</string>
+    <string name="logs_filter_type">Log type</string>
+    <string name="logs_filter_wildcard_hint">Exact match; use %1$s as a wildcard</string>
+    <string name="logs_chip_user">User: %1$s</string>
+    <string name="logs_chip_token">Token: %1$s</string>
+    <string name="logs_chip_model">Model: %1$s</string>
+    <string name="logs_chip_channel">Channel #%1$d</string>
+    <string name="logs_chip_group">Group: %1$s</string>
+    <string name="logs_chip_request_id">Request: %1$s</string>
+    <string name="logs_chip_remove">Remove filter</string>
+
+    <!-- Stats -->
+    <string name="logs_stats_quota">Usage</string>
+    <string name="logs_stats_rpm">RPM</string>
+    <string name="logs_stats_tpm">TPM</string>
+    <string name="logs_stats_caption">RPM and TPM cover the last 60 seconds</string>
+    <string name="logs_stats_caption_with_total">%1$s entries · RPM and TPM cover the last 60 seconds</string>
+    <string name="logs_stats_failed">Could not load usage stats</string>
+
+    <!-- Rows -->
+    <string name="logs_mapped_to">→ %1$s</string>
+    <string name="logs_cache_read_hint">Cache ↓ %1$s</string>
+    <string name="logs_first_token_value">First token %1$s</string>
+    <string name="logs_stream">Stream</string>
+    <string name="logs_non_stream">Non-stream</string>
+    <string name="logs_stream_ok">Normal</string>
+    <string name="logs_stream_error">Stream error</string>
+    <string name="logs_billing_subscription">Subscription</string>
+    <string name="logs_billing_wallet">Wallet</string>
+    <string name="logs_waived">Waived</string>
+
+    <!-- Detail sheet -->
+    <string name="logs_detail_title">Log details</string>
+    <string name="logs_detail_section_request">Request</string>
+    <string name="logs_detail_section_billing">Billing details</string>
+    <string name="logs_detail_section_tokens">Token breakdown</string>
+    <string name="logs_detail_section_error">Error</string>
+    <string name="logs_detail_section_stream">Stream status</string>
+    <string name="logs_detail_section_audit">Operation audit</string>
+    <string name="logs_detail_section_content">Content</string>
+    <string name="logs_detail_section_raw">Raw data (other)</string>
+    <string name="logs_detail_expand">Show</string>
+    <string name="logs_detail_collapse">Hide</string>
+    <string name="logs_view_user">View user</string>
+    <string name="logs_view_target_user">View target user</string>
+    <string name="logs_view_channel">View channel</string>
+    <string name="logs_value_with_id">%1$s (#%2$d)</string>
+    <string name="logs_not_applicable">N/A</string>
+    <string name="logs_price_per_million">%1$s / 1M tokens</string>
+    <string name="logs_billing_per_call">Per-call</string>
+    <string name="logs_billing_per_token">Per-token</string>
+    <string name="logs_end_reason_client_gone">Cancelled by client</string>
+
+    <!-- Field labels (filter sheet and detail sheet) -->
+    <string name="logs_label_time">Time</string>
+    <string name="logs_label_log_id">Log ID</string>
+    <string name="logs_label_request_id">Request ID</string>
+    <string name="logs_label_upstream_request_id">Upstream request ID</string>
+    <string name="logs_label_user">User</string>
+    <string name="logs_label_operator">Operator</string>
+    <string name="logs_label_username">Username</string>
+    <string name="logs_label_token">Token</string>
+    <string name="logs_label_token_name">Token name</string>
+    <string name="logs_label_model">Model</string>
+    <string name="logs_label_model_name">Model name</string>
+    <string name="logs_label_upstream_model">Actual model</string>
+    <string name="logs_label_channel">Channel</string>
+    <string name="logs_label_channel_id">Channel ID</string>
+    <string name="logs_label_retry_chain">Retry chain</string>
+    <string name="logs_label_group">Group</string>
+    <string name="logs_label_ip">IP address</string>
+    <string name="logs_label_request_path">Request path</string>
+    <string name="logs_label_stream">Response</string>
+    <string name="logs_label_use_time">Duration</string>
+    <string name="logs_label_first_response">First token</string>
+    <string name="logs_label_cost">Cost</string>
+    <string name="logs_label_billing_source">Billing source</string>
+    <string name="logs_label_billing_mode">Billing mode</string>
+    <string name="logs_label_model_price">Model price</string>
+    <string name="logs_label_model_ratio">Model ratio</string>
+    <string name="logs_label_completion_ratio">Completion ratio</string>
+    <string name="logs_label_input_price">Input price</string>
+    <string name="logs_label_output_price">Output price</string>
+    <string name="logs_label_group_ratio">Group ratio</string>
+    <string name="logs_label_user_group_ratio">User exclusive ratio</string>
+    <string name="logs_label_cache_ratio">Cache ratio</string>
+    <string name="logs_label_reasoning_effort">Reasoning effort</string>
+    <string name="logs_label_prompt_tokens">Input tokens</string>
+    <string name="logs_label_completion_tokens">Output tokens</string>
+    <string name="logs_label_cache_read">Cache read</string>
+    <string name="logs_label_cache_write">Cache write</string>
+    <string name="logs_label_reject_reason">Reject reason</string>
+    <string name="logs_label_error_type">Error type</string>
+    <string name="logs_label_error_code">Error code</string>
+    <string name="logs_label_status_code">Status code</string>
+    <string name="logs_label_stream_status">Status</string>
+    <string name="logs_label_end_reason">End reason</string>
+    <string name="logs_label_soft_errors">Soft errors</string>
+    <string name="logs_label_operation">Operation</string>
+</resources>

@@ -37,9 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -113,21 +111,22 @@ fun EmptyState(text: String, modifier: Modifier = Modifier, icon: ImageVector = 
     }
 }
 
-/** Calls [onLoadMore] when the last visible item is within [buffer] items of the end. */
+/**
+ * Calls [onLoadMore] when the last visible item is within [buffer] items of the end, and again
+ * whenever the item count grows while still near the end (a page that fits on screen keeps loading).
+ */
 @Composable
 fun LoadMoreEffect(listState: LazyListState, onLoadMore: () -> Unit, buffer: Int = 5) {
     val currentOnLoadMore by rememberUpdatedState(onLoadMore)
-    val shouldLoad by remember(listState) {
-        derivedStateOf {
-            val info = listState.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
-            info.totalItemsCount > 0 && last >= info.totalItemsCount - 1 - buffer
-        }
-    }
     LaunchedEffect(listState) {
-        snapshotFlow { shouldLoad }
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val nearEnd = info.totalItemsCount > 0 && last >= info.totalItemsCount - 1 - buffer
+            nearEnd to info.totalItemsCount
+        }
             .distinctUntilChanged()
-            .filter { it }
+            .filter { (nearEnd, _) -> nearEnd }
             .collect { currentOnLoadMore() }
     }
 }

@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- List -->
+    <string name="users_title">用户</string>
+    <string name="users_add">添加用户</string>
+    <string name="users_search_placeholder">搜索 ID、用户名、邮箱或显示名称</string>
+    <plurals name="users_count">
+        <item quantity="other">共 %1$s 个用户</item>
+    </plurals>
+    <string name="users_empty">暂无用户</string>
+    <string name="users_empty_filtered">未找到符合条件的用户</string>
+    <string name="users_remaining_value">剩余 %1$s</string>
+    <string name="users_used_value">已用 %1$s</string>
+    <string name="users_requests_value">请求：%1$s</string>
+    <string name="users_no_quota">无余额</string>
+    <string name="users_remove_filter">移除筛选</string>
+
+    <!-- Filters -->
+    <string name="users_filters_title">筛选用户</string>
+    <string name="users_filter_role">角色</string>
+    <string name="users_filter_status">状态</string>
+    <string name="users_filter_group">分组</string>
+    <string name="users_all_groups">所有分组</string>
+    <string name="users_groups_load_failed">无法加载分组列表。</string>
+
+    <!-- Roles and status -->
+    <string name="users_role_guest">访客</string>
+    <string name="users_role_user">用户</string>
+    <string name="users_role_admin">管理员</string>
+    <string name="users_role_root">超级管理员</string>
+    <string name="users_role_other">角色 %1$d</string>
+    <string name="users_status_deleted">已注销</string>
+    <string name="users_status_other">状态 %1$d</string>
+
+    <!-- Detail -->
+    <string name="users_detail_title">用户 #%1$d</string>
+    <string name="users_section_profile">基本信息</string>
+    <string name="users_section_quota">额度</string>
+    <string name="users_section_invite">邀请信息</string>
+    <string name="users_section_bindings">绑定信息</string>
+    <string name="users_section_permissions">管理员权限</string>
+    <string name="users_section_actions">操作</string>
+    <string name="users_field_id">ID</string>
+    <string name="users_field_username">用户名</string>
+    <string name="users_field_display_name">显示名称</string>
+    <string name="users_field_email">邮箱</string>
+    <string name="users_field_group">分组</string>
+    <string name="users_field_role">角色</string>
+    <string name="users_field_status">状态</string>
+    <string name="users_field_remark">备注</string>
+    <string name="users_field_created">创建时间</string>
+    <string name="users_field_last_login">最后登录</string>
+    <string name="users_field_password">密码</string>
+    <string name="users_never">从未登录</string>
+    <string name="users_field_remaining">剩余额度</string>
+    <string name="users_field_used">已用额度</string>
+    <string name="users_field_total">总额度</string>
+    <string name="users_field_requests">请求次数</string>
+    <string name="users_field_aff_code">邀请码</string>
+    <string name="users_field_aff_count">已邀请人数</string>
+    <string name="users_field_aff_quota">待领取奖励</string>
+    <string name="users_field_aff_history">累计奖励</string>
+    <string name="users_field_inviter">邀请人</string>
+    <string name="users_binding_github">GitHub</string>
+    <string name="users_binding_discord">Discord</string>
+    <string name="users_binding_oidc">OIDC</string>
+    <string name="users_binding_wechat">微信</string>
+    <string name="users_binding_telegram">Telegram</string>
+    <string name="users_binding_linuxdo">LINUX DO</string>
+    <string name="users_perm_channel">渠道管理</string>
+    <string name="users_perm_read">读取渠道</string>
+    <string name="users_perm_operate">运维渠道</string>
+    <string name="users_perm_write">编辑渠道路由</string>
+    <string name="users_perm_sensitive_write">编辑敏感渠道设置</string>
+    <string name="users_perm_secret_view">查看渠道密钥</string>
+    <string name="users_perm_none">无</string>
+    <string name="users_deleted_banner">该用户已注销，仅可查看。</string>
+    <string name="users_deleted_done">该用户已被删除。</string>
+    <string name="users_cannot_manage">无法管理同级或更高级别的用户。</string>
+
+    <!-- Actions -->
+    <string name="users_action_view_logs">查看使用日志</string>
+    <string name="users_action_adjust_quota">调整额度</string>
+    <string name="users_action_edit_profile">编辑资料</string>
+    <string name="users_action_edit_profile_desc">显示名称、分组和备注</string>
+    <string name="users_action_change_password">修改密码</string>
+    <string name="users_action_enable_desc">允许该用户重新登录并使用 API</string>
+    <string name="users_action_disable_desc">禁止登录，并让该用户在所有设备上退出登录</string>
+    <string name="users_action_promote">提升为管理员</string>
+    <string name="users_action_demote">降级为普通用户</string>
+    <string name="users_action_reset_2fa">重置 2FA</string>
+    <string name="users_action_reset_passkey">重置 Passkey</string>
+    <string name="users_action_delete">删除用户</string>
+    <string name="users_action_delete_desc">永久删除，无法撤销</string>
+
+    <!-- Confirmations -->
+    <string name="users_confirm_disable_title">禁用该用户？</string>
+    <string name="users_confirm_disable_text">%1$s 将在所有设备上退出登录，重新启用前无法登录。</string>
+    <string name="users_confirm_promote_title">提升为管理员？</string>
+    <string name="users_confirm_promote_text">%1$s 将获得此服务器的管理员权限，并在所有设备上退出登录。</string>
+    <string name="users_confirm_demote_title">降级为普通用户？</string>
+    <string name="users_confirm_demote_text">%1$s 将失去管理员权限，其管理员权限配置会被清除，并在所有设备上退出登录。</string>
+    <string name="users_confirm_reset_2fa_text">要重置 %1$s 的 2FA 吗？该用户必须重新设置 2FA 后才能继续使用，并会在所有设备上退出登录。</string>
+    <string name="users_confirm_reset_passkey_text">要重置 %1$s 的 Passkey 吗？该用户需要重新注册 Passkey 后才能使用无密码登录，并会在所有设备上退出登录。</string>
+    <string name="users_confirm_delete_title">永久删除该用户？</string>
+    <string name="users_confirm_delete_text">这将永久删除用户 %1$s 及其 API 令牌、2FA、Passkey、会话和绑定信息。使用日志和充值记录会保留。此操作无法撤销。</string>
+    <string name="users_self_warning">这是你自己的账号：本设备也会退出登录。</string>
+
+    <!-- Results -->
+    <string name="users_msg_enabled">用户启用成功</string>
+    <string name="users_msg_disabled">用户禁用成功</string>
+    <string name="users_msg_promoted">已成功提升为管理员</string>
+    <string name="users_msg_demoted">已成功降级为普通用户</string>
+    <string name="users_msg_quota_adjusted">调整额度成功</string>
+    <string name="users_msg_updated">用户更新成功</string>
+    <string name="users_msg_password_changed">密码已修改</string>
+    <string name="users_msg_2fa_reset">两因素认证已重置</string>
+    <string name="users_msg_passkey_reset">Passkey 已重置</string>
+    <string name="users_server_message">%1$s</string>
+
+    <!-- Adjust balance -->
+    <string name="users_quota_mode_add">添加</string>
+    <string name="users_quota_mode_subtract">减少</string>
+    <string name="users_quota_mode_set">设为</string>
+    <string name="users_quota_amount">金额（%1$s）</string>
+    <string name="users_quota_amount_tokens">额度（Token）</string>
+    <string name="users_quota_units">= %1$s 额度单位</string>
+    <string name="users_quota_current">当前额度：%1$s</string>
+    <string name="users_quota_result">调整后额度：%1$s</string>
+    <string name="users_quota_negative_warning">调整后额度将为负数。</string>
+    <string name="users_quota_cache_note">中转服务可能在约一分钟内仍使用之前的额度。</string>
+    <string name="users_quota_settings_missing">服务器的货币显示设置尚未加载，暂时无法换算金额。</string>
+    <string name="users_quota_error_invalid">请输入有效的数字</string>
+    <string name="users_quota_error_positive">请输入大于 0 的金额</string>
+    <string name="users_quota_error_too_small">金额小于 1 个额度单位</string>
+    <string name="users_quota_error_negative">额度不能设为负数</string>
+    <string name="users_quota_error_too_large">调整后额度将超过上限 %1$s</string>
+    <string name="users_quota_error_range">金额超出范围</string>
+
+    <!-- Edit profile -->
+    <string name="users_display_name_hint">留空以使用用户名</string>
+    <string name="users_length_counter">%1$d / %2$d</string>
+    <string name="users_error_too_long">最多 %1$d 个字符</string>
+    <string name="users_group_signout_warning">修改分组会让该用户在所有设备上退出登录。</string>
+
+    <!-- Password -->
+    <string name="users_password_new">新密码</string>
+    <string name="users_password_confirm">确认密码</string>
+    <string name="users_password_length">8 到 20 个字符</string>
+    <string name="users_password_length_error">密码长度必须在 8 到 20 个字符之间</string>
+    <string name="users_password_mismatch">两次输入的密码不一致</string>
+    <string name="users_password_reserved">不能使用此密码</string>
+    <string name="users_password_warning">该用户将在所有浏览器和应用会话中退出登录。个人访问令牌和 API 密钥仍然有效。</string>
+    <string name="users_show_password">显示密码</string>
+    <string name="users_hide_password">隐藏密码</string>
+
+    <!-- Create -->
+    <string name="users_create_username_hint">最多 20 个字符</string>
+    <string name="users_create_display_name_hint">可选，留空则使用用户名</string>
+    <string name="users_create_role_user">普通用户</string>
+    <string name="users_create_role_admin">管理员</string>
+    <string name="users_create_note">新用户默认位于 default 分组，并获得服务器设置的新用户初始额度。</string>
+    <string name="users_create_submit">创建用户</string>
+</resources>

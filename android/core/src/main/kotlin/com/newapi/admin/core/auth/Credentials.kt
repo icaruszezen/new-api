@@ -76,6 +76,10 @@ sealed interface AuthState {
 sealed interface LoginResult {
     data class Success(val user: SelfUser) : LoginResult
 
-    /** Password was right but the account has 2FA; call `verifyTwoFactor` within 5 minutes. */
+    /**
+     * Password was right but the account has 2FA; call `verifyTwoFactor` within 5 minutes.
+     * [baseUrl] is normalised; [expiresAt] is the flow's expiry in unix seconds of the server clock.
+     * A wrong code does not consume the flow; five wrong codes lock 2FA for five minutes.
+     */
     data class TwoFactorRequired(val baseUrl: String, val flowToken: String, val expiresAt: Long) : LoginResult
 }

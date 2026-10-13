@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_role_root">超级管理员</string>
+    <string name="settings_role_admin">管理员</string>
+    <string name="settings_balance">当前余额</string>
+    <string name="settings_used_quota">总用量</string>
+    <string name="settings_request_count">API 请求</string>
+    <string name="settings_user_id">用户 ID</string>
+    <string name="settings_group">分组</string>
+    <string name="settings_email">邮箱</string>
+    <string name="settings_sign_in_method">登录方式</string>
+    <string name="settings_method_session">密码登录（会话）</string>
+    <string name="settings_method_token">访问令牌</string>
+    <string name="settings_token_note">访问令牌不会过期。在网页控制台重新生成令牌后，本应用会被登出。</string>
+
+    <string name="settings_server_title">服务器</string>
+    <string name="settings_server_address">地址</string>
+    <string name="settings_cleartext">未加密连接（http://）</string>
+    <string name="settings_system_name">系统名称</string>
+    <string name="settings_server_version">版本</string>
+    <string name="settings_quota_display">额度显示模式</string>
+    <string name="settings_display_usd">美元（USD）</string>
+    <string name="settings_display_cny">人民币（CNY）</string>
+    <string name="settings_display_tokens">仅限 Token</string>
+    <string name="settings_display_custom">自定义货币（%1$s）</string>
+    <string name="settings_exchange_rate">汇率</string>
+    <string name="settings_exchange_rate_value">1 USD = %1$s %2$s</string>
+    <string name="settings_quota_per_unit">每美元额度</string>
+
+    <string name="settings_security_title">安全</string>
+    <string name="settings_change_password">更改密码</string>
+    <string name="settings_change_password_desc">其他已登录此账号的设备将被登出。</string>
+    <string name="settings_change_password_unavailable">使用访问令牌登录时不可用，请使用密码登录后再更改。</string>
+    <string name="settings_password_dialog_text">此操作会登出使用该账号的其他所有设备和浏览器，本应用将保持登录。</string>
+    <string name="settings_current_password">当前密码</string>
+    <string name="settings_new_password">新密码</string>
+    <string name="settings_confirm_password">确认新密码</string>
+    <string name="settings_show_password">显示密码</string>
+    <string name="settings_hide_password">隐藏密码</string>
+    <string name="settings_password_length">密码长度必须在 8 到 20 个字符之间</string>
+    <string name="settings_password_same">新密码必须与当前密码不同。</string>
+    <string name="settings_password_mismatch">两次输入的密码不一致。</string>
+    <string name="settings_change_password_confirm">更改</string>
+    <string name="settings_password_changed">密码已更改，其他会话已登出。</string>
+
+    <string name="settings_sign_out">退出登录</string>
+    <string name="settings_sign_out_confirm_title">退出登录？</string>
+    <string name="settings_sign_out_confirm_text">退出后需要重新登录才能继续管理 %1$s。</string>
+
+    <string name="settings_about_title">关于</string>
+    <string name="settings_app_version">应用版本</string>
+</resources>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="login_subtitle">Sign in with an administrator account</string>
+    <string name="login_signed_out_not_admin">You were signed out because this account is no longer an administrator.</string>
+
+    <string name="login_server_label">Server address</string>
+    <string name="login_server_placeholder">https://api.example.com</string>
+    <string name="login_server_invalid">Enter an http:// or https:// address, for example https://api.example.com</string>
+    <string name="login_server_cleartext">This is an http:// address. Your password and tokens travel unencrypted.</string>
+    <string name="login_server_found">Connected to %1$s</string>
+    <string name="login_server_found_version">Connected to %1$s (%2$s)</string>
+
+    <string name="login_mode_password">Password</string>
+    <string name="login_mode_token">Access token</string>
+    <string name="login_username_label">Username or email</string>
+    <string name="login_password_label">Password</string>
+    <string name="login_token_label">Access token</string>
+    <string name="login_show_secret">Show</string>
+    <string name="login_hide_secret">Hide</string>
+    <string name="login_token_help">Generate one in the web console: open Profile from the avatar menu, then Security → Access Token. Regenerating it there invalidates the previous token and signs this app out.</string>
+    <string name="login_token_limits">An access token never expires, but some actions need a password sign-in, such as changing your password.</string>
+    <string name="login_use_token">Use an access token</string>
+    <string name="login_sign_in">Sign in</string>
+
+    <string name="login_error_token_rejected">The server rejected this access token. Copy the current token from the web console and try again.</string>
+    <string name="login_error_user_disabled">This account has been disabled.</string>
+    <string name="login_error_session_limit">This account has too many active sign-in sessions. Sign out other sessions in the web console (Profile → Login sessions), then try again.</string>
+
+    <string name="login_2fa_title">Two-factor authentication</string>
+    <string name="login_2fa_code_prompt">Enter the 6-digit code from your authenticator app.</string>
+    <string name="login_2fa_backup_prompt">Enter one of your backup codes.</string>
+    <string name="login_2fa_code_label">Verification code</string>
+    <string name="login_2fa_backup_label">Backup code</string>
+    <string name="login_2fa_code_placeholder">123456</string>
+    <string name="login_2fa_backup_placeholder">XXXX-XXXX</string>
+    <string name="login_2fa_code_hint">Codes refresh every 30 seconds.</string>
+    <string name="login_2fa_backup_hint">Each backup code can only be used once.</string>
+    <string name="login_2fa_code_invalid">The verification code must be 6 digits.</string>
+    <string name="login_2fa_use_backup">Use a backup code</string>
+    <string name="login_2fa_use_totp">Use authenticator code</string>
+    <string name="login_2fa_verify">Verify and sign in</string>
+    <string name="login_2fa_back">Back to sign in</string>
+    <string name="login_2fa_expired">The sign-in attempt expired. Please sign in again.</string>
+</resources>

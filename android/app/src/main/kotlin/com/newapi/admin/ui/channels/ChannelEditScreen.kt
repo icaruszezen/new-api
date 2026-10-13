@@ -163,7 +163,8 @@ fun ChannelEditScreen(channelId: Int?, onBack: () -> Unit, onSaved: () -> Unit) 
                             AppButton(
                                 stringResource(R.string.common_save),
                                 onClick = { viewModel.save(canEditSensitive) },
-                                modifier = Modifier.padding(end = 8.dp),
+                                // With the bar's own 4dp, the button lines up with the 16dp content gutter.
+                                modifier = Modifier.padding(end = 12.dp),
                                 size = ButtonSize.Small,
                                 enabled = !state.saved && (viewModel.isCreate || viewModel.isDirty),
                             )

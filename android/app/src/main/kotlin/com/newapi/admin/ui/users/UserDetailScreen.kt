@@ -1,11 +1,15 @@
 package com.newapi.admin.ui.users
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -13,47 +17,36 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DeleteForever
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Password
-import androidx.compose.material.icons.filled.PersonOff
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.ArrowDownward
+import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Password
+import androidx.compose.material.icons.outlined.PersonOff
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SheetValue
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -66,10 +59,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -91,6 +83,18 @@ import com.newapi.admin.core.model.UserStatus
 import com.newapi.admin.ui.common.UiMessage
 import com.newapi.admin.ui.common.errorMessage
 import com.newapi.admin.ui.common.text
+import com.newapi.admin.ui.components.AppAlert
+import com.newapi.admin.ui.components.AppAvatar
+import com.newapi.admin.ui.components.AppBottomSheet
+import com.newapi.admin.ui.components.AppButton
+import com.newapi.admin.ui.components.AppCard
+import com.newapi.admin.ui.components.AppDialog
+import com.newapi.admin.ui.components.AppSegmentedTabs
+import com.newapi.admin.ui.components.AppSnackbarHost
+import com.newapi.admin.ui.components.AppTextField
+import com.newapi.admin.ui.components.AppTopBar
+import com.newapi.admin.ui.components.ButtonSize
+import com.newapi.admin.ui.components.ButtonVariant
 import com.newapi.admin.ui.components.ConfirmDialog
 import com.newapi.admin.ui.components.EmptyState
 import com.newapi.admin.ui.components.FullScreenError
@@ -100,6 +104,7 @@ import com.newapi.admin.ui.components.SectionCard
 import com.newapi.admin.ui.components.StatusPill
 import com.newapi.admin.ui.components.rememberCurrentUser
 import com.newapi.admin.ui.components.rememberQuotaFormatter
+import com.newapi.admin.ui.theme.AppTheme
 import com.newapi.admin.ui.theme.Tone
 import com.newapi.admin.ui.theme.colors
 import kotlinx.coroutines.flow.first
@@ -140,26 +145,20 @@ fun UserDetailScreen(userId: Int, onBack: () -> Unit, onOpenLogs: (username: Str
     val user = state.user
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        user?.displayName?.ifBlank { user.username } ?: stringResource(R.string.users_detail_title, userId),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
+            AppTopBar(
+                title = user?.displayName?.ifBlank { user.username } ?: stringResource(R.string.users_detail_title, userId),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { AppSnackbarHost(snackbarHostState) },
     ) { padding ->
         val loadError = state.loadError
         when {
-            state.deleted -> EmptyState(stringResource(R.string.users_deleted_done), Modifier.padding(padding), icon = Icons.Filled.PersonOff)
+            state.deleted -> EmptyState(stringResource(R.string.users_deleted_done), Modifier.padding(padding), icon = Icons.Outlined.PersonOff)
             user == null && loadError != null -> FullScreenError(loadError, onRetry = viewModel::load, modifier = Modifier.padding(padding))
             user == null -> FullScreenLoading(Modifier.padding(padding))
             else -> PullToRefreshBox(
@@ -175,7 +174,9 @@ fun UserDetailScreen(userId: Int, onBack: () -> Unit, onOpenLogs: (username: Str
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     UserHeader(user)
-                    if (user.isDeleted) Notice(stringResource(R.string.users_deleted_banner))
+                    if (user.isDeleted) {
+                        AppAlert(text = stringResource(R.string.users_deleted_banner), tone = Tone.Warning, icon = Icons.Outlined.Info)
+                    }
                     ProfileSection(user)
                     QuotaSection(user, formatter)
                     InviteSection(user, formatter)
@@ -280,50 +281,24 @@ private fun UserHeader(user: AdminUser) {
     val displayName = user.displayName.ifBlank { user.username }
     SectionCard(title = null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(48.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        // Two chars when the name starts with a surrogate pair (emoji, rare CJK).
-                        displayName.take(if (displayName.firstOrNull()?.isHighSurrogate() == true) 2 else 1).uppercase(),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
-            Spacer(Modifier.width(12.dp))
+            AppAvatar(avatarInitials(displayName), size = 56.dp)
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(displayName, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(displayName, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
                     "@${user.username} · #${user.id}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = AppTheme.colors.mutedForeground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             RolePill(user.role)
             UserStatusPill(user)
-            if (user.group.isNotEmpty()) StatusPill(user.group, Tone.Neutral, Modifier.weight(1f, fill = false))
-        }
-    }
-}
-
-@Composable
-private fun Notice(text: String) {
-    val colors = Tone.Warning.colors()
-    Surface(color = colors.container, contentColor = colors.content, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Info, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(text, style = MaterialTheme.typography.bodyMedium)
+            if (user.group.isNotEmpty()) StatusPill(user.group, Tone.Neutral, Modifier.weight(1f, fill = false), outlined = true)
         }
     }
 }
@@ -347,15 +322,45 @@ private fun ProfileSection(user: AdminUser) {
     }
 }
 
+/** The balance as the headline figure over the quota bar, with used, total and requests as stat tiles. */
 @Composable
 private fun QuotaSection(user: AdminUser, formatter: QuotaFormatter) {
+    val colors = AppTheme.colors
     SectionCard(title = stringResource(R.string.users_section_quota)) {
-        InfoRow(stringResource(R.string.users_field_remaining), formatter.format(user.quota))
-        InfoRow(stringResource(R.string.users_field_used), formatter.format(user.usedQuota))
-        InfoRow(stringResource(R.string.users_field_total), formatter.format(user.quota + user.usedQuota))
-        InfoRow(stringResource(R.string.users_field_requests), Formats.count(user.requestCount))
-        Spacer(Modifier.height(8.dp))
+        Text(stringResource(R.string.users_field_remaining), style = MaterialTheme.typography.bodySmall, color = colors.mutedForeground)
+        Text(
+            formatter.format(user.quota),
+            style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
+            color = if (user.quota < 0) colors.destructive else colors.foreground,
+        )
+        Spacer(Modifier.height(10.dp))
         QuotaBar(user.quota, user.usedQuota)
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            QuotaStat(stringResource(R.string.users_field_used), formatter.format(user.usedQuota), Modifier.weight(1f))
+            QuotaStat(stringResource(R.string.users_field_total), formatter.format(user.quota + user.usedQuota), Modifier.weight(1f))
+            QuotaStat(stringResource(R.string.users_field_requests), Formats.count(user.requestCount), Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun QuotaStat(label: String, value: String, modifier: Modifier) {
+    Column(
+        modifier
+            .fillMaxHeight()
+            .background(AppTheme.colors.muted, MaterialTheme.shapes.medium)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = AppTheme.colors.mutedForeground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(value, style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum"))
     }
 }
 
@@ -426,16 +431,23 @@ private fun ActionsSection(
     val iAmRoot = myRole >= Roles.ROOT
     val canManage = !user.isDeleted && (iAmRoot || myRole > user.role)
 
-    SectionCard(title = stringResource(R.string.users_section_actions)) {
-        ActionItem(Icons.AutoMirrored.Filled.ReceiptLong, stringResource(R.string.users_action_view_logs), onClick = onOpenLogs)
+    // Rows run edge to edge, so the card only pads its title.
+    AppCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(top = 16.dp, bottom = 6.dp)) {
+        Text(
+            stringResource(R.string.users_section_actions),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        Spacer(Modifier.height(6.dp))
+        ActionItem(Icons.AutoMirrored.Outlined.ReceiptLong, stringResource(R.string.users_action_view_logs), onClick = onOpenLogs)
         if (canManage) {
             ManageActions(user, iAmRoot, myRole, running, onOpenDialog, onAction)
         } else if (!user.isDeleted) {
             Text(
                 stringResource(R.string.users_cannot_manage),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 8.dp),
+                color = AppTheme.colors.mutedForeground,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
         }
     }
@@ -454,14 +466,14 @@ private fun ManageActions(
     val idle = running == null
     Column {
         ActionItem(
-            Icons.Filled.AccountBalanceWallet,
+            Icons.Outlined.AccountBalanceWallet,
             stringResource(R.string.users_action_adjust_quota),
             onClick = { onOpenDialog(UserDialog.ADJUST_QUOTA) },
             enabled = idle,
             busy = running == UserOperation.ADJUST_QUOTA,
         )
         ActionItem(
-            Icons.Filled.Edit,
+            Icons.Outlined.Edit,
             stringResource(R.string.users_action_edit_profile),
             subtitle = stringResource(R.string.users_action_edit_profile_desc),
             onClick = { onOpenDialog(UserDialog.EDIT_PROFILE) },
@@ -469,16 +481,16 @@ private fun ManageActions(
             busy = running == UserOperation.EDIT_PROFILE,
         )
         ActionItem(
-            Icons.Filled.Password,
+            Icons.Outlined.Password,
             stringResource(R.string.users_action_change_password),
             onClick = { onOpenDialog(UserDialog.CHANGE_PASSWORD) },
             enabled = idle,
             busy = running == UserOperation.CHANGE_PASSWORD,
         )
-        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+        HorizontalDivider(Modifier.padding(vertical = 6.dp), color = AppTheme.colors.border)
         if (user.status == UserStatus.DISABLED) {
             ActionItem(
-                Icons.Filled.CheckCircle,
+                Icons.Outlined.CheckCircle,
                 stringResource(R.string.common_enable),
                 subtitle = stringResource(R.string.users_action_enable_desc),
                 onClick = { onAction(UserOperation.ENABLE) },
@@ -487,7 +499,7 @@ private fun ManageActions(
             )
         } else if (!targetIsRoot) {
             ActionItem(
-                Icons.Filled.Block,
+                Icons.Outlined.Block,
                 stringResource(R.string.common_disable),
                 subtitle = stringResource(R.string.users_action_disable_desc),
                 onClick = { onAction(UserOperation.DISABLE) },
@@ -497,7 +509,7 @@ private fun ManageActions(
         }
         if (iAmRoot && user.role < Roles.ADMIN) {
             ActionItem(
-                Icons.Filled.ArrowUpward,
+                Icons.Outlined.ArrowUpward,
                 stringResource(R.string.users_action_promote),
                 onClick = { onAction(UserOperation.PROMOTE) },
                 enabled = idle,
@@ -506,7 +518,7 @@ private fun ManageActions(
         }
         if (user.role >= Roles.ADMIN && !targetIsRoot) {
             ActionItem(
-                Icons.Filled.ArrowDownward,
+                Icons.Outlined.ArrowDownward,
                 stringResource(R.string.users_action_demote),
                 onClick = { onAction(UserOperation.DEMOTE) },
                 enabled = idle,
@@ -514,29 +526,29 @@ private fun ManageActions(
             )
         }
         ActionItem(
-            Icons.Filled.Security,
+            Icons.Outlined.Security,
             stringResource(R.string.users_action_reset_2fa),
             onClick = { onAction(UserOperation.RESET_2FA) },
             enabled = idle,
             busy = running == UserOperation.RESET_2FA,
         )
         ActionItem(
-            Icons.Filled.Key,
+            Icons.Outlined.Key,
             stringResource(R.string.users_action_reset_passkey),
             onClick = { onAction(UserOperation.RESET_PASSKEY) },
             enabled = idle,
             busy = running == UserOperation.RESET_PASSKEY,
         )
         if (myRole > user.role && !targetIsRoot) {
-            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            HorizontalDivider(Modifier.padding(vertical = 6.dp), color = AppTheme.colors.border)
             ActionItem(
-                Icons.Filled.DeleteForever,
+                Icons.Outlined.DeleteForever,
                 stringResource(R.string.users_action_delete),
                 subtitle = stringResource(R.string.users_action_delete_desc),
                 onClick = { onAction(UserOperation.DELETE) },
                 enabled = idle,
                 busy = running == UserOperation.DELETE,
-                tint = MaterialTheme.colorScheme.error,
+                destructive = true,
             )
         }
     }
@@ -551,32 +563,35 @@ private fun ActionItem(
     subtitle: String? = null,
     enabled: Boolean = true,
     busy: Boolean = false,
-    tint: Color = MaterialTheme.colorScheme.onSurface,
+    destructive: Boolean = false,
 ) {
-    val alpha = if (enabled || busy) 1f else 0.5f
+    val colors = AppTheme.colors
+    val tint = if (destructive) colors.destructive else colors.foreground
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .alpha(if (enabled || busy) 1f else 0.5f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .size(32.dp)
+                .background(if (destructive) Tone.Danger.colors().container else colors.muted, MaterialTheme.shapes.small),
+            contentAlignment = Alignment.Center,
+        ) {
             if (busy) {
-                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = tint)
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = tint)
             } else {
-                Icon(icon, contentDescription = null, tint = tint.copy(alpha = tint.alpha * alpha))
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
             }
         }
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = tint.copy(alpha = tint.alpha * alpha))
+            Text(title, style = MaterialTheme.typography.labelLarge, color = tint)
             if (subtitle != null) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
-                )
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.mutedForeground)
             }
         }
     }
@@ -602,124 +617,119 @@ private fun AdjustQuotaDialog(
         if (canSubmit && input is BalanceInput.Valid) onSubmit(mode, input.value)
     }
     val modes = QuotaMode.entries
+    val colors = AppTheme.colors
 
     LaunchedEffect(displayReady) {
         if (!displayReady) onReloadDisplay()
     }
 
-    AlertDialog(
+    AppDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.users_action_adjust_quota)) },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    modes.forEachIndexed { index, option ->
-                        SegmentedButton(
-                            selected = mode == option,
-                            onClick = { mode = option },
-                            shape = SegmentedButtonDefaults.itemShape(index, modes.size),
-                            enabled = !busy,
-                        ) {
-                            Text(
-                                stringResource(
-                                    when (option) {
-                                        QuotaMode.ADD -> R.string.users_quota_mode_add
-                                        QuotaMode.SUBTRACT -> R.string.users_quota_mode_subtract
-                                        QuotaMode.OVERRIDE -> R.string.users_quota_mode_set
-                                    },
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { amount = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !busy,
-                    singleLine = true,
-                    label = {
-                        Text(
-                            if (formatter.isTokens) {
-                                stringResource(R.string.users_quota_amount_tokens)
-                            } else {
-                                stringResource(R.string.users_quota_amount, formatter.unitLabel)
-                            },
-                        )
-                    },
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"),
-                    isError = input is BalanceInput.Invalid,
-                    supportingText = when (input) {
-                        is BalanceInput.Invalid -> { { Text(input.message.text()) } }
-                        is BalanceInput.Valid ->
-                            if (formatter.isTokens) null else { { Text(stringResource(R.string.users_quota_units, Formats.count(input.value))) } }
-                        BalanceInput.Empty -> null
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = if (formatter.isTokens) KeyboardType.Number else KeyboardType.Decimal,
-                        imeAction = ImeAction.Done,
-                    ),
-                    keyboardActions = KeyboardActions(onDone = { submit() }),
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        stringResource(R.string.users_quota_current, formatter.format(user.quota)),
-                        style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (input is BalanceInput.Valid) {
-                        Text(
-                            stringResource(R.string.users_quota_result, formatter.format(input.resultingBalance)),
-                            style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
-                            fontWeight = FontWeight.Medium,
-                        )
-                        if (input.resultingBalance < 0) {
-                            Text(
-                                stringResource(R.string.users_quota_negative_warning),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Tone.Warning.colors().content,
-                            )
-                        }
-                    }
-                }
-                if (!displayReady) {
-                    Text(
-                        stringResource(R.string.users_quota_settings_missing),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    TextButton(onClick = onReloadDisplay) { Text(stringResource(R.string.common_retry)) }
-                }
-                if (mode == QuotaMode.OVERRIDE) {
-                    Text(
-                        stringResource(R.string.users_quota_cache_note),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (error != null) {
-                    Text(errorMessage(error), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                }
-            }
-        },
+        title = stringResource(R.string.users_action_adjust_quota),
         confirmButton = {
-            TextButton(onClick = submit, enabled = canSubmit) {
-                if (busy) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Text(stringResource(R.string.common_confirm))
-                }
-            }
+            AppButton(stringResource(R.string.common_confirm), onClick = submit, enabled = canSubmit, loading = busy)
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !busy) { Text(stringResource(R.string.common_cancel)) }
+            AppButton(stringResource(R.string.common_cancel), onClick = onDismiss, variant = ButtonVariant.Outline, enabled = !busy)
         },
-    )
+    ) {
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            AppSegmentedTabs(
+                options = modes.map { option ->
+                    stringResource(
+                        when (option) {
+                            QuotaMode.ADD -> R.string.users_quota_mode_add
+                            QuotaMode.SUBTRACT -> R.string.users_quota_mode_subtract
+                            QuotaMode.OVERRIDE -> R.string.users_quota_mode_set
+                        },
+                    )
+                },
+                selectedIndex = modes.indexOf(mode),
+                onSelect = { mode = modes[it] },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !busy,
+            )
+            AppTextField(
+                value = amount,
+                onValueChange = { amount = it },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !busy,
+                singleLine = true,
+                label = if (formatter.isTokens) {
+                    stringResource(R.string.users_quota_amount_tokens)
+                } else {
+                    stringResource(R.string.users_quota_amount, formatter.unitLabel)
+                },
+                textStyle = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"),
+                isError = input is BalanceInput.Invalid,
+                supportingText = when (input) {
+                    is BalanceInput.Invalid -> input.message.text()
+                    is BalanceInput.Valid ->
+                        if (formatter.isTokens) null else stringResource(R.string.users_quota_units, Formats.count(input.value))
+                    BalanceInput.Empty -> null
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (formatter.isTokens) KeyboardType.Number else KeyboardType.Decimal,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { submit() }),
+            )
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(colors.muted, MaterialTheme.shapes.medium)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    stringResource(R.string.users_quota_current, formatter.format(user.quota)),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+                    color = colors.mutedForeground,
+                )
+                if (input is BalanceInput.Valid) {
+                    Text(
+                        stringResource(R.string.users_quota_result, formatter.format(input.resultingBalance)),
+                        style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
+                    )
+                    if (input.resultingBalance < 0) {
+                        Text(
+                            stringResource(R.string.users_quota_negative_warning),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Tone.Warning.colors().content,
+                        )
+                    }
+                }
+            }
+            if (!displayReady) {
+                AppAlert(
+                    text = stringResource(R.string.users_quota_settings_missing),
+                    tone = Tone.Danger,
+                    icon = Icons.Outlined.ErrorOutline,
+                    action = {
+                        AppButton(
+                            stringResource(R.string.common_retry),
+                            onClick = onReloadDisplay,
+                            variant = ButtonVariant.Ghost,
+                            size = ButtonSize.Small,
+                        )
+                    },
+                )
+            }
+            if (mode == QuotaMode.OVERRIDE) {
+                Text(
+                    stringResource(R.string.users_quota_cache_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.mutedForeground,
+                )
+            }
+            if (error != null) {
+                AppAlert(text = errorMessage(error), tone = Tone.Danger, icon = Icons.Outlined.ErrorOutline)
+            }
+        }
+    }
 }
 
 @Composable
@@ -751,94 +761,108 @@ private fun EditProfileSheet(
     val valid = displayNameLength <= MAX_NAME_LENGTH && remarkLength <= MAX_REMARK_LENGTH
     val groupChanged = group != initialGroup
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    AppBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(stringResource(R.string.users_action_edit_profile), style = MaterialTheme.typography.titleLarge)
-            InfoRow(stringResource(R.string.users_field_username), user.username)
-            OutlinedTextField(
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(stringResource(R.string.users_action_edit_profile), style = MaterialTheme.typography.titleLarge)
+                Text(
+                    stringResource(R.string.users_action_edit_profile_desc),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.colors.mutedForeground,
+                )
+            }
+            InfoRow(
+                stringResource(R.string.users_field_username),
+                user.username,
+                Modifier
+                    .background(AppTheme.colors.muted, MaterialTheme.shapes.small)
+                    .padding(horizontal = 12.dp),
+            )
+            AppTextField(
                 value = displayName,
                 onValueChange = { displayName = it },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !busy,
                 singleLine = true,
-                label = { Text(stringResource(R.string.users_field_display_name)) },
-                placeholder = { Text(user.username) },
+                label = stringResource(R.string.users_field_display_name),
+                placeholder = user.username,
                 isError = displayNameLength > MAX_NAME_LENGTH,
-                supportingText = {
-                    Text(
-                        if (displayNameLength > MAX_NAME_LENGTH) {
-                            stringResource(R.string.users_error_too_long, MAX_NAME_LENGTH)
-                        } else {
-                            stringResource(R.string.users_display_name_hint)
-                        },
-                    )
+                supportingText = if (displayNameLength > MAX_NAME_LENGTH) {
+                    stringResource(R.string.users_error_too_long, MAX_NAME_LENGTH)
+                } else {
+                    stringResource(R.string.users_display_name_hint)
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
             )
-            GroupDropdown(
-                value = group,
-                options = groups.names,
-                onSelect = { group = it },
-                label = stringResource(R.string.users_field_group),
-                enabled = !busy,
-                supportingText = when {
-                    groupChanged -> stringResource(R.string.users_group_signout_warning) +
-                        if (isSelf) " " + stringResource(R.string.users_self_warning) else ""
-                    groups.failed -> stringResource(R.string.users_groups_load_failed)
-                    else -> null
-                },
-            )
-            if (groups.failed) {
-                TextButton(onClick = onRetryGroups, enabled = !busy) { Text(stringResource(R.string.common_retry)) }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                GroupDropdown(
+                    value = group,
+                    options = groups.names,
+                    onSelect = { group = it },
+                    label = stringResource(R.string.users_field_group),
+                    enabled = !busy,
+                    supportingText = when {
+                        groupChanged -> stringResource(R.string.users_group_signout_warning) +
+                            if (isSelf) " " + stringResource(R.string.users_self_warning) else ""
+                        groups.failed -> stringResource(R.string.users_groups_load_failed)
+                        else -> null
+                    },
+                )
+                if (groups.failed) {
+                    AppButton(
+                        stringResource(R.string.common_retry),
+                        onClick = onRetryGroups,
+                        variant = ButtonVariant.Outline,
+                        size = ButtonSize.Small,
+                        enabled = !busy,
+                    )
+                }
             }
-            OutlinedTextField(
+            AppTextField(
                 value = remark,
                 onValueChange = { remark = it },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !busy,
+                singleLine = false,
                 minLines = 2,
                 maxLines = 5,
-                label = { Text(stringResource(R.string.users_field_remark)) },
+                label = stringResource(R.string.users_field_remark),
                 isError = remarkLength > MAX_REMARK_LENGTH,
-                supportingText = {
-                    Text(
-                        if (remarkLength > MAX_REMARK_LENGTH) {
-                            stringResource(R.string.users_error_too_long, MAX_REMARK_LENGTH)
-                        } else {
-                            stringResource(R.string.users_length_counter, remarkLength, MAX_REMARK_LENGTH)
-                        },
-                    )
+                supportingText = if (remarkLength > MAX_REMARK_LENGTH) {
+                    stringResource(R.string.users_error_too_long, MAX_REMARK_LENGTH)
+                } else {
+                    stringResource(R.string.users_length_counter, remarkLength, MAX_REMARK_LENGTH)
                 },
             )
             if (error != null) {
-                Text(errorMessage(error), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                AppAlert(text = errorMessage(error), tone = Tone.Danger, icon = Icons.Outlined.ErrorOutline)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                TextButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.common_cancel))
-                }
-                Button(
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                AppButton(
+                    stringResource(R.string.common_cancel),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    variant = ButtonVariant.Outline,
+                    enabled = !busy,
+                )
+                AppButton(
+                    stringResource(R.string.common_save),
                     onClick = {
                         onSave(
                             ProfileFields(initialDisplayName, initialGroup, initialRemark),
                             ProfileFields(displayName, group, remark),
                         )
                     },
-                    enabled = !busy && valid,
                     modifier = Modifier.weight(1f),
-                ) {
-                    if (busy) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    } else {
-                        Text(stringResource(R.string.common_save))
-                    }
-                }
+                    enabled = !busy && valid,
+                    loading = busy,
+                )
             }
         }
     }
@@ -852,67 +876,62 @@ private fun ChangePasswordDialog(viewModel: UserDetailViewModel, state: UserDeta
     val newError = state.passwordErrors[PasswordInput.NEW]
     val confirmError = state.passwordErrors[PasswordInput.CONFIRM]
 
-    AlertDialog(
+    AppDialog(
         onDismissRequest = viewModel::closeDialog,
-        title = { Text(stringResource(R.string.users_action_change_password)) },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    stringResource(R.string.users_password_warning) + if (isSelf) "\n" + stringResource(R.string.users_self_warning) else "",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                OutlinedTextField(
-                    value = viewModel.newPassword,
-                    onValueChange = viewModel::onNewPasswordChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !busy,
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.users_password_new)) },
-                    trailingIcon = {
-                        IconButton(onClick = { visible = !visible }) {
-                            Icon(
-                                if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                contentDescription = stringResource(if (visible) R.string.users_hide_password else R.string.users_show_password),
-                            )
-                        }
-                    },
-                    isError = newError != null,
-                    supportingText = { Text(stringResource(newError ?: R.string.users_password_length)) },
-                    visualTransformation = transformation,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
-                )
-                OutlinedTextField(
-                    value = viewModel.confirmPassword,
-                    onValueChange = viewModel::onConfirmPasswordChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !busy,
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.users_password_confirm)) },
-                    isError = confirmError != null,
-                    supportingText = confirmError?.let { { Text(stringResource(it)) } },
-                    visualTransformation = transformation,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { viewModel.changePassword() }),
-                )
-                state.dialogError?.let { error ->
-                    Text(errorMessage(error), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                }
-            }
-        },
+        title = stringResource(R.string.users_action_change_password),
         confirmButton = {
-            TextButton(onClick = viewModel::changePassword, enabled = !busy) {
-                if (busy) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Text(stringResource(R.string.users_action_change_password))
-                }
-            }
+            AppButton(stringResource(R.string.users_action_change_password), onClick = viewModel::changePassword, loading = busy)
         },
         dismissButton = {
-            TextButton(onClick = viewModel::closeDialog, enabled = !busy) { Text(stringResource(R.string.common_cancel)) }
+            AppButton(stringResource(R.string.common_cancel), onClick = viewModel::closeDialog, variant = ButtonVariant.Outline, enabled = !busy)
         },
-    )
+    ) {
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                stringResource(R.string.users_password_warning) + if (isSelf) "\n" + stringResource(R.string.users_self_warning) else "",
+                style = MaterialTheme.typography.bodyMedium,
+                color = AppTheme.colors.mutedForeground,
+            )
+            AppTextField(
+                value = viewModel.newPassword,
+                onValueChange = viewModel::onNewPasswordChange,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !busy,
+                singleLine = true,
+                label = stringResource(R.string.users_password_new),
+                trailing = {
+                    IconButton(onClick = { visible = !visible }) {
+                        Icon(
+                            if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                            contentDescription = stringResource(if (visible) R.string.users_hide_password else R.string.users_show_password),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                },
+                isError = newError != null,
+                supportingText = stringResource(newError ?: R.string.users_password_length),
+                visualTransformation = transformation,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+            )
+            AppTextField(
+                value = viewModel.confirmPassword,
+                onValueChange = viewModel::onConfirmPasswordChange,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !busy,
+                singleLine = true,
+                label = stringResource(R.string.users_password_confirm),
+                isError = confirmError != null,
+                supportingText = confirmError?.let { stringResource(it) },
+                visualTransformation = transformation,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { viewModel.changePassword() }),
+            )
+            state.dialogError?.let { error ->
+                AppAlert(text = errorMessage(error), tone = Tone.Danger, icon = Icons.Outlined.ErrorOutline)
+            }
+        }
+    }
 }

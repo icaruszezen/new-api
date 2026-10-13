@@ -14,21 +14,15 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,7 +46,16 @@ import com.newapi.admin.R
 import com.newapi.admin.core.model.Roles
 import com.newapi.admin.ui.common.errorMessage
 import com.newapi.admin.ui.common.text
+import com.newapi.admin.ui.components.AppAlert
+import com.newapi.admin.ui.components.AppButton
+import com.newapi.admin.ui.components.AppCard
+import com.newapi.admin.ui.components.AppSegmentedTabs
+import com.newapi.admin.ui.components.AppTextField
+import com.newapi.admin.ui.components.AppTopBar
+import com.newapi.admin.ui.components.ButtonSize
 import com.newapi.admin.ui.components.rememberCurrentUser
+import com.newapi.admin.ui.theme.AppTheme
+import com.newapi.admin.ui.theme.Tone
 import kotlinx.coroutines.flow.first
 
 /** New user form: username, password, optional display name, and (for root) the admin role. */
@@ -81,11 +84,11 @@ fun UserCreateScreen(onBack: () -> Unit, onCreated: () -> Unit) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.users_add)) },
+            AppTopBar(
+                title = stringResource(R.string.users_add),
                 navigationIcon = {
                     IconButton(onClick = onBack, enabled = !state.isSubmitting) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
             )
@@ -99,89 +102,89 @@ fun UserCreateScreen(onBack: () -> Unit, onCreated: () -> Unit) {
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            val usernameError = state.fieldErrors[CreateField.USERNAME]
-            OutlinedTextField(
-                value = viewModel.username,
-                onValueChange = viewModel::onUsernameChange,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabled,
-                singleLine = true,
-                label = { Text(stringResource(R.string.users_field_username)) },
-                isError = usernameError != null,
-                supportingText = { Text(usernameError?.text() ?: stringResource(R.string.users_create_username_hint)) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Next),
-            )
+            AppCard(Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    val usernameError = state.fieldErrors[CreateField.USERNAME]
+                    AppTextField(
+                        value = viewModel.username,
+                        onValueChange = viewModel::onUsernameChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = enabled,
+                        singleLine = true,
+                        label = stringResource(R.string.users_field_username),
+                        isError = usernameError != null,
+                        supportingText = usernameError?.text() ?: stringResource(R.string.users_create_username_hint),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Next),
+                    )
 
-            val passwordError = state.fieldErrors[CreateField.PASSWORD]
-            OutlinedTextField(
-                value = viewModel.password,
-                onValueChange = viewModel::onPasswordChange,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabled,
-                singleLine = true,
-                label = { Text(stringResource(R.string.users_field_password)) },
-                trailingIcon = {
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(
-                            if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                            contentDescription = stringResource(if (passwordVisible) R.string.users_hide_password else R.string.users_show_password),
-                        )
-                    }
-                },
-                isError = passwordError != null,
-                supportingText = { Text(passwordError?.text() ?: stringResource(R.string.users_password_length)) },
-                visualTransformation = transformation,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
-            )
+                    val passwordError = state.fieldErrors[CreateField.PASSWORD]
+                    AppTextField(
+                        value = viewModel.password,
+                        onValueChange = viewModel::onPasswordChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = enabled,
+                        singleLine = true,
+                        label = stringResource(R.string.users_field_password),
+                        trailing = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                    contentDescription = stringResource(if (passwordVisible) R.string.users_hide_password else R.string.users_show_password),
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        },
+                        isError = passwordError != null,
+                        supportingText = passwordError?.text() ?: stringResource(R.string.users_password_length),
+                        visualTransformation = transformation,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                    )
 
-            val confirmError = state.fieldErrors[CreateField.CONFIRM]
-            OutlinedTextField(
-                value = viewModel.confirmPassword,
-                onValueChange = viewModel::onConfirmPasswordChange,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabled,
-                singleLine = true,
-                label = { Text(stringResource(R.string.users_password_confirm)) },
-                isError = confirmError != null,
-                supportingText = confirmError?.let { { Text(it.text()) } },
-                visualTransformation = transformation,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
-            )
+                    val confirmError = state.fieldErrors[CreateField.CONFIRM]
+                    AppTextField(
+                        value = viewModel.confirmPassword,
+                        onValueChange = viewModel::onConfirmPasswordChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = enabled,
+                        singleLine = true,
+                        label = stringResource(R.string.users_password_confirm),
+                        isError = confirmError != null,
+                        supportingText = confirmError?.text(),
+                        visualTransformation = transformation,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                    )
 
-            val displayNameError = state.fieldErrors[CreateField.DISPLAY_NAME]
-            OutlinedTextField(
-                value = viewModel.displayName,
-                onValueChange = viewModel::onDisplayNameChange,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabled,
-                singleLine = true,
-                label = { Text(stringResource(R.string.users_field_display_name)) },
-                placeholder = viewModel.username.trim().takeIf { it.isNotEmpty() }?.let { { Text(it) } },
-                isError = displayNameError != null,
-                supportingText = { Text(displayNameError?.text() ?: stringResource(R.string.users_create_display_name_hint)) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { viewModel.submit() }),
-            )
+                    val displayNameError = state.fieldErrors[CreateField.DISPLAY_NAME]
+                    AppTextField(
+                        value = viewModel.displayName,
+                        onValueChange = viewModel::onDisplayNameChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = enabled,
+                        singleLine = true,
+                        label = stringResource(R.string.users_field_display_name),
+                        placeholder = viewModel.username.trim().takeIf { it.isNotEmpty() },
+                        isError = displayNameError != null,
+                        supportingText = displayNameError?.text() ?: stringResource(R.string.users_create_display_name_hint),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { viewModel.submit() }),
+                    )
 
-            // Only root may create administrators; everyone else always creates regular users.
-            if (me?.isRoot == true) {
-                Text(
-                    stringResource(R.string.users_field_role),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                val roles = listOf(Roles.COMMON, Roles.ADMIN)
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    roles.forEachIndexed { index, option ->
-                        SegmentedButton(
-                            selected = viewModel.role == option,
-                            onClick = { viewModel.onRoleChange(option) },
-                            shape = SegmentedButtonDefaults.itemShape(index, roles.size),
-                            enabled = enabled,
-                        ) {
-                            Text(stringResource(if (option == Roles.ADMIN) R.string.users_create_role_admin else R.string.users_create_role_user))
+                    // Only root may create administrators; everyone else always creates regular users.
+                    if (me?.isRoot == true) {
+                        val roles = listOf(Roles.COMMON, Roles.ADMIN)
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(stringResource(R.string.users_field_role), style = MaterialTheme.typography.labelLarge)
+                            AppSegmentedTabs(
+                                options = roles.map { option ->
+                                    stringResource(if (option == Roles.ADMIN) R.string.users_create_role_admin else R.string.users_create_role_user)
+                                },
+                                selectedIndex = roles.indexOf(viewModel.role),
+                                onSelect = { viewModel.onRoleChange(roles[it]) },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = enabled,
+                            )
                         }
                     }
                 }
@@ -190,21 +193,22 @@ fun UserCreateScreen(onBack: () -> Unit, onCreated: () -> Unit) {
             Text(
                 stringResource(R.string.users_create_note),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 8.dp),
+                color = AppTheme.colors.mutedForeground,
+                modifier = Modifier.padding(horizontal = 4.dp),
             )
 
             state.error?.let { error ->
-                Text(errorMessage(error), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                AppAlert(text = errorMessage(error), tone = Tone.Danger, icon = Icons.Outlined.ErrorOutline)
             }
 
-            Button(onClick = viewModel::submit, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-                if (state.isSubmitting) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                } else {
-                    Text(stringResource(R.string.users_create_submit))
-                }
-            }
+            AppButton(
+                stringResource(R.string.users_create_submit),
+                onClick = viewModel::submit,
+                modifier = Modifier.fillMaxWidth(),
+                size = ButtonSize.Large,
+                enabled = enabled,
+                loading = state.isSubmitting,
+            )
         }
     }
 }

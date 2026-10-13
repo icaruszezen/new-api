@@ -27,6 +27,7 @@ import {
   resolveNextConsoleShellPathname,
 } from '../console-home-path'
 import { useUserConsolePreview } from '../use-user-console-preview'
+import { NextTicketFab } from './components/ticket-fab'
 import { NextConsoleShell } from './console/shell'
 import { NextConsolePreviewBanner } from './preview-banner'
 
@@ -40,7 +41,8 @@ import { NextConsolePreviewBanner } from './preview-banner'
  * `resolvedLocation` must not hide an incoming `/dashboard` standalone page.
  *
  * The preview banner lives on this side so administrators can tell they are
- * looking at the user console without changing classic chrome.
+ * looking at the user console without changing classic chrome. The support
+ * ticket button is mounted here too, so it follows users onto both shells.
  */
 export function NextAuthenticatedLayout() {
   const pathname = useRouterState({
@@ -61,6 +63,7 @@ export function NextAuthenticatedLayout() {
       ) : (
         <AuthenticatedLayout />
       )}
+      <NextTicketFab />
     </>
   )
 }

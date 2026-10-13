@@ -56,7 +56,9 @@ describe('useSidebarData channel monitoring settings', () => {
 
   test('lists first-token errors next to usage logs and requires admin', () => {
     const { result } = renderHook(() => useSidebarData())
-    const general = result.current.navGroups.find((group) => group.id === 'general')
+    const general = result.current.navGroups.find(
+      (group) => group.id === 'general'
+    )
     const items = general?.items ?? []
     const usageIndex = items.findIndex(
       (item) => 'url' in item && item.url === '/usage-logs/common'
@@ -76,4 +78,21 @@ describe('useSidebarData channel monitoring settings', () => {
 
     expect(urls).not.toContain('/channel-monitoring-settings')
   })
+})
+
+describe('useSidebarData ticket management', () => {
+  afterEach(() => {
+    setUiSkin('classic')
+  })
+
+  // Admins get the classic console under either site skin, so the support
+  // inbox must be listed in the admin group for both.
+  test.each(['classic', 'next'])(
+    'lists Ticket Management in the admin group when the site skin is %s',
+    (uiSkin) => {
+      setUiSkin(uiSkin)
+
+      expect(adminItemUrls()).toContain('/ticket-management')
+    }
+  )
 })

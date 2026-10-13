@@ -256,6 +256,7 @@ func SetApiRouter(router *gin.Engine) {
 		registerChannelMonitoringRoutes(apiRouter)
 		registerModelIQCheckRoutes(apiRouter)
 		registerAuthzRoutes(apiRouter)
+		registerTicketRoutes(apiRouter)
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())
 		{

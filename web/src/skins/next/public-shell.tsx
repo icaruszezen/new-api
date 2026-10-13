@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, type ReactNode } from 'react'
 
+import { NextTicketFab } from './components/ticket-fab'
 import { MinimalFooter } from './home/components/minimal-footer'
 import { MinimalHeader } from './home/components/minimal-header'
 import { LANDING_MEASURE_CLASS } from './home/layout'
@@ -35,6 +36,9 @@ type NextPublicShellProps = {
  * `data-skin="next"` scopes the charcoal page tokens on the page itself.
  * `data-next-public` is mirrored onto `document.body` so portaled sheets and
  * menus inherit the same tokens without touching the console.
+ *
+ * Signed-in users of the Next console also get the support ticket button
+ * here; it renders nothing for guests and classic sessions.
  */
 export function NextPublicShell(props: NextPublicShellProps) {
   useEffect(() => {
@@ -56,6 +60,7 @@ export function NextPublicShell(props: NextPublicShellProps) {
         {props.children}
       </main>
       <MinimalFooter />
+      <NextTicketFab />
     </div>
   )
 }

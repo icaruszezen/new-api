@@ -559,6 +559,16 @@ export const STATIC_I18N_KEYS = [
   'The model that was requested',
   'The upstream channel that served the requests',
 
+  // Support ticket statuses (TICKET_STATUS_CONFIG labelKey)
+  'Awaiting support',
+  'In progress',
+  'Resolved',
+  'Closed',
+
+  // Support ticket audit
+  'Replied to ticket #{{id}}',
+  'Changed status of ticket #{{id}}',
+
   // Misc
   'Cancel',
   'Status',

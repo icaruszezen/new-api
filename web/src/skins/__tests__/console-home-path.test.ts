@@ -23,6 +23,7 @@ import {
   isNextConsolePath,
   isNextStandaloneShellPath,
   isNextFirstTokenErrorsPath,
+  isNextTicketsPath,
   isNextUsageLogsPath,
   resolveNextConsoleShellPathname,
 } from '../console-home-path'
@@ -82,6 +83,22 @@ describe('isNextUsageLogsPath', () => {
   )
 })
 
+describe('isNextTicketsPath', () => {
+  test.each(['/tickets', '/tickets/', '/tickets/42'])(
+    'treats %s as a support-ticket path',
+    (pathname) => {
+      expect(isNextTicketsPath(pathname)).toBe(true)
+    }
+  )
+
+  test.each(['/ticket-management', '/tickets-archive', '/dashboard', '/'])(
+    'does not treat %s as a support-ticket path',
+    (pathname) => {
+      expect(isNextTicketsPath(pathname)).toBe(false)
+    }
+  )
+})
+
 describe('isNextStandaloneShellPath', () => {
   test.each([
     '/dashboard',
@@ -94,6 +111,8 @@ describe('isNextStandaloneShellPath', () => {
     '/usage-logs/drawing',
     '/usage-logs/task',
     '/first-token-errors',
+    '/tickets',
+    '/tickets/42',
   ])('uses the standalone shell on %s', (pathname) => {
     expect(isNextStandaloneShellPath(pathname)).toBe(true)
   })
@@ -103,6 +122,7 @@ describe('isNextStandaloneShellPath', () => {
     '/dashboard/flow',
     '/dashboard/users',
     '/keys',
+    '/ticket-management',
     '/',
   ])('leaves %s on the sidebar shell', (pathname) => {
     expect(isNextStandaloneShellPath(pathname)).toBe(false)
@@ -119,6 +139,8 @@ describe('isNextConsolePath', () => {
     '/invite',
     '/usage-logs/common',
     '/first-token-errors',
+    '/tickets',
+    '/tickets/42',
     '/keys',
     '/playground',
     '/chat/abc',
@@ -128,6 +150,7 @@ describe('isNextConsolePath', () => {
     '/iq-check-settings',
     '/error-message-overrides',
     '/billing-corrections',
+    '/ticket-management',
     '/models/deployments',
     '/users',
     '/redemption-codes',

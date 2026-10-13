@@ -478,6 +478,9 @@ const AUDIT_TEMPLATES: Record<string, string> = {
   'subscription.plan_create': 'Created a subscription plan',
   'subscription.plan_update': 'Updated a subscription plan',
   'subscription.bind': 'Bound a subscription',
+  // Support tickets
+  'ticket.reply': 'Replied to ticket #{{id}}',
+  'ticket.status': 'Changed status of ticket #{{id}}',
   // Logs
   'log.clear': 'Cleared historical logs',
   'log.cleanup_start': 'Log cleanup task started.',

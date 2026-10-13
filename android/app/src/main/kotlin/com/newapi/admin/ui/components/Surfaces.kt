@@ -1,6 +1,12 @@
 package com.newapi.admin.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.unit.sp
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -35,7 +41,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -96,7 +102,9 @@ fun AppTopBar(
                 }
             }
         },
-        modifier = modifier.drawBehind {
+        // Drawn after the content: the bar paints its own background over anything drawn behind it.
+        modifier = modifier.drawWithContent {
+            drawContent()
             val y = size.height - 0.5.dp.toPx()
             drawLine(colors.border, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
         },
@@ -282,5 +290,78 @@ fun AppAvatar(initials: String, modifier: Modifier = Modifier, size: Dp = 40.dp)
             color = colors.foreground,
             maxLines = 1,
         )
+    }
+}
+
+/**
+ * A figure on a muted tile with a small label above it. Large figures shrink (down to 11sp) to stay on
+ * one line; pass `Modifier.weight(1f).fillMaxHeight()` inside a `height(IntrinsicSize.Min)` row so a row
+ * of tiles lines up.
+ */
+@Composable
+fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
+    val colors = AppTheme.colors
+    Column(
+        modifier
+            .background(colors.muted, MaterialTheme.shapes.medium)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = colors.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        BasicText(
+            value,
+            style = MaterialTheme.typography.titleSmall.copy(color = colors.foreground, fontFeatureSettings = "tnum"),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 14.sp, stepSize = 0.5.sp),
+        )
+    }
+}
+
+/**
+ * A tappable line in a card's action list, edge to edge: an icon on a small muted tile, a title and an
+ * optional subtitle. A spinner replaces the icon while [busy]; disabled rows fade the icon and title.
+ * [destructive] draws the icon and title in the destructive colour.
+ */
+@Composable
+fun ActionRow(
+    icon: ImageVector,
+    title: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    enabled: Boolean = true,
+    busy: Boolean = false,
+    destructive: Boolean = false,
+) {
+    val colors = AppTheme.colors
+    val base = if (destructive) colors.destructive else colors.foreground
+    val tint = if (enabled || busy) base else base.copy(alpha = base.alpha * 0.5f)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(32.dp)
+                .background(if (destructive) Tone.Danger.colors().container else colors.muted, MaterialTheme.shapes.small),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (busy) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = base)
+            } else {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.labelLarge, color = tint)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.mutedForeground)
+            }
+        }
     }
 }

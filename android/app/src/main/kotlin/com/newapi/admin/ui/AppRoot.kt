@@ -21,7 +21,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -104,7 +104,8 @@ private fun MainScaffold() {
             if (destination == null || selectedTab != null) {
                 val colors = AppTheme.colors
                 NavigationBar(
-                    modifier = Modifier.drawBehind {
+                    modifier = Modifier.drawWithContent {
+                        drawContent()
                         drawLine(colors.border, Offset(0f, 0.5.dp.toPx()), Offset(size.width, 0.5.dp.toPx()), strokeWidth = 1.dp.toPx())
                     },
                     containerColor = colors.background,

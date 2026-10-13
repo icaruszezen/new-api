@@ -214,7 +214,16 @@ fun AppSegmentedTabs(
                 Modifier
                     .weight(1f)
                     .heightIn(min = 34.dp)
-                    .then(if (selected) Modifier.shadow(1.dp, itemShape).background(colors.background, itemShape) else Modifier)
+                    .then(
+                        when {
+                            !selected -> Modifier
+                            // shadcn dark tabs: a faint input-coloured fill with an input border instead of a shadow.
+                            colors.isDark -> Modifier
+                                .background(colors.input.copy(alpha = colors.input.alpha * 0.3f), itemShape)
+                                .border(1.dp, colors.input, itemShape)
+                            else -> Modifier.shadow(1.dp, itemShape).background(colors.background, itemShape)
+                        },
+                    )
                     .clip(itemShape)
                     .selectable(selected = selected, enabled = enabled, role = Role.Tab, onClick = { onSelect(index) })
                     .padding(horizontal = 8.dp, vertical = 6.dp),

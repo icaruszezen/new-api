@@ -1,9 +1,6 @@
 package com.newapi.admin.ui.settings
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,7 +26,6 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.WarningAmber
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,7 +44,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.semantics
@@ -70,6 +65,7 @@ import com.newapi.admin.core.format.QuotaFormatter
 import com.newapi.admin.core.model.SystemStatus
 import com.newapi.admin.ui.common.UiMessage
 import com.newapi.admin.ui.common.text
+import com.newapi.admin.ui.components.ActionRow
 import com.newapi.admin.ui.components.AppAlert
 import com.newapi.admin.ui.components.AppAvatar
 import com.newapi.admin.ui.components.AppButton
@@ -83,6 +79,7 @@ import com.newapi.admin.ui.components.ConfirmDialog
 import com.newapi.admin.ui.components.FullScreenLoading
 import com.newapi.admin.ui.components.InfoRow
 import com.newapi.admin.ui.components.SectionCard
+import com.newapi.admin.ui.components.StatTile
 import com.newapi.admin.ui.components.StatusPill
 import com.newapi.admin.ui.components.rememberQuotaFormatter
 import com.newapi.admin.ui.theme.AppTheme
@@ -278,32 +275,6 @@ private fun AccountCard(account: StoredAccount, formatter: QuotaFormatter) {
     }
 }
 
-/** A figure on a muted tile; it fills the height its row gives it, so a row of tiles lines up. */
-@Composable
-private fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(
-        modifier
-            .background(AppTheme.colors.muted, MaterialTheme.shapes.medium)
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = AppTheme.colors.mutedForeground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            value,
-            // titleSmall keeps a four-digit balance on one line in a third of a 360dp-wide screen.
-            style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum"),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
 @Composable
 private fun ServerCard(baseUrl: String, status: SystemStatus?, formatter: QuotaFormatter) {
     SectionCard(title = stringResource(R.string.settings_server_title)) {
@@ -344,56 +315,6 @@ private fun ServerCard(baseUrl: String, status: SystemStatus?, formatter: QuotaF
                 )
             }
             InfoRow(stringResource(R.string.settings_quota_per_unit), plainNumber(formatter.quotaPerUnit))
-        }
-    }
-}
-
-/**
- * One tappable edge-to-edge line in a card: icon tile, title, optional explanation; a spinner replaces the
- * icon while [busy]. [destructive] draws it in the destructive colour.
- */
-@Composable
-private fun ActionRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String?,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    busy: Boolean = false,
-    destructive: Boolean = false,
-) {
-    val colors = AppTheme.colors
-    val tint = if (destructive) colors.destructive else colors.foreground
-    val alpha = if (enabled || busy) 1f else 0.5f
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .size(32.dp)
-                .background(if (destructive) Tone.Danger.colors().container else colors.muted, MaterialTheme.shapes.small),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (busy) {
-                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = tint)
-            } else {
-                Icon(icon, contentDescription = null, tint = tint.copy(alpha = tint.alpha * alpha), modifier = Modifier.size(18.dp))
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.labelLarge, color = tint.copy(alpha = tint.alpha * alpha))
-            if (subtitle != null) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.mutedForeground,
-                )
-            }
         }
     }
 }

@@ -21,8 +21,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -65,7 +63,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -91,6 +88,7 @@ import com.newapi.admin.ui.components.FullScreenError
 import com.newapi.admin.ui.components.FullScreenLoading
 import com.newapi.admin.ui.components.InfoRow
 import com.newapi.admin.ui.components.SectionCard
+import com.newapi.admin.ui.components.StatTile
 import com.newapi.admin.ui.components.rememberQuotaFormatter
 import com.newapi.admin.ui.theme.AppTheme
 import com.newapi.admin.ui.theme.GeistMono
@@ -458,11 +456,11 @@ private fun StatsSection(
     val never = stringResource(R.string.channels_never)
     SectionCard(stringResource(R.string.channels_section_stats)) {
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatTile(stringResource(R.string.channels_label_used_quota), formatter.format(channel.usedQuota), Modifier.weight(1f))
+            StatTile(stringResource(R.string.channels_label_used_quota), formatter.format(channel.usedQuota), Modifier.weight(1f).fillMaxHeight())
             if (channel.hasBalance) {
-                StatTile(stringResource(R.string.channels_label_balance), formatter.formatUsd(channel.balance), Modifier.weight(1f))
+                StatTile(stringResource(R.string.channels_label_balance), formatter.formatUsd(channel.balance), Modifier.weight(1f).fillMaxHeight())
             }
-            StatTile(stringResource(R.string.channels_label_response_time), responseTimeText(channel.responseTime), Modifier.weight(1f))
+            StatTile(stringResource(R.string.channels_label_response_time), responseTimeText(channel.responseTime), Modifier.weight(1f).fillMaxHeight())
         }
         Spacer(Modifier.height(8.dp))
         if (channel.hasBalance) {
@@ -484,28 +482,6 @@ private fun StatsSection(
                 leadingIcon = Icons.Outlined.AccountBalanceWallet,
             )
         }
-    }
-}
-
-/** A muted tile with a small label over a number. */
-@Composable
-private fun StatTile(label: String, value: String, modifier: Modifier) {
-    Column(
-        modifier
-            .fillMaxHeight()
-            .background(AppTheme.colors.muted, MaterialTheme.shapes.medium)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.mutedForeground)
-        // Large amounts shrink to stay whole in a third of a narrow screen instead of being cut off.
-        BasicText(
-            value,
-            style = MaterialTheme.typography.titleSmall.copy(color = AppTheme.colors.foreground, fontFeatureSettings = "tnum"),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 14.sp, stepSize = 0.5.sp),
-        )
     }
 }
 

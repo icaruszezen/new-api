@@ -1,9 +1,7 @@
 package com.newapi.admin.ui.users
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -38,7 +36,6 @@ import androidx.compose.material.icons.outlined.PersonOff
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,8 +56,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -83,6 +78,7 @@ import com.newapi.admin.core.model.UserStatus
 import com.newapi.admin.ui.common.UiMessage
 import com.newapi.admin.ui.common.errorMessage
 import com.newapi.admin.ui.common.text
+import com.newapi.admin.ui.components.ActionRow
 import com.newapi.admin.ui.components.AppAlert
 import com.newapi.admin.ui.components.AppAvatar
 import com.newapi.admin.ui.components.AppBottomSheet
@@ -101,6 +97,7 @@ import com.newapi.admin.ui.components.FullScreenError
 import com.newapi.admin.ui.components.FullScreenLoading
 import com.newapi.admin.ui.components.InfoRow
 import com.newapi.admin.ui.components.SectionCard
+import com.newapi.admin.ui.components.StatTile
 import com.newapi.admin.ui.components.StatusPill
 import com.newapi.admin.ui.components.rememberCurrentUser
 import com.newapi.admin.ui.components.rememberQuotaFormatter
@@ -337,30 +334,10 @@ private fun QuotaSection(user: AdminUser, formatter: QuotaFormatter) {
         QuotaBar(user.quota, user.usedQuota)
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            QuotaStat(stringResource(R.string.users_field_used), formatter.format(user.usedQuota), Modifier.weight(1f))
-            QuotaStat(stringResource(R.string.users_field_total), formatter.format(user.quota + user.usedQuota), Modifier.weight(1f))
-            QuotaStat(stringResource(R.string.users_field_requests), Formats.count(user.requestCount), Modifier.weight(1f))
+            StatTile(stringResource(R.string.users_field_used), formatter.format(user.usedQuota), Modifier.weight(1f).fillMaxHeight())
+            StatTile(stringResource(R.string.users_field_total), formatter.format(user.quota + user.usedQuota), Modifier.weight(1f).fillMaxHeight())
+            StatTile(stringResource(R.string.users_field_requests), Formats.count(user.requestCount), Modifier.weight(1f).fillMaxHeight())
         }
-    }
-}
-
-@Composable
-private fun QuotaStat(label: String, value: String, modifier: Modifier) {
-    Column(
-        modifier
-            .fillMaxHeight()
-            .background(AppTheme.colors.muted, MaterialTheme.shapes.medium)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = AppTheme.colors.mutedForeground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(value, style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum"))
     }
 }
 
@@ -439,7 +416,7 @@ private fun ActionsSection(
             modifier = Modifier.padding(horizontal = 16.dp),
         )
         Spacer(Modifier.height(6.dp))
-        ActionItem(Icons.AutoMirrored.Outlined.ReceiptLong, stringResource(R.string.users_action_view_logs), onClick = onOpenLogs)
+        ActionRow(Icons.AutoMirrored.Outlined.ReceiptLong, stringResource(R.string.users_action_view_logs), onClick = onOpenLogs)
         if (canManage) {
             ManageActions(user, iAmRoot, myRole, running, onOpenDialog, onAction)
         } else if (!user.isDeleted) {
@@ -465,14 +442,14 @@ private fun ManageActions(
     val targetIsRoot = user.role >= Roles.ROOT
     val idle = running == null
     Column {
-        ActionItem(
+        ActionRow(
             Icons.Outlined.AccountBalanceWallet,
             stringResource(R.string.users_action_adjust_quota),
             onClick = { onOpenDialog(UserDialog.ADJUST_QUOTA) },
             enabled = idle,
             busy = running == UserOperation.ADJUST_QUOTA,
         )
-        ActionItem(
+        ActionRow(
             Icons.Outlined.Edit,
             stringResource(R.string.users_action_edit_profile),
             subtitle = stringResource(R.string.users_action_edit_profile_desc),
@@ -480,7 +457,7 @@ private fun ManageActions(
             enabled = idle,
             busy = running == UserOperation.EDIT_PROFILE,
         )
-        ActionItem(
+        ActionRow(
             Icons.Outlined.Password,
             stringResource(R.string.users_action_change_password),
             onClick = { onOpenDialog(UserDialog.CHANGE_PASSWORD) },
@@ -489,7 +466,7 @@ private fun ManageActions(
         )
         HorizontalDivider(Modifier.padding(vertical = 6.dp), color = AppTheme.colors.border)
         if (user.status == UserStatus.DISABLED) {
-            ActionItem(
+            ActionRow(
                 Icons.Outlined.CheckCircle,
                 stringResource(R.string.common_enable),
                 subtitle = stringResource(R.string.users_action_enable_desc),
@@ -498,7 +475,7 @@ private fun ManageActions(
                 busy = running == UserOperation.ENABLE,
             )
         } else if (!targetIsRoot) {
-            ActionItem(
+            ActionRow(
                 Icons.Outlined.Block,
                 stringResource(R.string.common_disable),
                 subtitle = stringResource(R.string.users_action_disable_desc),
@@ -508,7 +485,7 @@ private fun ManageActions(
             )
         }
         if (iAmRoot && user.role < Roles.ADMIN) {
-            ActionItem(
+            ActionRow(
                 Icons.Outlined.ArrowUpward,
                 stringResource(R.string.users_action_promote),
                 onClick = { onAction(UserOperation.PROMOTE) },
@@ -517,7 +494,7 @@ private fun ManageActions(
             )
         }
         if (user.role >= Roles.ADMIN && !targetIsRoot) {
-            ActionItem(
+            ActionRow(
                 Icons.Outlined.ArrowDownward,
                 stringResource(R.string.users_action_demote),
                 onClick = { onAction(UserOperation.DEMOTE) },
@@ -525,14 +502,14 @@ private fun ManageActions(
                 busy = running == UserOperation.DEMOTE,
             )
         }
-        ActionItem(
+        ActionRow(
             Icons.Outlined.Security,
             stringResource(R.string.users_action_reset_2fa),
             onClick = { onAction(UserOperation.RESET_2FA) },
             enabled = idle,
             busy = running == UserOperation.RESET_2FA,
         )
-        ActionItem(
+        ActionRow(
             Icons.Outlined.Key,
             stringResource(R.string.users_action_reset_passkey),
             onClick = { onAction(UserOperation.RESET_PASSKEY) },
@@ -541,7 +518,7 @@ private fun ManageActions(
         )
         if (myRole > user.role && !targetIsRoot) {
             HorizontalDivider(Modifier.padding(vertical = 6.dp), color = AppTheme.colors.border)
-            ActionItem(
+            ActionRow(
                 Icons.Outlined.DeleteForever,
                 stringResource(R.string.users_action_delete),
                 subtitle = stringResource(R.string.users_action_delete_desc),
@@ -550,49 +527,6 @@ private fun ManageActions(
                 busy = running == UserOperation.DELETE,
                 destructive = true,
             )
-        }
-    }
-}
-
-/** One tappable line in the actions card; a spinner replaces the icon while [busy]. */
-@Composable
-private fun ActionItem(
-    icon: ImageVector,
-    title: String,
-    onClick: () -> Unit,
-    subtitle: String? = null,
-    enabled: Boolean = true,
-    busy: Boolean = false,
-    destructive: Boolean = false,
-) {
-    val colors = AppTheme.colors
-    val tint = if (destructive) colors.destructive else colors.foreground
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .alpha(if (enabled || busy) 1f else 0.5f),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .size(32.dp)
-                .background(if (destructive) Tone.Danger.colors().container else colors.muted, MaterialTheme.shapes.small),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (busy) {
-                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = tint)
-            } else {
-                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.labelLarge, color = tint)
-            if (subtitle != null) {
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.mutedForeground)
-            }
         }
     }
 }

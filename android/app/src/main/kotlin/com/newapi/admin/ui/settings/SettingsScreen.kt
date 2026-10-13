@@ -296,7 +296,8 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
         )
         Text(
             value,
-            style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
+            // titleSmall keeps a four-digit balance on one line in a third of a 360dp-wide screen.
+            style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum"),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
@@ -310,8 +311,13 @@ private fun ServerCard(baseUrl: String, status: SystemStatus?, formatter: QuotaF
         if (ServerUrl.isCleartext(baseUrl)) {
             val warning = Tone.Warning.colors().content
             // Indented to the value column of InfoRow, so the warning reads as a note on the address.
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 112.dp, bottom = 4.dp)) {
-                Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = warning, modifier = Modifier.size(14.dp))
+            Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(start = 112.dp, bottom = 4.dp)) {
+                Icon(
+                    Icons.Outlined.WarningAmber,
+                    contentDescription = null,
+                    tint = warning,
+                    modifier = Modifier.padding(top = 1.dp).size(14.dp),
+                )
                 Spacer(Modifier.width(6.dp))
                 Text(stringResource(R.string.settings_cleartext), style = MaterialTheme.typography.bodySmall, color = warning)
             }

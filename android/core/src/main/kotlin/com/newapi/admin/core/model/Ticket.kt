@@ -105,15 +105,42 @@ data class TicketStats(
 class TicketImage(val bytes: ByteArray, val mimeType: String) {
     companion object {
         /**
-         * The upload type the server detects in [bytes] (Go's `http.DetectContentType` signatures), or null for a
-         * format it rejects, such as HEIC, AVIF or BMP. The server ignores the declared type and file name.
+         * The upload type the server detects in [bytes] (Go's `http.DetectContentType` signatures), or null for an
+         * image it rejects: a format such as HEIC, AVIF or BMP, a CMYK JPEG, or an animated WebP. The server ignores
+         * the declared type and file name.
          */
         fun detectMimeType(bytes: ByteArray): String? = when {
             bytes.matches(0, "\u0089PNG\r\n\u001A\n") -> "image/png"
-            bytes.matches(0, "\u00FF\u00D8\u00FF") -> "image/jpeg"
+            bytes.matches(0, "\u00FF\u00D8\u00FF") -> if (bytes.jpegColorComponents() == 4) null else "image/jpeg"
             bytes.matches(0, "GIF87a") || bytes.matches(0, "GIF89a") -> "image/gif"
-            bytes.matches(0, "RIFF") && bytes.matches(8, "WEBPVP") -> "image/webp"
+            bytes.matches(0, "RIFF") && bytes.matches(8, "WEBPVP") -> {
+                // An extended (VP8X) header flags animation in bit 1 of byte 20; the server decodes still frames only.
+                val animated = bytes.matches(12, "VP8X") && bytes.size > 20 && (bytes[20].toInt() and 0x02) != 0
+                if (animated) null else "image/webp"
+            }
             else -> null
+        }
+
+        /** The colour components the first JPEG frame header declares (4 for CMYK), or 0 if none comes before the image data. */
+        private fun ByteArray.jpegColorComponents(): Int {
+            var i = 2
+            while (i + 3 < size) {
+                if (this[i] != 0xFF.toByte()) return 0
+                val marker = this[i + 1].toInt() and 0xFF
+                when {
+                    // Fill byte before a marker.
+                    marker == 0xFF -> i += 1
+                    // Markers without a length.
+                    marker == 0x01 || marker in 0xD0..0xD8 -> i += 2
+                    // Start of scan or end of image: no frame header first.
+                    marker == 0xDA || marker == 0xD9 -> return 0
+                    // SOF0 to SOF15, except DHT, JPG and DAC that share the range.
+                    marker in 0xC0..0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC ->
+                        return if (i + 9 < size) this[i + 9].toInt() and 0xFF else 0
+                    else -> i += 2 + (((this[i + 2].toInt() and 0xFF) shl 8) or (this[i + 3].toInt() and 0xFF))
+                }
+            }
+            return 0
         }
 
         /** Whether [signature], one byte per Latin-1 character, appears at [offset]. */

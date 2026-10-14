@@ -50,8 +50,9 @@ class TicketsViewModel(private val container: AppContainer) : ViewModel() {
 
     init {
         pager.refresh()
-        // The detail screen announces the ticket it opened, answered or moved. The row is patched in place so the
-        // scroll position survives, and leaves a status filter it no longer matches, as it would on a reload.
+        // The detail screen announces the ticket it opened, answered or moved. A shown row that still matches the
+        // status filter is patched in place so the scroll position survives; a ticket that left or entered the
+        // filter reloads the list, so the rows, the total and the next page stay consistent with the server.
         viewModelScope.launch {
             container.events.ticketsChanged.collect { changed ->
                 if (changed == null) {
@@ -59,12 +60,13 @@ class TicketsViewModel(private val container: AppContainer) : ViewModel() {
                     return@collect
                 }
                 val status = mutableFilters.value.status
-                pager.updateItems { items ->
-                    if (status != null && changed.status != status) {
-                        items.filter { it.id != changed.id }
-                    } else {
+                val matches = status == null || changed.status == status
+                val shown = pager.state.value.items.any { it.id == changed.id }
+                when {
+                    shown && matches -> pager.updateItems { items ->
                         items.map { if (it.id == changed.id) changed.copy(username = changed.username.ifEmpty { it.username }) else it }
                     }
+                    shown || matches -> pager.refresh()
                 }
             }
         }

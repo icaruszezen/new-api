@@ -30,8 +30,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -154,6 +155,16 @@ private fun MainScaffold() {
                     tonalElevation = 0.dp,
                 ) {
                     TopLevelTab.entries.forEach { tab ->
+                        val unread = if (tab == TopLevelTab.Me) ticketStats?.unread ?: 0 else 0
+                        val badgeDescription = if (unread > 0) {
+                            pluralStringResource(
+                                R.plurals.tickets_badge_description,
+                                unread.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                                Formats.count(unread),
+                            )
+                        } else {
+                            null
+                        }
                         NavigationBarItem(
                             selected = tab == selectedTab,
                             onClick = {
@@ -164,19 +175,14 @@ private fun MainScaffold() {
                                 }
                             },
                             icon = {
-                                val unread = ticketStats?.unread ?: 0
-                                if (tab == TopLevelTab.Me && unread > 0) {
-                                    val description = pluralStringResource(
-                                        R.plurals.tickets_badge_description,
-                                        unread.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-                                        Formats.count(unread),
-                                    )
+                                if (unread > 0) {
                                     BadgedBox(
                                         badge = {
+                                            // The tab itself announces the count, after its name.
                                             Badge(
                                                 containerColor = colors.primary,
                                                 contentColor = colors.primaryForeground,
-                                                modifier = Modifier.semantics { contentDescription = description },
+                                                modifier = Modifier.clearAndSetSemantics {},
                                             ) {
                                                 Text(if (unread > 99) "99+" else unread.toString())
                                             }
@@ -188,6 +194,7 @@ private fun MainScaffold() {
                                     Icon(tab.icon, contentDescription = null)
                                 }
                             },
+                            modifier = if (badgeDescription != null) Modifier.semantics { stateDescription = badgeDescription } else Modifier,
                             label = { Text(stringResource(tab.label), style = MaterialTheme.typography.labelMedium) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = colors.foreground,

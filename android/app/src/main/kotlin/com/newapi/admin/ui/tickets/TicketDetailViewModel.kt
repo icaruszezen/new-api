@@ -95,7 +95,12 @@ class TicketDetailViewModel(private val container: AppContainer, private val tic
         load(showIndicator = false)
     }
 
-    fun refresh() = load(showIndicator = true)
+    /** Pull-to-refresh; skipped while a reply or status change runs, whose own answer updates the ticket. */
+    fun refresh() {
+        val current = mutableState.value
+        if (current.isSending || current.isChangingStatus) return
+        load(showIndicator = true)
+    }
 
     private fun load(showIndicator: Boolean) {
         loadJob?.cancel()
@@ -138,10 +143,15 @@ class TicketDetailViewModel(private val container: AppContainer, private val tic
         replyStatus = status
     }
 
-    /** Reads and, where needed, converts picked images; the ones beyond [imageRoom] are dropped. */
+    /** Reads and, where needed, converts picked images; the ones beyond [imageRoom] are dropped with a warning. */
     fun addImages(context: Context, uris: List<Uri>) {
         val detail = mutableState.value.detail ?: return
-        val accepted = uris.take(imageRoom(detail))
+        val room = imageRoom(detail)
+        if (uris.size > room) {
+            val limits = listOf(TicketLimits.MAX_IMAGES_PER_MESSAGE, TicketLimits.MAX_ATTACHMENTS_PER_TICKET)
+            messageChannel.trySend(UiMessage.Res(R.string.tickets_error_too_many_images, limits))
+        }
+        val accepted = uris.take(room)
         if (accepted.isEmpty()) return
         val appContext = context.applicationContext
         preparingImages += accepted.size
@@ -149,7 +159,7 @@ class TicketDetailViewModel(private val container: AppContainer, private val tic
             for (uri in accepted) {
                 try {
                     val image = prepareTicketUpload(appContext, uri)
-                    val preview = withContext(decodeDispatcher) { decodeTicketImage(image.bytes, PREVIEW_SIDE) }
+                    val preview = withContext(decodeDispatcher) { decodeTicketThumbnail(image.bytes, PREVIEW_SIDE) }
                     pendingImages.add(PendingImage(nextImageKey++, image, preview))
                 } catch (e: CancellationException) {
                     throw e
@@ -191,15 +201,16 @@ class TicketDetailViewModel(private val container: AppContainer, private val tic
                 reply = ""
                 pendingImages.clear()
                 replyStatus = null
-                // The answer is only the new message: show it now and reload for the status the server chose.
+                // The answer is only the new message: show it now and reload for the status the server chose. A load
+                // that finished during the send may already hold it.
                 mutableState.update { state ->
+                    val shown = state.detail
+                    if (shown == null || shown.messages.any { it.id == message.id }) return@update state
                     state.copy(
-                        detail = state.detail?.let { detail ->
-                            detail.copy(
-                                ticket = detail.ticket.copy(messageCount = detail.ticket.messageCount + 1),
-                                messages = detail.messages + message,
-                            )
-                        },
+                        detail = shown.copy(
+                            ticket = shown.ticket.copy(messageCount = shown.ticket.messageCount + 1),
+                            messages = shown.messages + message,
+                        ),
                     )
                 }
                 messageChannel.send(UiMessage.Res(R.string.tickets_msg_reply_sent))
@@ -221,7 +232,9 @@ class TicketDetailViewModel(private val container: AppContainer, private val tic
         val current = mutableState.value
         val detail = current.detail ?: return
         if (current.isChangingStatus || current.isSending || status == detail.ticket.status) return
-        mutableState.update { it.copy(isChangingStatus = true) }
+        // A load still running could answer with the old status after this change.
+        loadJob?.cancel()
+        mutableState.update { it.copy(isChangingStatus = true, isRefreshing = false) }
         viewModelScope.launch {
             try {
                 val saved = api.setTicketStatus(ticketId, status)
@@ -253,7 +266,7 @@ class TicketDetailViewModel(private val container: AppContainer, private val tic
         viewModelScope.launch {
             val result = try {
                 val bytes = api.ticketAttachment(ticketId, attachmentId)
-                withContext(decodeDispatcher) { decodeTicketImage(bytes, THUMBNAIL_SIDE) }?.let { Thumbnail.Loaded(it) } ?: Thumbnail.Failed
+                withContext(decodeDispatcher) { decodeTicketThumbnail(bytes, THUMBNAIL_SIDE) }?.let { Thumbnail.Loaded(it) } ?: Thumbnail.Failed
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -270,9 +283,9 @@ class TicketDetailViewModel(private val container: AppContainer, private val tic
     }
 
     private companion object {
-        /** Pixels on the long side: 96dp thumbnails and 64dp previews on dense screens, and stored images whole. */
+        /** Square sides for 96dp thumbnails and 64dp previews on dense screens; stored images show whole. */
         const val THUMBNAIL_SIDE = 320
-        const val PREVIEW_SIDE = 240
+        const val PREVIEW_SIDE = 224
         const val FULL_SIDE = TicketLimits.STORED_IMAGE_SIDE
     }
 }

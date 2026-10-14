@@ -71,6 +71,7 @@
     <string name="tickets_error_image_unreadable">无法读取这张图片</string>
     <string name="tickets_error_image_unsupported">不支持这种图片格式</string>
     <string name="tickets_error_image_too_large">图片过大</string>
+    <string name="tickets_error_too_many_images">部分图片未添加：每条回复最多 %1$d 张，每个工单最多 %2$d 张。</string>
     <string name="tickets_message_limit">此工单已达到 %1$d 条消息上限，无法继续回复。</string>
     <string name="tickets_attachment_limit">此工单已有 %1$d 张图片，只能继续回复文字。</string>
     <string name="tickets_closed_note">工单已关闭，用户无法回复。除非选择其他状态，回复后仍保持关闭。</string>

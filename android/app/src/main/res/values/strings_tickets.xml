@@ -76,6 +76,7 @@
     <string name="tickets_error_image_unreadable">The image could not be read</string>
     <string name="tickets_error_image_unsupported">This image format is not supported</string>
     <string name="tickets_error_image_too_large">The image is too large</string>
+    <string name="tickets_error_too_many_images">Some images were not added. A reply can have up to %1$d images and a ticket up to %2$d.</string>
     <string name="tickets_message_limit">This ticket has reached %1$d messages and cannot take more replies.</string>
     <string name="tickets_attachment_limit">This ticket already has %1$d images. You can still reply with text.</string>
     <string name="tickets_closed_note">Closed: the user cannot reply. A reply keeps it closed unless you pick another status.</string>

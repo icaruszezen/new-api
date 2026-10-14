@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorSpace
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
@@ -34,8 +35,8 @@ class TicketUploadException(val problem: UploadProblem) : Exception(problem.name
 /** Larger picked files are refused before decoding. */
 private const val MAX_SOURCE_BYTES = 64 * 1024 * 1024
 
-/** Pixels decoded at once (48 MB as ARGB); larger images are subsampled first. */
-private const val MAX_DECODE_PIXELS = 12_000_000L
+/** Pixels decoded at once (64 MB as ARGB, so a 16 MP photo decodes whole); larger images are subsampled first. */
+private const val MAX_DECODE_PIXELS = 4096L * 4096
 
 /** A converted upload is JPEG at this quality; the server re-encodes it once more. */
 private const val JPEG_QUALITY = 90
@@ -45,6 +46,32 @@ fun decodeTicketImage(bytes: ByteArray, maxSide: Int): ImageBitmap? = try {
     decodeScaled(bytes, maxSide, orientation = ExifInterface.ORIENTATION_NORMAL)?.asImageBitmap()
 } catch (e: OutOfMemoryError) {
     null
+}
+
+/**
+ * The top of the image in [bytes] as a square of at most [side] pixels, as thumbnails show it, or null if Android
+ * cannot decode them. Sized by the short side, so a tall screenshot stays as sharp as a square photo.
+ */
+fun decodeTicketThumbnail(bytes: ByteArray, side: Int): ImageBitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    val width = bounds.outWidth
+    val height = bounds.outHeight
+    if (width <= 0 || height <= 0) return null
+    var sample = 1
+    while (minOf(width, height) / (sample * 2) >= side) sample *= 2
+    while ((width / sample).toLong() * (height / sample) > MAX_DECODE_PIXELS) sample *= 2
+    return try {
+        val decoded = decodeSampled(bytes, sample) ?: return null
+        val crop = minOf(decoded.width, decoded.height)
+        val scale = minOf(1f, side.toFloat() / crop)
+        val matrix = Matrix().apply { setScale(scale, scale) }
+        val square = Bitmap.createBitmap(decoded, (decoded.width - crop) / 2, 0, crop, crop, matrix, true)
+        if (square !== decoded) decoded.recycle()
+        square.asImageBitmap()
+    } catch (e: OutOfMemoryError) {
+        null
+    }
 }
 
 /**
@@ -86,8 +113,8 @@ suspend fun prepareTicketUpload(context: Context, uri: Uri): TicketImage = withC
 }
 
 /**
- * The system photo picker for up to [maxItems] images (nothing when it is 0). [onPicked] gets at most [maxItems]:
- * on devices without the photo picker the document picker that replaces it ignores the limit.
+ * The system photo picker for up to [maxItems] images (nothing when it is 0). [onPicked] can get more than
+ * [maxItems]: on devices without the photo picker the document picker that replaces it ignores the limit.
  */
 @Composable
 fun rememberTicketImagePicker(maxItems: Int, onPicked: (List<Uri>) -> Unit): () -> Unit {
@@ -97,7 +124,7 @@ fun rememberTicketImagePicker(maxItems: Int, onPicked: (List<Uri>) -> Unit): () 
     // The multiple-item picker rejects a limit below 2, so one remaining slot uses the single picker.
     val multipleContract = remember(maxItems) { ActivityResultContracts.PickMultipleVisualMedia(maxItems.coerceAtLeast(2)) }
     val multiple = rememberLauncherForActivityResult(multipleContract) { uris ->
-        if (uris.isNotEmpty()) onPicked(uris.take(maxItems))
+        if (uris.isNotEmpty()) onPicked(uris)
     }
     return {
         val request = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -154,8 +181,7 @@ private fun decodeScaled(bytes: ByteArray, maxSide: Int, orientation: Int): Bitm
     var sample = 1
     while (maxOf(width, height) / (sample * 2) >= maxSide) sample *= 2
     while ((width / sample).toLong() * (height / sample) > MAX_DECODE_PIXELS) sample *= 2
-    val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
-        ?: return null
+    val decoded = decodeSampled(bytes, sample) ?: return null
     val matrix = Matrix()
     when (orientation) {
         ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.setScale(-1f, 1f)
@@ -181,6 +207,16 @@ private fun decodeScaled(bytes: ByteArray, maxSide: Int, orientation: Int): Bitm
     val result = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
     if (result !== decoded) decoded.recycle()
     return result
+}
+
+/** Decodes [bytes] at 1/[sample] of their size, in sRGB. */
+private fun decodeSampled(bytes: ByteArray, sample: Int): Bitmap? {
+    val options = BitmapFactory.Options().apply {
+        inSampleSize = sample
+        // A wide-gamut photo would otherwise decode, and encode, in Display P3, which the server's decoder ignores.
+        inPreferredColorSpace = ColorSpace.get(ColorSpace.Named.SRGB)
+    }
+    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
 }
 
 private fun Bitmap.encode(format: Bitmap.CompressFormat, quality: Int): ByteArray {

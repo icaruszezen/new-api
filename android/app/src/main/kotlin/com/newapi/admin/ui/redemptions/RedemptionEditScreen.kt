@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -345,7 +346,8 @@ private fun ExpiryDateDialog(expiresAt: Long, onConfirm: (epochDay: Long) -> Uni
             override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis >= todayUtcMillis
         }
     }
-    val initialDay = if (expiresAt > 0) Instant.ofEpochSecond(expiresAt).atZone(zone).toLocalDate() else null
+    // The picker rejects an initial date outside its years (to 2100); a later expiry set elsewhere starts unselected.
+    val initialDay = if (expiresAt > 0) Instant.ofEpochSecond(expiresAt).atZone(zone).toLocalDate().takeIf { it.year in DatePickerDefaults.YearRange } else null
     val state = rememberDatePickerState(
         initialSelectedDateMillis = initialDay?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
         selectableDates = selectableDates,

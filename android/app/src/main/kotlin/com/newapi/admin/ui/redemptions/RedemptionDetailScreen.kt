@@ -182,7 +182,7 @@ private fun CodeHeader(code: Redemption, codeState: CodeState, isChangingStatus:
             color = AppTheme.colors.mutedForeground,
         )
         Text(formatter.format(code.quota), style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"))
-        if (codeState.canToggle) {
+        if (code.canToggle(codeState)) {
             Spacer(Modifier.height(16.dp))
             val enabled = codeState == CodeState.UNUSED
             // loading = isChangingStatus keeps the button disabled while the change runs.

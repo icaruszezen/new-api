@@ -26,9 +26,18 @@ internal fun Redemption.state(nowSeconds: Long): CodeState = when (status) {
     else -> if (isExpired(nowSeconds)) CodeState.EXPIRED else CodeState.UNUSED
 }
 
-/** Like the web: only an unused code can be edited, and a used or expired one cannot be switched on or off. */
+/** Like the web: only an unused code can be edited. */
 internal val CodeState.canEdit: Boolean get() = this == CodeState.UNUSED
-internal val CodeState.canToggle: Boolean get() = this == CodeState.UNUSED || this == CodeState.DISABLED
+
+/**
+ * Like the web, a used or expired code cannot be switched on or off. Unlike the web, a disabled code that
+ * was already redeemed is not offered "Enable" either: redeeming only checks the status, so it would pay out twice.
+ */
+internal fun Redemption.canToggle(state: CodeState): Boolean = when (state) {
+    CodeState.UNUSED -> true
+    CodeState.DISABLED -> usedUserId == 0
+    CodeState.USED, CodeState.EXPIRED -> false
+}
 
 internal val Redemption.displayName: String get() = name.ifBlank { "#$id" }
 

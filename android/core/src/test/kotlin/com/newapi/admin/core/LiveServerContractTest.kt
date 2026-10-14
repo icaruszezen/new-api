@@ -12,6 +12,8 @@ import com.newapi.admin.core.model.ChannelStatus
 import com.newapi.admin.core.model.LogQuery
 import com.newapi.admin.core.model.LogType
 import com.newapi.admin.core.model.QuotaMode
+import com.newapi.admin.core.model.RedemptionStatus
+import com.newapi.admin.core.model.RedemptionStatusFilter
 import com.newapi.admin.core.model.UserAction
 import com.newapi.admin.core.model.UserStatus
 import com.newapi.admin.core.model.UserUpdate
@@ -169,6 +171,62 @@ class LiveServerContractTest {
         }
         assertThrows(ApiError.Business::class.java) { runBlocking { api.user(id) } }
         assertTrue(api.users(page = 1, pageSize = 10, keyword = username).items.orEmpty().none { it.username == username })
+    }
+
+    @Test
+    fun f2_redemptionLifecycle() = runBlocking<Unit> {
+        val name = "it-code-$suffix"
+        val nowSeconds = System.currentTimeMillis() / 1000
+        val keys = api.createRedemptions(name, quota = 500_000, count = 2, expiredTime = nowSeconds + 3600)
+        var ids = emptyList<Int>()
+        try {
+            assertEquals(2, keys.size)
+            assertTrue(keys.all { it.matches(Regex("[0-9a-f]{32}")) })
+            val found = api.redemptions(page = 1, pageSize = 20, keyword = name).items.orEmpty().filter { it.name == name }
+            ids = found.map { it.id }
+            assertEquals(keys.toSet(), found.map { it.key }.toSet())
+
+            val id = ids.first()
+            val created = api.redemption(id)
+            assertEquals(RedemptionStatus.ENABLED, created.status)
+            assertEquals(500_000L, created.quota)
+            assertEquals(nowSeconds + 3600, created.expiredTime)
+            assertEquals(store.load()!!.user.id, created.creatorId)
+            assertEquals(0, created.usedUserId)
+
+            val updated = api.updateRedemption(id, "$name-x", quota = 250_000, expiredTime = 0)
+            assertEquals(250_000L, updated?.quota)
+            assertEquals("$name-x", api.redemption(id).name)
+            assertEquals(0L, api.redemption(id).expiredTime)
+
+            assertEquals(RedemptionStatus.DISABLED, api.setRedemptionEnabled(id, enabled = false)?.status)
+            val disabled = api.redemptions(page = 1, pageSize = 20, keyword = name, status = RedemptionStatusFilter.DISABLED)
+            assertEquals(listOf(id), disabled.items.orEmpty().map { it.id })
+            api.setRedemptionEnabled(id, enabled = true)
+            assertEquals(RedemptionStatus.ENABLED, api.redemption(id).status)
+            val unused = api.redemptions(page = 1, pageSize = 20, keyword = name, status = RedemptionStatusFilter.UNUSED)
+            assertEquals(ids.toSet(), unused.items.orEmpty().map { it.id }.toSet())
+
+            for (invalid in listOf<suspend () -> Any?>(
+                { api.createRedemptions("x".repeat(21), 1, 1, 0) },
+                { api.createRedemptions(name, 1, 101, 0) },
+                { api.createRedemptions(name, 1, 1, nowSeconds - 3600) },
+                { api.updateRedemption(id, name, 1, nowSeconds - 3600) },
+            )) {
+                val error = assertThrows(ApiError.Business::class.java) { runBlocking { invalid() } }
+                assertTrue(error.message.orEmpty().isNotBlank())
+            }
+
+            val second = ids.last()
+            api.setRedemptionEnabled(second, enabled = false)
+            assertTrue(api.deleteInvalidRedemptions() >= 1)
+            ids = listOf(id)
+            assertThrows(ApiError.Business::class.java) { runBlocking { api.redemption(second) } }
+        } finally {
+            ids.forEach { api.deleteRedemption(it) }
+        }
+        assertThrows(ApiError.Business::class.java) { runBlocking { api.redemption(ids.single()) } }
+        assertTrue(api.redemptions(page = 1, pageSize = 20, keyword = name).items.orEmpty().isEmpty())
     }
 
     @Test

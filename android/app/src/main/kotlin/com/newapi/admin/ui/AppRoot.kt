@@ -8,6 +8,7 @@ import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Redeem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -54,10 +55,16 @@ import com.newapi.admin.ui.navigation.ChannelEditRoute
 import com.newapi.admin.ui.navigation.ChannelsRoute
 import com.newapi.admin.ui.navigation.FilteredLogsRoute
 import com.newapi.admin.ui.navigation.LogsRoute
+import com.newapi.admin.ui.navigation.RedemptionDetailRoute
+import com.newapi.admin.ui.navigation.RedemptionEditRoute
+import com.newapi.admin.ui.navigation.RedemptionsRoute
 import com.newapi.admin.ui.navigation.SettingsRoute
 import com.newapi.admin.ui.navigation.UserCreateRoute
 import com.newapi.admin.ui.navigation.UserDetailRoute
 import com.newapi.admin.ui.navigation.UsersRoute
+import com.newapi.admin.ui.redemptions.RedemptionDetailScreen
+import com.newapi.admin.ui.redemptions.RedemptionEditScreen
+import com.newapi.admin.ui.redemptions.RedemptionsScreen
 import com.newapi.admin.ui.settings.SettingsScreen
 import com.newapi.admin.ui.theme.AppTheme
 import com.newapi.admin.ui.update.UpdatePrompt
@@ -69,6 +76,7 @@ private enum class TopLevelTab(val route: Any, val label: Int, val icon: ImageVe
     Logs(LogsRoute, R.string.nav_logs, Icons.AutoMirrored.Outlined.ReceiptLong),
     Users(UsersRoute, R.string.nav_users, Icons.Outlined.Group),
     Channels(ChannelsRoute, R.string.nav_channels, Icons.Outlined.Hub),
+    Redemptions(RedemptionsRoute, R.string.nav_redemptions, Icons.Outlined.Redeem),
     Me(SettingsRoute, R.string.nav_me, Icons.Outlined.Person),
 }
 
@@ -200,6 +208,27 @@ private fun MainScaffold() {
                     channelId = entry.toRoute<ChannelEditRoute>().id.takeIf { it > 0 },
                     onBack = { navController.backFrom(entry) },
                     onSaved = { navController.backFrom(entry) },
+                )
+            }
+            composable<RedemptionsRoute> { entry ->
+                RedemptionsScreen(
+                    onOpenCode = { navController.navigateFrom(entry, RedemptionDetailRoute(it)) },
+                    onCreateCodes = { navController.navigateFrom(entry, RedemptionEditRoute()) },
+                )
+            }
+            composable<RedemptionDetailRoute> { entry ->
+                RedemptionDetailScreen(
+                    codeId = entry.toRoute<RedemptionDetailRoute>().id,
+                    onBack = { navController.backFrom(entry) },
+                    onEdit = { navController.navigateFrom(entry, RedemptionEditRoute(it)) },
+                    onOpenUser = { navController.navigateFrom(entry, UserDetailRoute(it)) },
+                )
+            }
+            composable<RedemptionEditRoute> { entry ->
+                RedemptionEditScreen(
+                    codeId = entry.toRoute<RedemptionEditRoute>().id.takeIf { it > 0 },
+                    onBack = { navController.backFrom(entry) },
+                    onDone = { navController.backFrom(entry) },
                 )
             }
             composable<SettingsRoute> { SettingsScreen() }

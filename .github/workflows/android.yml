@@ -59,6 +59,15 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{"username":"root","password":"ContractPass123!","confirmPassword":"ContractPass123!","SelfUseModeEnabled":false,"DemoSiteEnabled":false}' \
             | tee /dev/stderr | grep -q '"success":true'
+          # Creating redemption codes needs the root's payment compliance confirmation, which only a
+          # browser session can give, so the contract tests cannot do it themselves.
+          token=$(curl -fsS -X POST http://127.0.0.1:3000/api/user/login \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"root","password":"ContractPass123!"}' | jq -er .data.access_token)
+          curl -fsS -X POST http://127.0.0.1:3000/api/option/payment_compliance \
+            -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
+            -d '{"confirmed":true}' \
+            | tee /dev/stderr | grep -q '"success":true'
 
       - name: Set up JDK
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1

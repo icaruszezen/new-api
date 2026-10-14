@@ -40,6 +40,12 @@ object ChannelStatus {
     const val AUTO_DISABLED = 3
 }
 
+object RedemptionStatus {
+    const val ENABLED = 1
+    const val DISABLED = 2
+    const val USED = 3
+}
+
 object LogType {
     /** As a filter value 0 means "all types". */
     const val ALL = 0

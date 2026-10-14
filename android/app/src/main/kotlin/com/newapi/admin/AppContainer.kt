@@ -98,9 +98,11 @@ class AppContainer(
 class AppEvents {
     private val users = MutableSharedFlow<Int?>(extraBufferCapacity = 8)
     private val channels = MutableSharedFlow<Int?>(extraBufferCapacity = 8)
+    private val redemptions = MutableSharedFlow<Int?>(extraBufferCapacity = 8)
 
     val usersChanged: SharedFlow<Int?> = users.asSharedFlow()
     val channelsChanged: SharedFlow<Int?> = channels.asSharedFlow()
+    val redemptionsChanged: SharedFlow<Int?> = redemptions.asSharedFlow()
 
     fun notifyUsersChanged(id: Int? = null) {
         users.tryEmit(id)
@@ -108,6 +110,10 @@ class AppEvents {
 
     fun notifyChannelsChanged(id: Int? = null) {
         channels.tryEmit(id)
+    }
+
+    fun notifyRedemptionsChanged(id: Int? = null) {
+        redemptions.tryEmit(id)
     }
 }
 

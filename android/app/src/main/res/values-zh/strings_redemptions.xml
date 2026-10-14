@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 列表 -->
+    <string name="redemptions_title">兑换码</string>
+    <string name="redemptions_add">新建兑换码</string>
+    <string name="redemptions_search_placeholder">名称或 ID</string>
+    <plurals name="redemptions_count">
+        <item quantity="other">共 %1$s 个兑换码</item>
+    </plurals>
+    <string name="redemptions_empty">暂无兑换码</string>
+    <string name="redemptions_empty_filtered">未找到符合条件的兑换码</string>
+    <string name="redemptions_status_unused">未使用</string>
+    <string name="redemptions_status_disabled">已禁用</string>
+    <string name="redemptions_status_used">已使用</string>
+    <string name="redemptions_status_expired">已过期</string>
+    <string name="redemptions_copy_code">复制兑换码</string>
+    <string name="redemptions_never_expires">永不过期</string>
+    <string name="redemptions_expires_at">%1$s 过期</string>
+    <string name="redemptions_expired_at">已于 %1$s 过期</string>
+    <string name="redemptions_redeemed_by_at">用户 #%1$d 于 %2$s 兑换</string>
+    <string name="redemptions_delete_invalid">删除无效兑换码</string>
+    <string name="redemptions_delete_invalid_message">删除此服务器上所有已使用、已禁用和已过期的兑换码？此操作无法撤销。</string>
+    <string name="redemptions_msg_deleted_invalid">已删除 %1$s 个无效兑换码</string>
+
+    <!-- 详情 -->
+    <string name="redemptions_detail_title">兑换码 #%1$d</string>
+    <string name="redemptions_label_quota">每个兑换码的额度</string>
+    <string name="redemptions_section_code">兑换码</string>
+    <string name="redemptions_section_details">详细信息</string>
+    <string name="redemptions_label_id">ID</string>
+    <string name="redemptions_label_created">创建时间</string>
+    <string name="redemptions_label_expires">过期时间</string>
+    <string name="redemptions_label_creator">创建者</string>
+    <string name="redemptions_label_redeemed_by">兑换用户</string>
+    <string name="redemptions_label_redeemed_at">兑换时间</string>
+    <string name="redemptions_user_value">用户 #%1$d</string>
+    <string name="redemptions_open_user">查看用户</string>
+    <string name="redemptions_delete_title">删除兑换码</string>
+    <string name="redemptions_delete_message">永久删除 %1$s？此操作无法撤销。</string>
+    <string name="redemptions_msg_enabled">兑换码已启用</string>
+    <string name="redemptions_msg_disabled">兑换码已禁用</string>
+
+    <!-- 新建和编辑 -->
+    <string name="redemptions_create_title">新建兑换码</string>
+    <string name="redemptions_edit_title">编辑兑换码</string>
+    <string name="redemptions_field_name">名称</string>
+    <string name="redemptions_name_hint_create">最多 20 个字符，留空时使用额度作为名称</string>
+    <string name="redemptions_name_hint_edit">最多 20 个字符</string>
+    <string name="redemptions_field_amount">每个兑换码的金额（%1$s）</string>
+    <string name="redemptions_field_amount_tokens">每个兑换码的额度</string>
+    <string name="redemptions_amount_units">= %1$s 额度单位</string>
+    <string name="redemptions_field_count">数量</string>
+    <string name="redemptions_count_hint">一次可创建 1 到 100 个</string>
+    <string name="redemptions_field_expiry">过期时间</string>
+    <string name="redemptions_expiry_never">永不过期</string>
+    <string name="redemptions_expiry_day">1 天</string>
+    <string name="redemptions_expiry_week">1 周</string>
+    <string name="redemptions_expiry_month">1 个月</string>
+    <string name="redemptions_expiry_custom">自定义</string>
+    <string name="redemptions_expiry_pick_date">过期日期</string>
+    <string name="redemptions_expiry_pick_time">过期时刻</string>
+    <string name="redemptions_settings_missing">服务器的货币显示设置尚未加载，暂时无法换算金额。</string>
+    <string name="redemptions_error_too_long">最多 %1$d 个字符</string>
+    <string name="redemptions_error_amount_invalid">请输入有效的数字</string>
+    <string name="redemptions_error_amount_positive">请输入大于 0 的金额</string>
+    <string name="redemptions_error_amount_too_small">金额小于 1 个额度单位</string>
+    <string name="redemptions_error_amount_too_large">每个兑换码最多 %1$s</string>
+    <string name="redemptions_error_count">请输入 1 到 100 之间的数字</string>
+    <string name="redemptions_error_expiry_past">过期时间必须晚于现在</string>
+    <string name="redemptions_form_invalid">请修正标记的字段</string>
+    <string name="redemptions_create_submit">创建</string>
+    <string name="redemptions_discard_title">放弃更改？</string>
+    <string name="redemptions_discard_message">您有未保存的更改。确定要离开吗？</string>
+    <string name="redemptions_discard_confirm">放弃</string>
+
+    <!-- 创建结果 -->
+    <plurals name="redemptions_created_title">
+        <item quantity="other">已创建 %1$s 个兑换码</item>
+    </plurals>
+    <string name="redemptions_created_description">把兑换码发给用户，用户在钱包页兑换。兑换码也会保留在列表中。</string>
+    <string name="redemptions_copy_all">复制全部</string>
+    <string name="redemptions_done">完成</string>
+</resources>

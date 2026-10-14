@@ -67,6 +67,7 @@ import com.newapi.admin.LocalAppContainer
 import com.newapi.admin.R
 import com.newapi.admin.core.model.ChannelType
 import com.newapi.admin.core.model.ChannelTypes
+import com.newapi.admin.ui.common.UiMessagesEffect
 import com.newapi.admin.ui.components.AppAlert
 import com.newapi.admin.ui.components.AppBottomSheet
 import com.newapi.admin.ui.components.AppButton
@@ -132,7 +133,7 @@ fun ChannelEditScreen(channelId: Int?, onBack: () -> Unit, onSaved: () -> Unit) 
         }
     }
 
-    ChannelMessagesEffect(viewModel.messages, snackbarHostState)
+    UiMessagesEffect(viewModel.messages, snackbarHostState)
     // Leaving during a save would cancel it before the change is announced, although the server may apply it.
     BackHandler(enabled = guardBack || state.isSaving) {
         if (!state.isSaving) confirmDiscard = true

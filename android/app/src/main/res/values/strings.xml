@@ -6,6 +6,7 @@
     <string name="nav_logs">Logs</string>
     <string name="nav_users">Users</string>
     <string name="nav_channels">Channels</string>
+    <string name="nav_redemptions">Codes</string>
     <string name="nav_me">Me</string>
 
     <string name="common_retry">Retry</string>

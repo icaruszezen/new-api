@@ -1,10 +1,17 @@
 package com.newapi.admin.ui.common
 
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import com.newapi.admin.R
 import com.newapi.admin.core.net.ApiError
 import com.newapi.admin.core.update.UpdateError
+import kotlinx.coroutines.flow.Flow
 
 /** A one-off message a ViewModel wants shown in a snackbar; resolved to text in composition. */
 sealed interface UiMessage {
@@ -40,4 +47,20 @@ fun errorMessage(error: Throwable): String = when (error) {
     is UpdateError.CorruptDownload -> stringResource(R.string.update_error_corrupt)
     is UpdateError.Storage -> stringResource(R.string.update_error_storage)
     else -> error.message?.takeIf { it.isNotBlank() } ?: stringResource(R.string.error_unknown)
+}
+
+/** Shows each one-off ViewModel message once in [hostState]; a newer message replaces the one on screen. */
+@Composable
+fun UiMessagesEffect(messages: Flow<UiMessage>, hostState: SnackbarHostState) {
+    var current by remember { mutableStateOf<UiMessage?>(null) }
+    LaunchedEffect(messages) {
+        messages.collect { current = it }
+    }
+    current?.let { message ->
+        val text = message.text()
+        LaunchedEffect(message) {
+            hostState.showSnackbar(text)
+            current = null
+        }
+    }
 }

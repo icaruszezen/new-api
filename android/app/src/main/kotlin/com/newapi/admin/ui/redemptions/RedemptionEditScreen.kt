@@ -259,7 +259,8 @@ private fun RedemptionFormFields(
                 )
                 // The amount error shows as soon as it is typed: it explains the conversion, not a missing field.
                 val amountError = errors.amount.takeIf { showErrors || form.amount.isNotBlank() }
-                val amount = CodeAmount.parse(form.amount, formatter)
+                // An untouched amount on edit keeps the stored quota, which its rounded text may not show.
+                val quota = viewModel.savedQuota(formatter)
                 AppTextField(
                     value = form.amount,
                     onValueChange = { value -> viewModel.update { it.copy(amount = value) } },
@@ -271,8 +272,7 @@ private fun RedemptionFormFields(
                     },
                     supportingText = when {
                         amountError != null -> amountError.text()
-                        amount is CodeAmount.Valid && !formatter.isTokens ->
-                            stringResource(R.string.redemptions_amount_units, Formats.count(amount.quota))
+                        quota != null && !formatter.isTokens -> stringResource(R.string.redemptions_amount_units, Formats.count(quota))
                         else -> null
                     },
                     isError = amountError != null,

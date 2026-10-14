@@ -143,6 +143,12 @@ class RedemptionEditViewModel(private val container: AppContainer, private val c
 
     fun setCustomExpiry(epochSeconds: Long) = update { it.copy(expiry = ExpiryChoice.CUSTOM, expiresAt = epochSeconds) }
 
+    /** The quota a save sends: the stored one while an edit leaves the amount untouched, else the typed amount; null if invalid. */
+    fun savedQuota(formatter: QuotaFormatter): Long? {
+        if (!isCreate && form.amount == baseline.amount) return storedQuota
+        return (CodeAmount.parse(form.amount, formatter) as? CodeAmount.Valid)?.quota
+    }
+
     fun errors(formatter: QuotaFormatter, nowSeconds: Long): RedemptionFormErrors {
         val current = form
         // An untouched amount is sent back as stored, so its rounded display value is not checked.
@@ -183,11 +189,7 @@ class RedemptionEditViewModel(private val container: AppContainer, private val c
             mutableState.update { it.copy(saved = true) }
             return
         }
-        val quota = if (id != null && submitted.amount == baseline.amount) {
-            storedQuota
-        } else {
-            (CodeAmount.parse(submitted.amount, formatter) as CodeAmount.Valid).quota
-        }
+        val quota = savedQuota(formatter) ?: return
         val name = submitted.name.trim().ifEmpty { formatter.format(quota) }
         mutableState.update { it.copy(isSaving = true, showErrors = true) }
         viewModelScope.launch {

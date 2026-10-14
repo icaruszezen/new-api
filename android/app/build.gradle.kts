@@ -18,6 +18,14 @@ val releaseKeyPassword = env("ANDROID_KEY_PASSWORD")
 val hasReleaseKey = listOf(releaseKeystoreFile, releaseKeystorePassword, releaseKeyAlias, releaseKeyPassword)
     .all { it != null }
 
+// GitHub repository (`owner/name`) whose releases the app checks for updates. Only builds signed with the
+// release key can install over each other, so other builds leave it empty and hide in-app updates.
+// GITHUB_REPOSITORY is set by GitHub Actions; ANDROID_UPDATE_REPOSITORY overrides it.
+val updateRepository = (if (hasReleaseKey) env("ANDROID_UPDATE_REPOSITORY") ?: env("GITHUB_REPOSITORY") else null).orEmpty()
+require(updateRepository.isEmpty() || updateRepository.matches(Regex("[A-Za-z0-9._-]+/[A-Za-z0-9._-]+"))) {
+    "ANDROID_UPDATE_REPOSITORY must look like owner/name, got '$updateRepository'"
+}
+
 android {
     namespace = "com.newapi.admin"
     compileSdk = 35
@@ -28,6 +36,7 @@ android {
         targetSdk = 35
         versionCode = env("ANDROID_VERSION_CODE")?.toInt() ?: 1
         versionName = env("ANDROID_VERSION_NAME") ?: "0.1.0"
+        buildConfigField("String", "UPDATE_REPOSITORY", "\"$updateRepository\"")
     }
 
     signingConfigs {

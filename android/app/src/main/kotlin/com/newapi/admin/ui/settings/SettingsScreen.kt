@@ -1,10 +1,9 @@
 package com.newapi.admin.ui.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -15,31 +14,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,12 +46,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -75,12 +67,25 @@ import com.newapi.admin.core.format.QuotaFormatter
 import com.newapi.admin.core.model.SystemStatus
 import com.newapi.admin.ui.common.UiMessage
 import com.newapi.admin.ui.common.text
+import com.newapi.admin.ui.components.ActionRow
+import com.newapi.admin.ui.components.AppAlert
+import com.newapi.admin.ui.components.AppAvatar
+import com.newapi.admin.ui.components.AppButton
+import com.newapi.admin.ui.components.AppCard
+import com.newapi.admin.ui.components.AppDialog
+import com.newapi.admin.ui.components.AppSnackbarHost
+import com.newapi.admin.ui.components.AppTextField
+import com.newapi.admin.ui.components.AppTopBar
+import com.newapi.admin.ui.components.ButtonVariant
 import com.newapi.admin.ui.components.ConfirmDialog
 import com.newapi.admin.ui.components.FullScreenLoading
 import com.newapi.admin.ui.components.InfoRow
 import com.newapi.admin.ui.components.SectionCard
+import com.newapi.admin.ui.components.StatTile
 import com.newapi.admin.ui.components.StatusPill
+import com.newapi.admin.ui.components.ToggleRow
 import com.newapi.admin.ui.components.rememberQuotaFormatter
+import com.newapi.admin.ui.theme.AppTheme
 import com.newapi.admin.ui.theme.Tone
 import com.newapi.admin.ui.theme.colors
 import java.math.BigDecimal
@@ -102,6 +107,9 @@ fun SettingsScreen() {
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { snackbarMessage = it }
     }
+    LaunchedEffect(container.updates) {
+        container.updates.messages.collect { snackbarMessage = it }
+    }
     snackbarMessage?.let { message ->
         val text = message.text()
         LaunchedEffect(message) {
@@ -112,16 +120,16 @@ fun SettingsScreen() {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.nav_me)) },
+            AppTopBar(
+                title = stringResource(R.string.nav_me),
                 actions = {
                     IconButton(onClick = viewModel::refresh, enabled = !state.isRefreshing) {
-                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh))
+                        Icon(Icons.Outlined.Refresh, contentDescription = stringResource(R.string.common_refresh))
                     }
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { AppSnackbarHost(snackbarHostState) },
     ) { padding ->
         val current = account
         if (current == null) {
@@ -144,9 +152,16 @@ fun SettingsScreen() {
             ) {
                 AccountCard(current, formatter)
                 ServerCard(current.baseUrl, status, formatter)
-                SectionCard(title = stringResource(R.string.settings_security_title)) {
+                // Rows run edge to edge, so the card only pads its title.
+                AppCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(top = 16.dp, bottom = 6.dp)) {
+                    Text(
+                        stringResource(R.string.settings_security_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                    Spacer(Modifier.height(6.dp))
                     ActionRow(
-                        icon = Icons.Filled.Lock,
+                        icon = Icons.Outlined.Lock,
                         title = stringResource(R.string.settings_change_password),
                         subtitle = stringResource(
                             if (isSession) R.string.settings_change_password_desc else R.string.settings_change_password_unavailable,
@@ -154,20 +169,18 @@ fun SettingsScreen() {
                         enabled = isSession,
                         onClick = viewModel::openPasswordDialog,
                     )
-                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                    HorizontalDivider(Modifier.padding(vertical = 4.dp), color = AppTheme.colors.border)
                     ActionRow(
-                        icon = Icons.AutoMirrored.Filled.Logout,
+                        icon = Icons.AutoMirrored.Outlined.Logout,
                         title = stringResource(R.string.settings_sign_out),
                         subtitle = null,
                         enabled = !state.isSigningOut,
                         busy = state.isSigningOut,
-                        tint = MaterialTheme.colorScheme.error,
+                        destructive = true,
                         onClick = { confirmSignOut = true },
                     )
                 }
-                SectionCard(title = stringResource(R.string.settings_about_title)) {
-                    InfoRow(stringResource(R.string.settings_app_version), container.appVersion)
-                }
+                AboutCard()
             }
         }
 
@@ -191,27 +204,66 @@ fun SettingsScreen() {
     }
 }
 
+/** App version, update checks and the beta opt-in. */
+@Composable
+private fun AboutCard() {
+    val container = LocalAppContainer.current
+    val updates = container.updates
+    val update by updates.state.collectAsStateWithLifecycle()
+    val available = update.available
+    // Rows run edge to edge, so the card only pads its title and the version line.
+    AppCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(top = 16.dp, bottom = 6.dp)) {
+        Text(
+            stringResource(R.string.settings_about_title),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        Spacer(Modifier.height(6.dp))
+        InfoRow(
+            stringResource(R.string.settings_app_version),
+            "${container.appVersion} (${container.appVersionCode})",
+            Modifier.padding(horizontal = 16.dp),
+        )
+        HorizontalDivider(Modifier.padding(vertical = 4.dp), color = AppTheme.colors.border)
+        ActionRow(
+            icon = Icons.Outlined.SystemUpdate,
+            title = stringResource(R.string.update_check),
+            subtitle = when {
+                !updates.isSupported -> stringResource(R.string.update_unsupported)
+                update.isChecking -> stringResource(R.string.update_checking)
+                available != null -> stringResource(R.string.update_available_short, available.versionName)
+                update.lastCheckedMillis > 0 -> stringResource(R.string.update_last_checked, Formats.dateTime(update.lastCheckedMillis / 1000))
+                else -> null
+            },
+            enabled = updates.isSupported && !update.isChecking,
+            busy = update.isChecking,
+            onClick = updates::checkNow,
+        )
+        if (updates.isSupported) {
+            HorizontalDivider(Modifier.padding(vertical = 4.dp), color = AppTheme.colors.border)
+            ToggleRow(
+                icon = Icons.Outlined.Science,
+                title = stringResource(R.string.update_beta_title),
+                subtitle = stringResource(R.string.update_beta_desc),
+                checked = update.includeBeta,
+                onCheckedChange = updates::setIncludeBeta,
+            )
+        }
+    }
+}
+
 @Composable
 private fun AccountCard(account: StoredAccount, formatter: QuotaFormatter) {
+    val colors = AppTheme.colors
     val user = account.user
     val displayName = user.displayName.ifBlank { user.username }
     SectionCard(title = null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(48.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        // Two chars when the name starts with a surrogate pair (emoji, rare CJK).
-                        displayName.take(if (displayName.firstOrNull()?.isHighSurrogate() == true) 2 else 1).uppercase(),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
+            AppAvatar(
+                // Two chars when the name starts with a surrogate pair (emoji, rare CJK).
+                displayName.take(if (displayName.firstOrNull()?.isHighSurrogate() == true) 2 else 1).uppercase(),
+                size = 48.dp,
+            )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -223,7 +275,7 @@ private fun AccountCard(account: StoredAccount, formatter: QuotaFormatter) {
                 Text(
                     "@${user.username}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = colors.mutedForeground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -257,38 +309,20 @@ private fun AccountCard(account: StoredAccount, formatter: QuotaFormatter) {
             ),
         )
         if (account.credentials is Credentials.AccessToken) {
-            Text(
-                stringResource(R.string.settings_token_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.medium,
-        modifier = modifier,
-    ) {
-        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                value,
-                style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum"),
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.Top) {
+                Icon(
+                    Icons.Outlined.Info,
+                    contentDescription = null,
+                    tint = colors.mutedForeground,
+                    modifier = Modifier.padding(top = 1.dp).size(14.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    stringResource(R.string.settings_token_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.mutedForeground,
+                )
+            }
         }
     }
 }
@@ -299,9 +333,15 @@ private fun ServerCard(baseUrl: String, status: SystemStatus?, formatter: QuotaF
         InfoRow(stringResource(R.string.settings_server_address), baseUrl, copyable = true)
         if (ServerUrl.isCleartext(baseUrl)) {
             val warning = Tone.Warning.colors().content
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-                Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = warning, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp))
+            // Indented to the value column of InfoRow, so the warning reads as a note on the address.
+            Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(start = 112.dp, bottom = 4.dp)) {
+                Icon(
+                    Icons.Outlined.WarningAmber,
+                    contentDescription = null,
+                    tint = warning,
+                    modifier = Modifier.padding(top = 1.dp).size(14.dp),
+                )
+                Spacer(Modifier.width(6.dp))
                 Text(stringResource(R.string.settings_cleartext), style = MaterialTheme.typography.bodySmall, color = warning)
             }
         }
@@ -331,46 +371,6 @@ private fun ServerCard(baseUrl: String, status: SystemStatus?, formatter: QuotaF
     }
 }
 
-/** One tappable line in a card: icon, title, optional explanation; a spinner replaces the icon while [busy]. */
-@Composable
-private fun ActionRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String?,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    busy: Boolean = false,
-    tint: Color = MaterialTheme.colorScheme.onSurface,
-) {
-    val alpha = if (enabled || busy) 1f else 0.5f
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-            if (busy) {
-                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = tint)
-            } else {
-                Icon(icon, contentDescription = null, tint = tint.copy(alpha = tint.alpha * alpha))
-            }
-        }
-        Spacer(Modifier.width(16.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = tint.copy(alpha = tint.alpha * alpha))
-            if (subtitle != null) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun ChangePasswordDialog(viewModel: SettingsViewModel, dialog: PasswordDialogState) {
     var visible by rememberSaveable { mutableStateOf(false) }
@@ -379,8 +379,9 @@ private fun ChangePasswordDialog(viewModel: SettingsViewModel, dialog: PasswordD
     val visibilityToggle: @Composable () -> Unit = {
         IconButton(onClick = { visible = !visible }) {
             Icon(
-                if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                 contentDescription = stringResource(if (visible) R.string.settings_hide_password else R.string.settings_show_password),
+                modifier = Modifier.size(18.dp),
             )
         }
     }
@@ -390,39 +391,40 @@ private fun ChangePasswordDialog(viewModel: SettingsViewModel, dialog: PasswordD
         Triple(PasswordField.CONFIRM, viewModel.confirmPassword, viewModel::onConfirmPasswordChange),
     )
 
-    AlertDialog(
+    AppDialog(
         onDismissRequest = viewModel::closePasswordDialog,
-        title = { Text(stringResource(R.string.settings_change_password)) },
-        text = {
+        title = stringResource(R.string.settings_change_password),
+        content = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(stringResource(R.string.settings_password_dialog_text), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    stringResource(R.string.settings_password_dialog_text),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.colors.mutedForeground,
+                )
                 fields.forEach { (field, value, onChange) ->
                     val error = dialog.fieldErrors[field]
                     val hint = error ?: if (field == PasswordField.NEW) R.string.settings_password_length else null
-                    OutlinedTextField(
+                    AppTextField(
                         value = value,
                         onValueChange = onChange,
-                        modifier = Modifier.fillMaxWidth().semantics {
+                        modifier = Modifier.fillMaxWidth(),
+                        inputModifier = Modifier.semantics {
                             contentType = if (field == PasswordField.CURRENT) ContentType.Password else ContentType.NewPassword
                         },
                         enabled = enabled,
-                        label = {
-                            Text(
-                                stringResource(
-                                    when (field) {
-                                        PasswordField.CURRENT -> R.string.settings_current_password
-                                        PasswordField.NEW -> R.string.settings_new_password
-                                        PasswordField.CONFIRM -> R.string.settings_confirm_password
-                                    },
-                                ),
-                            )
-                        },
-                        trailingIcon = if (field == PasswordField.CURRENT) visibilityToggle else null,
+                        label = stringResource(
+                            when (field) {
+                                PasswordField.CURRENT -> R.string.settings_current_password
+                                PasswordField.NEW -> R.string.settings_new_password
+                                PasswordField.CONFIRM -> R.string.settings_confirm_password
+                            },
+                        ),
+                        trailing = if (field == PasswordField.CURRENT) visibilityToggle else null,
                         isError = error != null,
-                        supportingText = hint?.let { { Text(stringResource(it)) } },
+                        supportingText = hint?.let { stringResource(it) },
                         singleLine = true,
                         visualTransformation = transformation,
                         keyboardOptions = KeyboardOptions(
@@ -433,23 +435,25 @@ private fun ChangePasswordDialog(viewModel: SettingsViewModel, dialog: PasswordD
                     )
                 }
                 dialog.error?.let { error ->
-                    Text(error.text(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    AppAlert(text = error.text(), tone = Tone.Danger, icon = Icons.Outlined.ErrorOutline)
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = viewModel::changePassword, enabled = enabled) {
-                if (dialog.isSubmitting) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Text(stringResource(R.string.settings_change_password_confirm))
-                }
-            }
+            AppButton(
+                stringResource(R.string.settings_change_password_confirm),
+                onClick = viewModel::changePassword,
+                enabled = enabled,
+                loading = dialog.isSubmitting,
+            )
         },
         dismissButton = {
-            TextButton(onClick = viewModel::closePasswordDialog, enabled = enabled) {
-                Text(stringResource(R.string.common_cancel))
-            }
+            AppButton(
+                stringResource(R.string.common_cancel),
+                onClick = viewModel::closePasswordDialog,
+                variant = ButtonVariant.Outline,
+                enabled = enabled,
+            )
         },
     )
 }

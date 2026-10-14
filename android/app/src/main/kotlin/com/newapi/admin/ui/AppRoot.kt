@@ -4,13 +4,15 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Hub
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.Hub
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,9 +21,13 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -53,15 +59,17 @@ import com.newapi.admin.ui.navigation.UserCreateRoute
 import com.newapi.admin.ui.navigation.UserDetailRoute
 import com.newapi.admin.ui.navigation.UsersRoute
 import com.newapi.admin.ui.settings.SettingsScreen
+import com.newapi.admin.ui.theme.AppTheme
+import com.newapi.admin.ui.update.UpdatePrompt
 import com.newapi.admin.ui.users.UserCreateScreen
 import com.newapi.admin.ui.users.UserDetailScreen
 import com.newapi.admin.ui.users.UsersScreen
 
 private enum class TopLevelTab(val route: Any, val label: Int, val icon: ImageVector) {
-    Logs(LogsRoute, R.string.nav_logs, Icons.AutoMirrored.Filled.ReceiptLong),
-    Users(UsersRoute, R.string.nav_users, Icons.Filled.Group),
-    Channels(ChannelsRoute, R.string.nav_channels, Icons.Filled.Hub),
-    Me(SettingsRoute, R.string.nav_me, Icons.Filled.Person),
+    Logs(LogsRoute, R.string.nav_logs, Icons.AutoMirrored.Outlined.ReceiptLong),
+    Users(UsersRoute, R.string.nav_users, Icons.Outlined.Group),
+    Channels(ChannelsRoute, R.string.nav_channels, Icons.Outlined.Hub),
+    Me(SettingsRoute, R.string.nav_me, Icons.Outlined.Person),
 }
 
 /** Login gate, then the tabbed admin UI. */
@@ -81,6 +89,9 @@ fun AppRoot() {
             CompositionLocalProvider(LocalViewModelStoreOwner provides sessionViewModels) { MainScaffold() }
         }
     }
+    // Updates are app-wide, so the dialog also shows over the login screen.
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { container.updates.onForeground() }
+    UpdatePrompt()
 }
 
 @Composable
@@ -96,7 +107,15 @@ private fun MainScaffold() {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (destination == null || selectedTab != null) {
-                NavigationBar {
+                val colors = AppTheme.colors
+                NavigationBar(
+                    modifier = Modifier.drawWithContent {
+                        drawContent()
+                        drawLine(colors.border, Offset(0f, 0.5.dp.toPx()), Offset(size.width, 0.5.dp.toPx()), strokeWidth = 1.dp.toPx())
+                    },
+                    containerColor = colors.background,
+                    tonalElevation = 0.dp,
+                ) {
                     TopLevelTab.entries.forEach { tab ->
                         NavigationBarItem(
                             selected = tab == selectedTab,
@@ -108,7 +127,14 @@ private fun MainScaffold() {
                                 }
                             },
                             icon = { Icon(tab.icon, contentDescription = null) },
-                            label = { Text(stringResource(tab.label)) },
+                            label = { Text(stringResource(tab.label), style = MaterialTheme.typography.labelMedium) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = colors.foreground,
+                                selectedTextColor = colors.foreground,
+                                indicatorColor = colors.accent,
+                                unselectedIconColor = colors.mutedForeground,
+                                unselectedTextColor = colors.mutedForeground,
+                            ),
                         )
                     }
                 }

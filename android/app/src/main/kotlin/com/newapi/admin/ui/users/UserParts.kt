@@ -1,14 +1,19 @@
 package com.newapi.admin.ui.users
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -16,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -23,7 +29,9 @@ import com.newapi.admin.R
 import com.newapi.admin.core.model.AdminUser
 import com.newapi.admin.core.model.Roles
 import com.newapi.admin.core.model.UserStatus
+import com.newapi.admin.ui.components.AppTextField
 import com.newapi.admin.ui.components.StatusPill
+import com.newapi.admin.ui.theme.AppTheme
 import com.newapi.admin.ui.theme.Tone
 import com.newapi.admin.ui.theme.colors
 
@@ -42,6 +50,10 @@ internal const val UNCHANGED_PASSWORD_SENTINEL = "\$I_LOVE_U"
 internal const val STATUS_DELETED = -1
 
 internal fun String.runeCount(): Int = codePointCount(0, length)
+
+/** Avatar text: the first character uppercased, both halves when it is a surrogate pair (emoji, rare CJK). */
+internal fun avatarInitials(name: String): String =
+    name.take(if (name.firstOrNull()?.isHighSurrogate() == true) 2 else 1).uppercase()
 
 /** String resource describing why an admin-set password is rejected, or null when it is acceptable. */
 internal fun passwordProblem(password: String): Int? = when {
@@ -107,13 +119,13 @@ internal fun QuotaBar(quota: Long, usedQuota: Long, modifier: Modifier = Modifie
     val color = when {
         fraction <= 0.1f -> Tone.Danger.colors().content
         fraction <= 0.3f -> Tone.Warning.colors().content
-        else -> MaterialTheme.colorScheme.primary
+        else -> AppTheme.colors.primary
     }
     LinearProgressIndicator(
         progress = { fraction },
-        modifier = modifier.fillMaxWidth().height(4.dp),
+        modifier = modifier.fillMaxWidth().height(6.dp),
         color = color,
-        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        trackColor = AppTheme.colors.muted,
         strokeCap = StrokeCap.Round,
         gapSize = 0.dp,
         drawStopIndicator = {},
@@ -137,23 +149,41 @@ internal fun GroupDropdown(
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val entries = (options + value).filter { it.isNotEmpty() }.distinct().sorted()
+    val open = expanded && enabled
+    val colors = AppTheme.colors
     ExposedDropdownMenuBox(
-        expanded = expanded && enabled,
+        expanded = open,
         onExpandedChange = { if (enabled) expanded = it },
         modifier = modifier,
     ) {
-        OutlinedTextField(
+        AppTextField(
             value = value.ifEmpty { allLabel.orEmpty() },
             onValueChange = {},
+            modifier = Modifier.fillMaxWidth(),
+            inputModifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled),
             readOnly = true,
             enabled = enabled,
             singleLine = true,
-            label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded && enabled) },
-            supportingText = supportingText?.let { { Text(it) } },
-            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled),
+            label = label,
+            trailing = {
+                Icon(
+                    Icons.Outlined.KeyboardArrowDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp).rotate(if (open) 180f else 0f),
+                )
+            },
+            supportingText = supportingText,
         )
-        ExposedDropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
+        ExposedDropdownMenu(
+            expanded = open,
+            onDismissRequest = { expanded = false },
+            shape = MaterialTheme.shapes.medium,
+            containerColor = colors.popover,
+            border = BorderStroke(1.dp, colors.border),
+        ) {
+            val check: @Composable () -> Unit = {
+                Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+            }
             if (allLabel != null) {
                 DropdownMenuItem(
                     text = { Text(allLabel) },
@@ -161,6 +191,7 @@ internal fun GroupDropdown(
                         onSelect("")
                         expanded = false
                     },
+                    trailingIcon = if (value.isEmpty()) check else null,
                     contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
                 )
             }
@@ -171,6 +202,7 @@ internal fun GroupDropdown(
                         onSelect(group)
                         expanded = false
                     },
+                    trailingIcon = if (group == value) check else null,
                     contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
                 )
             }

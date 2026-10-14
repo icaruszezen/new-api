@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,29 +20,17 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.PersonSearch
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -58,7 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -72,6 +59,17 @@ import com.newapi.admin.core.model.Roles
 import com.newapi.admin.core.model.UserStatus
 import com.newapi.admin.ui.common.UiMessage
 import com.newapi.admin.ui.common.text
+import com.newapi.admin.ui.components.AppAvatar
+import com.newapi.admin.ui.components.AppBottomSheet
+import com.newapi.admin.ui.components.AppButton
+import com.newapi.admin.ui.components.AppCard
+import com.newapi.admin.ui.components.AppFab
+import com.newapi.admin.ui.components.AppFilterChip
+import com.newapi.admin.ui.components.AppRemovableChip
+import com.newapi.admin.ui.components.AppSnackbarHost
+import com.newapi.admin.ui.components.AppTopBar
+import com.newapi.admin.ui.components.ButtonSize
+import com.newapi.admin.ui.components.ButtonVariant
 import com.newapi.admin.ui.components.EmptyState
 import com.newapi.admin.ui.components.FullScreenError
 import com.newapi.admin.ui.components.FullScreenLoading
@@ -80,6 +78,7 @@ import com.newapi.admin.ui.components.LoadMoreEffect
 import com.newapi.admin.ui.components.SearchField
 import com.newapi.admin.ui.components.StatusPill
 import com.newapi.admin.ui.components.rememberQuotaFormatter
+import com.newapi.admin.ui.theme.AppTheme
 import com.newapi.admin.ui.theme.Tone
 
 private val ROLE_FILTERS = listOf(Roles.COMMON, Roles.ADMIN, Roles.ROOT)
@@ -124,29 +123,35 @@ fun UsersScreen(onOpenUser: (Int) -> Unit, onCreateUser: () -> Unit) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.users_title)) },
+            AppTopBar(
+                title = stringResource(R.string.users_title),
                 actions = {
                     IconButton(onClick = {
                         viewModel.loadGroups()
                         showFilters = true
                     }) {
-                        BadgedBox(badge = { if (filters.hasColumnFilters) Badge() }) {
-                            Icon(Icons.Filled.FilterList, contentDescription = stringResource(R.string.common_filter))
+                        BadgedBox(
+                            badge = {
+                                if (filters.hasColumnFilters) {
+                                    Badge(containerColor = AppTheme.colors.primary, contentColor = AppTheme.colors.primaryForeground)
+                                }
+                            },
+                        ) {
+                            Icon(Icons.Outlined.FilterList, contentDescription = stringResource(R.string.common_filter))
                         }
                     }
                 },
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            AppFab(
+                text = stringResource(R.string.users_add),
+                icon = Icons.Outlined.PersonAdd,
                 onClick = onCreateUser,
                 expanded = fabExpanded,
-                icon = { Icon(Icons.Filled.PersonAdd, contentDescription = null) },
-                text = { Text(stringResource(R.string.users_add)) },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { AppSnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             SearchField(
@@ -173,7 +178,7 @@ fun UsersScreen(onOpenUser: (Int) -> Unit, onCreateUser: () -> Unit) {
                         item(key = "empty") {
                             EmptyState(
                                 text = stringResource(if (filters.isActive) R.string.users_empty_filtered else R.string.users_empty),
-                                icon = Icons.Filled.PersonSearch,
+                                icon = Icons.Outlined.PersonSearch,
                                 modifier = Modifier.fillParentMaxSize(),
                             )
                         }
@@ -183,14 +188,15 @@ fun UsersScreen(onOpenUser: (Int) -> Unit, onCreateUser: () -> Unit) {
                         modifier = Modifier.fillMaxSize(),
                         // Room below the last card for the floating button.
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 96.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         item(key = "count") {
                             val total = state.total.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
                             Text(
                                 pluralStringResource(R.plurals.users_count, total, Formats.count(state.total)),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                                color = AppTheme.colors.mutedForeground,
+                                modifier = Modifier.padding(horizontal = 2.dp),
                             )
                         }
                         items(state.items, key = { it.id }) { user ->
@@ -227,77 +233,78 @@ fun UsersScreen(onOpenUser: (Int) -> Unit, onCreateUser: () -> Unit) {
 
 @Composable
 private fun UserRow(user: AdminUser, formatter: QuotaFormatter, onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+    val colors = AppTheme.colors
+    val name = user.displayName.ifBlank { user.username }
+    AppCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Decorative: the name next to it already says who this is.
+            AppAvatar(avatarInitials(name), Modifier.clearAndSetSemantics {})
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
                 Text(
-                    user.displayName.ifBlank { user.username },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    name,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    "@${user.username} · #${user.id}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.mutedForeground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            UserStatusPill(user)
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            RolePill(user.role)
+            Box(Modifier.weight(1f)) {
+                if (user.group.isNotEmpty()) StatusPill(user.group, Tone.Neutral, outlined = true)
+            }
+            Text(
+                stringResource(R.string.users_requests_value, Formats.count(user.requestCount)),
+                style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                color = colors.mutedForeground,
+                maxLines = 1,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        if (user.quota == 0L && user.usedQuota == 0L) {
+            Text(
+                stringResource(R.string.users_no_quota),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.mutedForeground,
+            )
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.users_remaining_value, formatter.format(user.quota)),
+                    style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
+                    color = if (user.quota < 0) colors.destructive else colors.foreground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                Spacer(Modifier.width(8.dp))
-                UserStatusPill(user)
-            }
-            Text(
-                "@${user.username} · #${user.id}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                RolePill(user.role)
-                Box(Modifier.weight(1f)) {
-                    if (user.group.isNotEmpty()) StatusPill(user.group, Tone.Neutral)
-                }
                 Text(
-                    stringResource(R.string.users_requests_value, Formats.count(user.requestCount)),
+                    stringResource(R.string.users_used_value, formatter.format(user.usedQuota)),
                     style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = colors.mutedForeground,
                     maxLines = 1,
                 )
             }
-            Spacer(Modifier.height(2.dp))
-            if (user.quota == 0L && user.usedQuota == 0L) {
-                Text(
-                    stringResource(R.string.users_no_quota),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        stringResource(R.string.users_remaining_value, formatter.format(user.quota)),
-                        style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
-                        fontWeight = FontWeight.Medium,
-                        color = if (user.quota < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        stringResource(R.string.users_used_value, formatter.format(user.usedQuota)),
-                        style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
-            }
-            QuotaBar(user.quota, user.usedQuota)
         }
+        Spacer(Modifier.height(8.dp))
+        QuotaBar(user.quota, user.usedQuota)
     }
 }
 
 /** Removable chips for the applied role, status and group filters. */
 @Composable
 private fun ActiveFilters(filters: UserFilters, onChange: (role: Int?, status: Int?, group: String) -> Unit) {
+    val removeDescription = stringResource(R.string.users_remove_filter)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -305,31 +312,25 @@ private fun ActiveFilters(filters: UserFilters, onChange: (role: Int?, status: I
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        val removeIcon: @Composable () -> Unit = {
-            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.users_remove_filter), modifier = Modifier.size(16.dp))
-        }
         filters.role?.let { role ->
-            InputChip(
-                selected = true,
-                onClick = { onChange(null, filters.status, filters.group) },
-                label = { Text(roleLabel(role)) },
-                trailingIcon = removeIcon,
+            AppRemovableChip(
+                label = roleLabel(role),
+                onRemove = { onChange(null, filters.status, filters.group) },
+                removeDescription = removeDescription,
             )
         }
         filters.status?.let { status ->
-            InputChip(
-                selected = true,
-                onClick = { onChange(filters.role, null, filters.group) },
-                label = { Text(statusFilterLabel(status)) },
-                trailingIcon = removeIcon,
+            AppRemovableChip(
+                label = statusFilterLabel(status),
+                onRemove = { onChange(filters.role, null, filters.group) },
+                removeDescription = removeDescription,
             )
         }
         if (filters.group.isNotEmpty()) {
-            InputChip(
-                selected = true,
-                onClick = { onChange(filters.role, filters.status, "") },
-                label = { Text(filters.group, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                trailingIcon = removeIcon,
+            AppRemovableChip(
+                label = filters.group,
+                onRemove = { onChange(filters.role, filters.status, "") },
+                removeDescription = removeDescription,
             )
         }
     }
@@ -357,56 +358,71 @@ private fun UserFilterSheet(
     var group by rememberSaveable { mutableStateOf(filters.group) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    AppBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Text(stringResource(R.string.users_filters_title), style = MaterialTheme.typography.titleLarge)
 
-            Text(stringResource(R.string.users_filter_role), style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = role == null, onClick = { role = null }, label = { Text(stringResource(R.string.common_all)) })
-                ROLE_FILTERS.forEach { value ->
-                    FilterChip(selected = role == value, onClick = { role = value }, label = { Text(roleLabel(value)) })
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.users_filter_role), style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppFilterChip(selected = role == null, onClick = { role = null }, label = stringResource(R.string.common_all))
+                    ROLE_FILTERS.forEach { value ->
+                        AppFilterChip(selected = role == value, onClick = { role = value }, label = roleLabel(value))
+                    }
                 }
             }
 
-            Text(stringResource(R.string.users_filter_status), style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = status == null, onClick = { status = null }, label = { Text(stringResource(R.string.common_all)) })
-                STATUS_FILTERS.forEach { value ->
-                    FilterChip(selected = status == value, onClick = { status = value }, label = { Text(statusFilterLabel(value)) })
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.users_filter_status), style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppFilterChip(selected = status == null, onClick = { status = null }, label = stringResource(R.string.common_all))
+                    STATUS_FILTERS.forEach { value ->
+                        AppFilterChip(selected = status == value, onClick = { status = value }, label = statusFilterLabel(value))
+                    }
                 }
             }
 
-            GroupDropdown(
-                value = group,
-                options = groups.names,
-                onSelect = { group = it },
-                label = stringResource(R.string.users_filter_group),
-                allLabel = stringResource(R.string.users_all_groups),
-                supportingText = if (groups.failed) stringResource(R.string.users_groups_load_failed) else null,
-            )
-            if (groups.failed) {
-                TextButton(onClick = onRetryGroups) { Text(stringResource(R.string.common_retry)) }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                GroupDropdown(
+                    value = group,
+                    options = groups.names,
+                    onSelect = { group = it },
+                    label = stringResource(R.string.users_filter_group),
+                    allLabel = stringResource(R.string.users_all_groups),
+                    supportingText = if (groups.failed) stringResource(R.string.users_groups_load_failed) else null,
+                )
+                if (groups.failed) {
+                    AppButton(
+                        stringResource(R.string.common_retry),
+                        onClick = onRetryGroups,
+                        variant = ButtonVariant.Outline,
+                        size = ButtonSize.Small,
+                    )
+                }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                AppButton(
+                    stringResource(R.string.common_reset),
                     onClick = {
                         role = null
                         status = null
                         group = ""
                     },
                     modifier = Modifier.weight(1f),
-                ) { Text(stringResource(R.string.common_reset)) }
-                Button(onClick = { onApply(role, status, group) }, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.common_apply))
-                }
+                    variant = ButtonVariant.Outline,
+                )
+                AppButton(
+                    stringResource(R.string.common_apply),
+                    onClick = { onApply(role, status, group) },
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }

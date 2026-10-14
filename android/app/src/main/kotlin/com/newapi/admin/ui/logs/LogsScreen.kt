@@ -10,34 +10,27 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AssistChip
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.InputChip
-import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,7 +44,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,6 +58,13 @@ import com.newapi.admin.core.model.LogType
 import com.newapi.admin.core.model.parsedOther
 import com.newapi.admin.ui.common.UiMessage
 import com.newapi.admin.ui.common.text
+import com.newapi.admin.ui.components.AppButton
+import com.newapi.admin.ui.components.AppCard
+import com.newapi.admin.ui.components.AppRemovableChip
+import com.newapi.admin.ui.components.AppSnackbarHost
+import com.newapi.admin.ui.components.AppTopBar
+import com.newapi.admin.ui.components.ButtonSize
+import com.newapi.admin.ui.components.ButtonVariant
 import com.newapi.admin.ui.components.EmptyState
 import com.newapi.admin.ui.components.FullScreenError
 import com.newapi.admin.ui.components.FullScreenLoading
@@ -73,6 +72,8 @@ import com.newapi.admin.ui.components.ListFooter
 import com.newapi.admin.ui.components.LoadMoreEffect
 import com.newapi.admin.ui.components.StatusPill
 import com.newapi.admin.ui.components.rememberQuotaFormatter
+import com.newapi.admin.ui.theme.AppTheme
+import com.newapi.admin.ui.theme.GeistMono
 import com.newapi.admin.ui.theme.Tone
 import com.newapi.admin.ui.theme.colors
 import java.time.LocalDate
@@ -123,12 +124,12 @@ fun LogsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.logs_title)) },
+            AppTopBar(
+                title = stringResource(R.string.logs_title),
                 navigationIcon = {
                     if (onBack != null) {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.common_back))
                         }
                     }
                 },
@@ -144,17 +145,25 @@ fun LogsScreen(
                             filter.group.isNotBlank(),
                             filter.requestId.isNotBlank(),
                         ).count { it }
-                        BadgedBox(badge = { if (activeCount > 0) Badge { Text(activeCount.toString()) } }) {
-                            Icon(Icons.Filled.FilterList, contentDescription = stringResource(R.string.common_filter))
+                        BadgedBox(
+                            badge = {
+                                if (activeCount > 0) {
+                                    Badge(containerColor = AppTheme.colors.primary, contentColor = AppTheme.colors.primaryForeground) {
+                                        Text(activeCount.toString())
+                                    }
+                                }
+                            },
+                        ) {
+                            Icon(Icons.Outlined.FilterList, contentDescription = stringResource(R.string.common_filter))
                         }
                     }
                     IconButton(onClick = viewModel::refresh, enabled = !state.isRefreshing && !state.isInitialLoading) {
-                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.common_refresh))
+                        Icon(Icons.Outlined.Refresh, contentDescription = stringResource(R.string.common_refresh))
                     }
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { AppSnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             FilterChipsRow(filter = filter, onOpenFilters = { showFilters = true }, onChange = applyFilter)
@@ -167,7 +176,7 @@ fun LogsScreen(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     item(key = "stats") {
                         StatsCard(
@@ -260,94 +269,122 @@ internal fun timeRangeLabel(filter: LogFilter): String = when (filter.preset) {
 /** The time range chip (tap to change) followed by one removable chip per active filter. */
 @Composable
 private fun FilterChipsRow(filter: LogFilter, onOpenFilters: () -> Unit, onChange: (LogFilter) -> Unit) {
+    val removeDescription = stringResource(R.string.logs_chip_remove)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (filter.preset == TimePreset.TODAY) {
-            AssistChip(
+            // A button (like the AssistChip it replaces), not a toggle: it only opens the filter sheet.
+            AppButton(
+                timeRangeLabel(filter),
                 onClick = onOpenFilters,
-                label = { Text(timeRangeLabel(filter)) },
-                leadingIcon = { Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                variant = ButtonVariant.Outline,
+                size = ButtonSize.Small,
+                leadingIcon = Icons.Outlined.DateRange,
             )
         } else {
-            RemovableChip(timeRangeLabel(filter)) {
-                onChange(filter.copy(preset = TimePreset.TODAY, customStartDay = null, customEndDay = null))
-            }
+            AppRemovableChip(
+                label = timeRangeLabel(filter),
+                onRemove = { onChange(filter.copy(preset = TimePreset.TODAY, customStartDay = null, customEndDay = null)) },
+                removeDescription = removeDescription,
+            )
         }
         if (filter.type != LogType.ALL) {
-            RemovableChip(stringResource(logTypeLabel(filter.type))) { onChange(filter.copy(type = LogType.ALL)) }
+            AppRemovableChip(
+                label = stringResource(logTypeLabel(filter.type)),
+                onRemove = { onChange(filter.copy(type = LogType.ALL)) },
+                removeDescription = removeDescription,
+            )
         }
         if (filter.username.isNotBlank()) {
-            RemovableChip(stringResource(R.string.logs_chip_user, filter.username.trim())) { onChange(filter.copy(username = "")) }
+            AppRemovableChip(
+                label = stringResource(R.string.logs_chip_user, filter.username.trim()),
+                onRemove = { onChange(filter.copy(username = "")) },
+                removeDescription = removeDescription,
+            )
         }
         if (filter.tokenName.isNotBlank()) {
-            RemovableChip(stringResource(R.string.logs_chip_token, filter.tokenName.trim())) { onChange(filter.copy(tokenName = "")) }
+            AppRemovableChip(
+                label = stringResource(R.string.logs_chip_token, filter.tokenName.trim()),
+                onRemove = { onChange(filter.copy(tokenName = "")) },
+                removeDescription = removeDescription,
+            )
         }
         if (filter.modelName.isNotBlank()) {
-            RemovableChip(stringResource(R.string.logs_chip_model, filter.modelName.trim())) { onChange(filter.copy(modelName = "")) }
+            AppRemovableChip(
+                label = stringResource(R.string.logs_chip_model, filter.modelName.trim()),
+                onRemove = { onChange(filter.copy(modelName = "")) },
+                removeDescription = removeDescription,
+            )
         }
         val channelId = filter.channelId ?: 0
         if (channelId > 0) {
-            RemovableChip(stringResource(R.string.logs_chip_channel, channelId)) { onChange(filter.copy(channelId = null)) }
+            AppRemovableChip(
+                label = stringResource(R.string.logs_chip_channel, channelId),
+                onRemove = { onChange(filter.copy(channelId = null)) },
+                removeDescription = removeDescription,
+            )
         }
         if (filter.group.isNotBlank()) {
-            RemovableChip(stringResource(R.string.logs_chip_group, filter.group.trim())) { onChange(filter.copy(group = "")) }
+            AppRemovableChip(
+                label = stringResource(R.string.logs_chip_group, filter.group.trim()),
+                onRemove = { onChange(filter.copy(group = "")) },
+                removeDescription = removeDescription,
+            )
         }
         if (filter.requestId.isNotBlank()) {
-            RemovableChip(stringResource(R.string.logs_chip_request_id, filter.requestId.trim())) { onChange(filter.copy(requestId = "")) }
+            AppRemovableChip(
+                label = stringResource(R.string.logs_chip_request_id, filter.requestId.trim()),
+                onRemove = { onChange(filter.copy(requestId = "")) },
+                removeDescription = removeDescription,
+            )
         }
     }
-}
-
-@Composable
-private fun RemovableChip(label: String, onRemove: () -> Unit) {
-    InputChip(
-        selected = true,
-        onClick = onRemove,
-        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp)) },
-        trailingIcon = {
-            Icon(
-                Icons.Filled.Close,
-                contentDescription = stringResource(R.string.logs_chip_remove),
-                modifier = Modifier.size(InputChipDefaults.IconSize),
-            )
-        },
-    )
 }
 
 /** Consumption of the current filter (`/api/log/stat` sums consume logs only) plus the live RPM/TPM. */
 @Composable
 private fun StatsCard(stats: LogStatsState, total: Long?, formatter: QuotaFormatter, onRetry: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-    ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            val stat = stats.stat
-            val error = stats.error
-            if (error != null && stat == null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        stringResource(R.string.logs_stats_failed),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = onRetry) { Text(stringResource(R.string.common_retry)) }
-                }
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    StatValue(stringResource(R.string.logs_stats_quota), stat?.let { formatter.formatLog(it.quota) }, Modifier.weight(1.4f))
-                    StatValue(stringResource(R.string.logs_stats_rpm), stat?.let { Formats.count(it.rpm) }, Modifier.weight(1f))
-                    StatValue(stringResource(R.string.logs_stats_tpm), stat?.let { Formats.count(it.tpm) }, Modifier.weight(1f))
-                    if (stats.isLoading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                }
+    val colors = AppTheme.colors
+    AppCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) {
+        val stat = stats.stat
+        val error = stats.error
+        val failed = error != null && stat == null
+        if (failed) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = colors.destructive, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    stringResource(R.string.logs_stats_failed),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                AppButton(stringResource(R.string.common_retry), onClick = onRetry, variant = ButtonVariant.Ghost, size = ButtonSize.Small)
             }
+        } else {
+            // No per-column padding or dividers, so long amounts and TPM values keep their width on 360dp phones.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                StatValue(stringResource(R.string.logs_stats_quota), stat?.let { formatter.formatLog(it.quota) }, Modifier.weight(1.4f))
+                StatValue(stringResource(R.string.logs_stats_rpm), stat?.let { Formats.count(it.rpm) }, Modifier.weight(1f))
+                StatValue(stringResource(R.string.logs_stats_tpm), stat?.let { Formats.count(it.tpm) }, Modifier.weight(1f))
+            }
+        }
+        HorizontalDivider(color = colors.border)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             val caption = if (total != null) {
                 stringResource(R.string.logs_stats_caption_with_total, Formats.count(total))
             } else {
@@ -355,23 +392,25 @@ private fun StatsCard(stats: LogStatsState, total: Long?, formatter: QuotaFormat
             }
             Text(
                 caption,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f),
-                modifier = Modifier.padding(top = 6.dp),
+                style = MaterialTheme.typography.bodySmall.merge(TextStyle(fontFeatureSettings = "tnum")),
+                color = colors.mutedForeground,
+                modifier = Modifier.weight(1f),
             )
+            // Same condition as before: the spinner belongs to the values, not to the failure message.
+            if (!failed && stats.isLoading) {
+                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp, color = colors.mutedForeground)
+            }
         }
     }
 }
 
 @Composable
 private fun StatValue(label: String, value: String?, modifier: Modifier) {
-    Column(modifier) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = AppTheme.colors.mutedForeground, maxLines = 1)
         Text(
             value ?: "–",
-            style = MaterialTheme.typography.titleMedium.merge(TextStyle(fontFeatureSettings = "tnum")),
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            style = MaterialTheme.typography.titleLarge.merge(TextStyle(fontFeatureSettings = "tnum")),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -384,14 +423,15 @@ private fun LogRow(entry: LogEntry, formatter: QuotaFormatter, onClick: () -> Un
     val usage = hasUsage(entry.type)
     val timing = hasTiming(entry.type)
     val isError = entry.type == LogType.ERROR
-    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val secondary = AppTheme.colors.mutedForeground
     val numbers = TextStyle(fontFeatureSettings = "tnum")
-    Card(
+    AppCard(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // Header, then the usage lines as one tight group, then the timing pills and the message.
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatusPill(stringResource(logTypeLabel(entry.type)), logTypeTone(entry.type))
                 val title = if (usage) entry.modelName else entry.username
@@ -405,57 +445,66 @@ private fun LogRow(entry: LogEntry, formatter: QuotaFormatter, onClick: () -> Un
                 Text(
                     Formats.shortDateTime(entry.createdAt),
                     style = MaterialTheme.typography.labelSmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = secondary,
-                )
-            }
-
-            val upstreamModel = other?.upstreamModelName
-            if (usage && other?.isModelMapped == true && upstreamModel != null && upstreamModel != entry.modelName) {
-                Text(
-                    stringResource(R.string.logs_mapped_to, upstreamModel),
-                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = GeistMono,
+                    fontWeight = FontWeight.Normal,
                     color = secondary,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
 
             if (usage) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        listOf(entry.username, entry.tokenName).filter { it.isNotBlank() }.joinToString(" · ").ifEmpty { "-" },
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        formatter.formatLog(entry.quota),
-                        style = MaterialTheme.typography.titleSmall.merge(numbers),
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                    )
-                }
-                val channel = if (entry.channel > 0) "#${entry.channel} ${entry.channelName}".trim() else ""
-                val channelAndGroup = listOf(channel, entry.group).filter { it.isNotBlank() }.joinToString(" · ")
-                if (channelAndGroup.isNotEmpty()) {
-                    Text(channelAndGroup, style = MaterialTheme.typography.bodySmall, color = secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                val cacheRead = other?.cacheTokens ?: 0
-                val cacheWrite = other?.cacheWriteTokens ?: 0
-                val tokens = if (entry.promptTokens == 0L && entry.completionTokens == 0L) {
-                    "-"
-                } else {
-                    Formats.count(entry.promptTokens) + " → " + Formats.count(entry.completionTokens)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(tokens, style = MaterialTheme.typography.bodySmall.merge(numbers))
-                    if (cacheRead > 0) {
-                        Text(stringResource(R.string.logs_cache_read_hint, Formats.count(cacheRead)), style = MaterialTheme.typography.bodySmall.merge(numbers), color = secondary)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    val upstreamModel = other?.upstreamModelName
+                    if (other?.isModelMapped == true && upstreamModel != null && upstreamModel != entry.modelName) {
+                        Text(
+                            stringResource(R.string.logs_mapped_to, upstreamModel),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = secondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
-                    if (cacheWrite > 0) {
-                        Text("↑ " + Formats.count(cacheWrite), style = MaterialTheme.typography.bodySmall.merge(numbers), color = secondary)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            listOf(entry.username, entry.tokenName).filter { it.isNotBlank() }.joinToString(" · ").ifEmpty { "-" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            formatter.formatLog(entry.quota),
+                            style = MaterialTheme.typography.titleSmall.merge(numbers),
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(start = 12.dp),
+                        )
+                    }
+                    val channel = if (entry.channel > 0) "#${entry.channel} ${entry.channelName}".trim() else ""
+                    val channelAndGroup = listOf(channel, entry.group).filter { it.isNotBlank() }.joinToString(" · ")
+                    if (channelAndGroup.isNotEmpty()) {
+                        Text(channelAndGroup, style = MaterialTheme.typography.bodySmall, color = secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    val cacheRead = other?.cacheTokens ?: 0
+                    val cacheWrite = other?.cacheWriteTokens ?: 0
+                    val noTokens = entry.promptTokens == 0L && entry.completionTokens == 0L
+                    val tokens = if (noTokens) {
+                        "-"
+                    } else {
+                        Formats.count(entry.promptTokens) + " → " + Formats.count(entry.completionTokens)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            tokens,
+                            style = MaterialTheme.typography.bodySmall.merge(numbers),
+                            color = if (noTokens) secondary else AppTheme.colors.foreground,
+                        )
+                        if (cacheRead > 0) {
+                            Text(stringResource(R.string.logs_cache_read_hint, Formats.count(cacheRead)), style = MaterialTheme.typography.bodySmall.merge(numbers), color = secondary)
+                        }
+                        if (cacheWrite > 0) {
+                            Text("↑ " + Formats.count(cacheWrite), style = MaterialTheme.typography.bodySmall.merge(numbers), color = secondary)
+                        }
                     }
                 }
             } else if (entry.username.isBlank() && entry.userId > 0) {
@@ -463,7 +512,10 @@ private fun LogRow(entry: LogEntry, formatter: QuotaFormatter, onClick: () -> Un
             }
 
             if (timing) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     StatusPill(
                         stringResource(if (entry.isStream) R.string.logs_stream else R.string.logs_non_stream),
                         if (entry.isStream) Tone.Info else Tone.Neutral,
@@ -497,7 +549,7 @@ private fun LogRow(entry: LogEntry, formatter: QuotaFormatter, onClick: () -> Un
                 Text(
                     entry.content,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (isError) Tone.Danger.colors().content else MaterialTheme.colorScheme.onSurface,
+                    color = if (isError) Tone.Danger.colors().content else AppTheme.colors.foreground,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )

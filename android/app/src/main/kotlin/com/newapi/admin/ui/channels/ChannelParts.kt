@@ -1,6 +1,5 @@
 package com.newapi.admin.ui.channels
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,6 +18,7 @@ import com.newapi.admin.ui.common.UiMessage
 import com.newapi.admin.ui.common.text
 import com.newapi.admin.ui.components.StatusPill
 import com.newapi.admin.ui.components.rememberCurrentUser
+import com.newapi.admin.ui.theme.AppTheme
 import com.newapi.admin.ui.theme.Tone
 import com.newapi.admin.ui.theme.colors
 import java.util.Locale
@@ -107,7 +107,7 @@ internal fun responseTimeText(ms: Int): String = when {
 /** Text colour for a metric; neutral values keep the surrounding colour. */
 @Composable
 internal fun toneTextColor(tone: Tone): Color =
-    if (tone == Tone.Neutral) MaterialTheme.colorScheme.onSurfaceVariant else tone.colors().content
+    if (tone == Tone.Neutral) AppTheme.colors.mutedForeground else tone.colors().content
 
 @Composable
 internal fun ChannelStatusPill(status: Int, modifier: Modifier = Modifier) {

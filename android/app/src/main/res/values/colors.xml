@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Brand blue, same as ui.theme.BrandColors.Primary. -->
+    <!-- Launcher icon background (brand blue). -->
     <color name="ic_launcher_background">#FF3557D6</color>
-    <!-- Window background shown before the first Compose frame; matches the light colour scheme surface. -->
-    <color name="window_background">#FFFBF8FF</color>
+    <!-- Window background shown before the first Compose frame; matches LightAppColors.background. -->
+    <color name="window_background">#FFFFFFFF</color>
 </resources>

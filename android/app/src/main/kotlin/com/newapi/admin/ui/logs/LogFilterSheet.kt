@@ -1,6 +1,5 @@
 package com.newapi.admin.ui.logs
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -12,8 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DatePickerDefaults
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SelectableDates
@@ -36,10 +33,11 @@ import com.newapi.admin.R
 import com.newapi.admin.core.model.LogType
 import com.newapi.admin.ui.components.AppBottomSheet
 import com.newapi.admin.ui.components.AppButton
+import com.newapi.admin.ui.components.AppDatePickerDialog
 import com.newapi.admin.ui.components.AppFilterChip
 import com.newapi.admin.ui.components.AppTextField
 import com.newapi.admin.ui.components.ButtonVariant
-import com.newapi.admin.ui.theme.AppTheme
+import com.newapi.admin.ui.components.appDatePickerColors
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -221,50 +219,14 @@ private fun CustomRangeDialog(startDay: Long?, endDay: Long?, onConfirm: (Long, 
         selectableDates = selectableDates,
     )
     val selectedStart = state.selectedStartDateMillis
-    val appColors = AppTheme.colors
-    val shape = MaterialTheme.shapes.extraLarge
-    val pickerColors = DatePickerDefaults.colors(
-        containerColor = appColors.popover,
-        titleContentColor = appColors.mutedForeground,
-        headlineContentColor = appColors.foreground,
-        weekdayContentColor = appColors.mutedForeground,
-        subheadContentColor = appColors.mutedForeground,
-        navigationContentColor = appColors.foreground,
-        yearContentColor = appColors.foreground,
-        currentYearContentColor = appColors.foreground,
-        selectedYearContentColor = appColors.primaryForeground,
-        selectedYearContainerColor = appColors.primary,
-        dayContentColor = appColors.foreground,
-        selectedDayContentColor = appColors.primaryForeground,
-        selectedDayContainerColor = appColors.primary,
-        todayContentColor = appColors.foreground,
-        todayDateBorderColor = appColors.ring,
-        dayInSelectionRangeContainerColor = appColors.accent,
-        dayInSelectionRangeContentColor = appColors.accentForeground,
-        dividerColor = appColors.border,
-    )
-    DatePickerDialog(
+    AppDatePickerDialog(
         onDismissRequest = onDismiss,
-        confirmButton = {
-            AppButton(
-                stringResource(R.string.common_ok),
-                onClick = {
-                    if (selectedStart != null) {
-                        onConfirm(Math.floorDiv(selectedStart, MILLIS_PER_DAY), state.selectedEndDateMillis?.let { Math.floorDiv(it, MILLIS_PER_DAY) })
-                    }
-                },
-                // The picker insets its buttons for text buttons only (6dp end, 8dp bottom); match AppDialog's 24dp.
-                modifier = Modifier.padding(end = 18.dp, bottom = 12.dp),
-                enabled = selectedStart != null,
-            )
+        onConfirm = {
+            if (selectedStart != null) {
+                onConfirm(Math.floorDiv(selectedStart, MILLIS_PER_DAY), state.selectedEndDateMillis?.let { Math.floorDiv(it, MILLIS_PER_DAY) })
+            }
         },
-        modifier = Modifier.border(1.dp, appColors.border, shape),
-        dismissButton = {
-            AppButton(stringResource(R.string.common_cancel), onClick = onDismiss, variant = ButtonVariant.Outline)
-        },
-        shape = shape,
-        tonalElevation = 0.dp,
-        colors = pickerColors,
+        confirmEnabled = selectedStart != null,
     ) {
         DateRangePicker(
             state = state,
@@ -276,7 +238,7 @@ private fun CustomRangeDialog(startDay: Long?, endDay: Long?, onConfirm: (Long, 
                 )
             },
             modifier = Modifier.fillMaxWidth().height(500.dp),
-            colors = pickerColors,
+            colors = appDatePickerColors(),
         )
     }
 }

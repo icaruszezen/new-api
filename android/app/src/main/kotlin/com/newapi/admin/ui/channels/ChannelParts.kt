@@ -1,12 +1,7 @@
 package com.newapi.admin.ui.channels
 
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -14,15 +9,12 @@ import com.newapi.admin.R
 import com.newapi.admin.core.model.Channel
 import com.newapi.admin.core.model.ChannelStatus
 import com.newapi.admin.core.model.ChannelTypes
-import com.newapi.admin.ui.common.UiMessage
-import com.newapi.admin.ui.common.text
 import com.newapi.admin.ui.components.StatusPill
 import com.newapi.admin.ui.components.rememberCurrentUser
 import com.newapi.admin.ui.theme.AppTheme
 import com.newapi.admin.ui.theme.Tone
 import com.newapi.admin.ui.theme.colors
 import java.util.Locale
-import kotlinx.coroutines.flow.Flow
 
 /** What the signed-in admin may do with channels (`admin_permissions.channel.*`; root can do everything). */
 data class ChannelPermissions(
@@ -118,20 +110,4 @@ internal fun ChannelStatusPill(status: Int, modifier: Modifier = Modifier) {
         else -> R.string.common_unknown to Tone.Neutral
     }
     StatusPill(stringResource(label), tone, modifier)
-}
-
-/** Shows each one-off ViewModel message once in [hostState]; a newer message replaces the one on screen. */
-@Composable
-internal fun ChannelMessagesEffect(messages: Flow<UiMessage>, hostState: SnackbarHostState) {
-    var current by remember { mutableStateOf<UiMessage?>(null) }
-    LaunchedEffect(messages) {
-        messages.collect { current = it }
-    }
-    current?.let { message ->
-        val text = message.text()
-        LaunchedEffect(message) {
-            hostState.showSnackbar(text)
-            current = null
-        }
-    }
 }

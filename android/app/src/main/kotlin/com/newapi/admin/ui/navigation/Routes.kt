@@ -23,4 +23,11 @@ import kotlinx.serialization.Serializable
 /** Edits channel [id], or creates a channel when [id] is 0. */
 @Serializable data class ChannelEditRoute(val id: Int = 0)
 
+@Serializable data object RedemptionsRoute
+
+@Serializable data class RedemptionDetailRoute(val id: Int)
+
+/** Edits redemption code [id], or creates codes when [id] is 0. */
+@Serializable data class RedemptionEditRoute(val id: Int = 0)
+
 @Serializable data object SettingsRoute

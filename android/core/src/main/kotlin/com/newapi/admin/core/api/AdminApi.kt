@@ -15,6 +15,9 @@ import com.newapi.admin.core.model.LogQuery
 import com.newapi.admin.core.model.LogStat
 import com.newapi.admin.core.model.PageData
 import com.newapi.admin.core.model.QuotaMode
+import com.newapi.admin.core.model.Redemption
+import com.newapi.admin.core.model.RedemptionStatus
+import com.newapi.admin.core.model.RedemptionStatusFilter
 import com.newapi.admin.core.model.SystemStatus
 import com.newapi.admin.core.model.UserAction
 import com.newapi.admin.core.model.UserUpdate
@@ -24,6 +27,7 @@ import com.newapi.admin.core.net.await
 import com.newapi.admin.core.net.bool
 import com.newapi.admin.core.net.decodeData
 import com.newapi.admin.core.net.double
+import com.newapi.admin.core.net.long
 import com.newapi.admin.core.net.string
 import com.newapi.admin.core.net.toApiError
 import com.newapi.admin.core.net.toRequestBody
@@ -300,6 +304,75 @@ class AdminApi(
         val envelope = execute(request("GET", "/api/channel/fetch_models/${requireId(id)}"), slow = true).envelope()
         return envelope.decodeData(ListSerializer(String.serializer()), "model list") { emptyList() }
     }
+
+    // ---- Redemption codes ----
+
+    /** `GET /api/redemption/`, or `GET /api/redemption/search` when [keyword] or [status] is set. Newest first. */
+    suspend fun redemptions(
+        page: Int,
+        pageSize: Int,
+        keyword: String = "",
+        status: RedemptionStatusFilter = RedemptionStatusFilter.ALL,
+    ): PageData<Redemption> {
+        val envelope = if (keyword.isBlank() && status.wire == null) {
+            get("/api/redemption/", pageParams(page, pageSize))
+        } else {
+            // Like the web: keyword is always sent (possibly empty), status only when chosen. The keyword
+            // matches the id exactly or the start of the name, never the code itself.
+            get("/api/redemption/search", listOf("keyword" to keyword.trim(), "status" to status.wire) + pageParams(page, pageSize))
+        }
+        return envelope.decodeData(PageData.serializer(Redemption.serializer()), "redemption page") { PageData() }
+    }
+
+    /** `GET /api/redemption/{id}`. */
+    suspend fun redemption(id: Int): Redemption =
+        get("/api/redemption/${requireId(id)}").decodeData(Redemption.serializer(), "redemption")
+
+    /**
+     * `POST /api/redemption/`: creates [count] codes (1..100) and returns their keys; the server returns no ids.
+     * [name] must be 1..20 characters and [expiredTime] (unix seconds) 0 for never or in the future. The server
+     * does not check [quota] and stores 0 as 100, so callers keep it positive.
+     */
+    suspend fun createRedemptions(name: String, quota: Long, count: Int, expiredTime: Long): List<String> {
+        val body = buildJsonObject {
+            put("name", name.trim())
+            put("quota", quota)
+            put("count", count)
+            put("expired_time", expiredTime)
+        }
+        return send("POST", "/api/redemption/", body = body).decodeData(ListSerializer(String.serializer()), "redemption keys") { emptyList() }
+    }
+
+    /**
+     * `PUT /api/redemption/`: sets name, quota and expiry together (the server writes all three, so an omitted
+     * one would become 0). Returns the saved code when the server sends it.
+     */
+    suspend fun updateRedemption(id: Int, name: String, quota: Long, expiredTime: Long): Redemption? {
+        val body = buildJsonObject {
+            put("id", requireId(id))
+            put("name", name.trim())
+            put("quota", quota)
+            put("expired_time", expiredTime)
+        }
+        return send("PUT", "/api/redemption/", body = body).decodeData(Redemption.serializer(), "redemption") { null }
+    }
+
+    /** `PUT /api/redemption/?status_only=true {id, status: 1|2}`; returns the saved code when the server sends it. */
+    suspend fun setRedemptionEnabled(id: Int, enabled: Boolean): Redemption? {
+        val body = buildJsonObject {
+            put("id", requireId(id))
+            put("status", if (enabled) RedemptionStatus.ENABLED else RedemptionStatus.DISABLED)
+        }
+        return send("PUT", "/api/redemption/", listOf("status_only" to "true"), body).decodeData(Redemption.serializer(), "redemption") { null }
+    }
+
+    /** `DELETE /api/redemption/{id}`. */
+    suspend fun deleteRedemption(id: Int) {
+        send("DELETE", "/api/redemption/${requireId(id)}")
+    }
+
+    /** `DELETE /api/redemption/invalid`: deletes every used, disabled and expired code; returns how many. */
+    suspend fun deleteInvalidRedemptions(): Long = send("DELETE", "/api/redemption/invalid").long("data") ?: 0
 
     // ---- Internals ----
 

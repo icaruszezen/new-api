@@ -9,6 +9,7 @@ import com.newapi.admin.core.model.ChannelStatusFilter
 import com.newapi.admin.core.model.ChannelTestResult
 import com.newapi.admin.core.model.LogQuery
 import com.newapi.admin.core.model.QuotaMode
+import com.newapi.admin.core.model.RedemptionStatusFilter
 import com.newapi.admin.core.model.UserUpdate
 import com.newapi.admin.core.net.ApiError
 import com.newapi.admin.core.net.NewApiClient
@@ -191,6 +192,66 @@ class AdminApiTest {
             },
             body["channel"],
         )
+    }
+
+    @Test
+    fun redemptionEndpointsSendWhatTheServerReads() = runBlocking {
+        val codeJson = """{"id":9,"user_id":1,"key":"0123456789abcdef0123456789abcdef","status":1,"name":"promo","quota":500000,
+            "created_time":1,"redeemed_time":0,"count":0,"used_user_id":0,"DeletedAt":null,"expired_time":${SERVER_NOW_SECONDS - 1}}"""
+        server.handler = { request ->
+            when {
+                request.method == "GET" && request.path in setOf("/api/redemption/", "/api/redemption/search") ->
+                    okData("""{"page":1,"page_size":20,"total":1,"items":[$codeJson]}""")
+                request.method == "GET" -> okData(codeJson)
+                request.method == "POST" -> okData("""["k1","k2"]""")
+                request.method == "PUT" -> okData(codeJson)
+                request.path == "/api/redemption/invalid" -> okData("3")
+                else -> okData()
+            }
+        }
+
+        val page = api.redemptions(page = 1, pageSize = 20)
+        api.redemptions(page = 2, pageSize = 20, status = RedemptionStatusFilter.EXPIRED)
+        api.redemptions(page = 1, pageSize = 20, keyword = " promo ")
+        api.redemption(9)
+        val keys = api.createRedemptions(" promo ", quota = 500000, count = 2, expiredTime = 0)
+        api.updateRedemption(9, "promo2", quota = 250000, expiredTime = SERVER_NOW_SECONDS + 60)
+        api.setRedemptionEnabled(9, enabled = false)
+        api.deleteRedemption(9)
+        val deleted = api.deleteInvalidRedemptions()
+
+        assertEquals(
+            listOf(
+                "GET /api/redemption/", "GET /api/redemption/search", "GET /api/redemption/search", "GET /api/redemption/9",
+                "POST /api/redemption/", "PUT /api/redemption/", "PUT /api/redemption/", "DELETE /api/redemption/9",
+                "DELETE /api/redemption/invalid",
+            ),
+            server.requests.map { "${it.method} ${it.path}" },
+        )
+        val code = page.items.orEmpty().single()
+        assertEquals(500000L, code.quota)
+        assertTrue(code.isExpired(SERVER_NOW_SECONDS))
+        assertEquals(listOf("k1", "k2"), keys)
+        assertEquals(3L, deleted)
+
+        val (statusSearch, keywordSearch) = server.requestsTo("/api/redemption/search")
+        assertEquals("", statusSearch.query("keyword"))
+        assertEquals("expired", statusSearch.query("status"))
+        assertEquals("2", statusSearch.query("p"))
+        assertEquals("promo", keywordSearch.query("keyword"))
+        assertNull(keywordSearch.query("status"))
+        assertEquals(
+            buildJsonObject { put("name", "promo"); put("quota", 500000); put("count", 2); put("expired_time", 0) },
+            server.requests[4].json(),
+        )
+        val (update, toggle) = server.requestsTo("/api/redemption/").filter { it.method == "PUT" }
+        assertNull(update.query("status_only"))
+        assertEquals(
+            buildJsonObject { put("id", 9); put("name", "promo2"); put("quota", 250000); put("expired_time", SERVER_NOW_SECONDS + 60) },
+            update.json(),
+        )
+        assertEquals("true", toggle.query("status_only"))
+        assertEquals(buildJsonObject { put("id", 9); put("status", 2) }, toggle.json())
     }
 
     @Test

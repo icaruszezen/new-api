@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Redemption code list, detail and create/edit screens. -->
+<resources>
+    <!-- List -->
+    <string name="redemptions_title">Redemption codes</string>
+    <string name="redemptions_add">New codes</string>
+    <string name="redemptions_search_placeholder">Name or ID</string>
+    <plurals name="redemptions_count">
+        <item quantity="one">%1$s code</item>
+        <item quantity="other">%1$s codes</item>
+    </plurals>
+    <string name="redemptions_empty">No redemption codes yet</string>
+    <string name="redemptions_empty_filtered">No codes match these filters</string>
+    <string name="redemptions_status_unused">Unused</string>
+    <string name="redemptions_status_disabled">Disabled</string>
+    <string name="redemptions_status_used">Used</string>
+    <string name="redemptions_status_expired">Expired</string>
+    <string name="redemptions_copy_code">Copy code</string>
+    <string name="redemptions_never_expires">Never expires</string>
+    <string name="redemptions_expires_at">Expires %1$s</string>
+    <string name="redemptions_expired_at">Expired %1$s</string>
+    <string name="redemptions_redeemed_by_at">Redeemed by user #%1$d · %2$s</string>
+    <string name="redemptions_delete_invalid">Delete invalid codes</string>
+    <string name="redemptions_delete_invalid_message">Delete every used, disabled and expired code on this server? This cannot be undone.</string>
+    <string name="redemptions_msg_deleted_invalid">Invalid codes deleted: %1$s</string>
+
+    <!-- Detail -->
+    <string name="redemptions_detail_title">Code #%1$d</string>
+    <string name="redemptions_label_quota">Quota per code</string>
+    <string name="redemptions_section_code">Code</string>
+    <string name="redemptions_section_details">Details</string>
+    <string name="redemptions_label_id">ID</string>
+    <string name="redemptions_label_created">Created</string>
+    <string name="redemptions_label_expires">Expires</string>
+    <string name="redemptions_label_creator">Created by</string>
+    <string name="redemptions_label_redeemed_by">Redeemed by</string>
+    <string name="redemptions_label_redeemed_at">Redeemed at</string>
+    <string name="redemptions_user_value">User #%1$d</string>
+    <string name="redemptions_open_user">View user</string>
+    <string name="redemptions_delete_title">Delete code</string>
+    <string name="redemptions_delete_message">Delete %1$s permanently? This cannot be undone.</string>
+    <string name="redemptions_msg_enabled">Code enabled</string>
+    <string name="redemptions_msg_disabled">Code disabled</string>
+
+    <!-- Create and edit -->
+    <string name="redemptions_create_title">New redemption codes</string>
+    <string name="redemptions_edit_title">Edit code</string>
+    <string name="redemptions_field_name">Name</string>
+    <string name="redemptions_name_hint_create">Up to 20 characters. Left empty, the amount is used.</string>
+    <string name="redemptions_name_hint_edit">Up to 20 characters</string>
+    <string name="redemptions_field_amount">Amount per code (%1$s)</string>
+    <string name="redemptions_field_amount_tokens">Quota per code</string>
+    <string name="redemptions_amount_units">= %1$s quota units</string>
+    <string name="redemptions_field_count">Number of codes</string>
+    <string name="redemptions_count_hint">1 to 100 codes at a time</string>
+    <string name="redemptions_field_expiry">Expiry</string>
+    <string name="redemptions_expiry_never">Never</string>
+    <string name="redemptions_expiry_day">1 day</string>
+    <string name="redemptions_expiry_week">1 week</string>
+    <string name="redemptions_expiry_month">1 month</string>
+    <string name="redemptions_expiry_custom">Custom</string>
+    <string name="redemptions_expiry_pick_date">Expiry date</string>
+    <string name="redemptions_expiry_pick_time">Expiry time</string>
+    <string name="redemptions_settings_missing">The server currency settings have not loaded yet, so the amount cannot be converted.</string>
+    <string name="redemptions_error_too_long">At most %1$d characters</string>
+    <string name="redemptions_error_amount_invalid">Enter a valid number</string>
+    <string name="redemptions_error_amount_positive">Enter an amount greater than 0</string>
+    <string name="redemptions_error_amount_too_small">The amount is less than one quota unit</string>
+    <string name="redemptions_error_amount_too_large">At most %1$s per code</string>
+    <string name="redemptions_error_count">Enter a number from 1 to 100</string>
+    <string name="redemptions_error_expiry_past">The expiry must be in the future</string>
+    <string name="redemptions_form_invalid">Fix the highlighted fields</string>
+    <string name="redemptions_create_submit">Create</string>
+    <string name="redemptions_discard_title">Discard changes?</string>
+    <string name="redemptions_discard_message">You have unsaved changes. Leave without saving?</string>
+    <string name="redemptions_discard_confirm">Discard</string>
+
+    <!-- Created -->
+    <plurals name="redemptions_created_title">
+        <item quantity="one">%1$s code created</item>
+        <item quantity="other">%1$s codes created</item>
+    </plurals>
+    <string name="redemptions_created_description">Send a code to a user, who redeems it in their wallet. The codes also stay in the list.</string>
+    <string name="redemptions_copy_all">Copy all</string>
+    <string name="redemptions_done">Done</string>
+</resources>

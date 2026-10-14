@@ -68,6 +68,7 @@ import com.newapi.admin.core.model.ChannelQuery
 import com.newapi.admin.core.model.ChannelStatus
 import com.newapi.admin.core.model.ChannelStatusFilter
 import com.newapi.admin.core.model.ChannelTypes
+import com.newapi.admin.ui.common.UiMessagesEffect
 import com.newapi.admin.ui.components.AppBottomSheet
 import com.newapi.admin.ui.components.AppButton
 import com.newapi.admin.ui.components.AppCard
@@ -109,7 +110,7 @@ fun ChannelsScreen(onOpenChannel: (Int) -> Unit, onCreateChannel: () -> Unit) {
     var showFilters by rememberSaveable { mutableStateOf(false) }
     val fabExpanded by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
 
-    ChannelMessagesEffect(viewModel.messages, snackbarHostState)
+    UiMessagesEffect(viewModel.messages, snackbarHostState)
     LoadMoreEffect(listState, onLoadMore = viewModel::loadMore)
 
     Scaffold(

@@ -73,6 +73,7 @@ import com.newapi.admin.core.format.Formats
 import com.newapi.admin.core.format.QuotaFormatter
 import com.newapi.admin.core.model.Channel
 import com.newapi.admin.core.model.ChannelStatus
+import com.newapi.admin.ui.common.UiMessagesEffect
 import com.newapi.admin.ui.common.errorMessage
 import com.newapi.admin.ui.components.AppAlert
 import com.newapi.admin.ui.components.AppButton
@@ -117,7 +118,7 @@ fun ChannelDetailScreen(channelId: Int, onBack: () -> Unit, onEdit: (Int) -> Uni
     var showTestDialog by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
 
-    ChannelMessagesEffect(viewModel.messages, snackbarHostState)
+    UiMessagesEffect(viewModel.messages, snackbarHostState)
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(state.deleted) {
         if (!state.deleted) return@LaunchedEffect

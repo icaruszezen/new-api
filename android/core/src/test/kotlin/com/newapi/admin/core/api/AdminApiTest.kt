@@ -10,6 +10,8 @@ import com.newapi.admin.core.model.ChannelTestResult
 import com.newapi.admin.core.model.LogQuery
 import com.newapi.admin.core.model.QuotaMode
 import com.newapi.admin.core.model.RedemptionStatusFilter
+import com.newapi.admin.core.model.TicketImage
+import com.newapi.admin.core.model.TicketStatus
 import com.newapi.admin.core.model.UserUpdate
 import com.newapi.admin.core.net.ApiError
 import com.newapi.admin.core.net.NewApiClient
@@ -252,6 +254,91 @@ class AdminApiTest {
         )
         assertEquals("true", toggle.query("status_only"))
         assertEquals(buildJsonObject { put("id", 9); put("status", 2) }, toggle.json())
+    }
+
+    @Test
+    fun ticketEndpointsSendWhatTheServerReads() = runBlocking {
+        val ticketJson = """{"id":12,"user_id":5,"subject":"Cannot top up","status":1,"last_reply_role":"user","message_count":2,
+            "user_unread":false,"admin_unread":true,"created_time":100,"updated_time":200,"closed_time":0,"username":"alice"}"""
+        val messageJson = """{"id":31,"ticket_id":12,"author_role":"admin","content":"Fixed","created_time":300,"author_name":"root",
+            "attachments":[{"id":5,"ticket_id":12,"message_id":31,"mime_type":"image/png","size":2048,"width":640,"height":480,"created_time":300}]}"""
+        val imageBytes = byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 0, 1, 2)
+        server.handler = { request ->
+            when {
+                request.path == "/api/ticket/admin" -> okData("""{"page":1,"page_size":20,"total":1,"items":[$ticketJson]}""")
+                request.path == "/api/ticket/admin/stats" -> okData("""{"pending":2,"processing":1,"resolved":4,"closed":3,"unread":1}""")
+                request.path == "/api/ticket/admin/12" -> okData(
+                    """{"ticket":$ticketJson,"messages":[{"id":30,"ticket_id":12,"author_role":"user","content":"Help",
+                    "created_time":100,"author_name":"alice","attachments":[]},$messageJson],
+                    "user":{"id":5,"username":"alice","display_name":"Alice","email":"a@example.com","group":"vip"}}""",
+                )
+                request.path == "/api/ticket/admin/12/reply" -> okData(messageJson)
+                request.path == "/api/ticket/admin/12/status" -> okData(ticketJson.replace("\"status\":1", "\"status\":4"))
+                request.path == "/api/ticket/admin/12/attachments/5" ->
+                    MockResponse().setHeader("Content-Type", "image/png").setBody(okio.Buffer().write(imageBytes))
+                else -> okData()
+            }
+        }
+
+        val page = api.tickets(page = 1, pageSize = 20)
+        api.tickets(page = 2, pageSize = 20, keyword = " #12 ", status = TicketStatus.CLOSED)
+        val stats = api.ticketStats()
+        val detail = api.ticket(12)
+        val reply = api.replyTicket(12, " Fixed ", listOf(TicketImage("png-bytes".toByteArray(), "image/png")), status = TicketStatus.RESOLVED)
+        api.replyTicket(12, "Thanks")
+        val closed = api.setTicketStatus(12, TicketStatus.CLOSED)
+        val attachment = api.ticketAttachment(12, 5)
+
+        assertEquals(
+            listOf(
+                "GET /api/ticket/admin", "GET /api/ticket/admin", "GET /api/ticket/admin/stats", "GET /api/ticket/admin/12",
+                "POST /api/ticket/admin/12/reply", "POST /api/ticket/admin/12/reply", "PUT /api/ticket/admin/12/status",
+                "GET /api/ticket/admin/12/attachments/5",
+            ),
+            server.requests.map { "${it.method} ${it.path}" },
+        )
+        val (all, filtered) = server.requestsTo("/api/ticket/admin")
+        assertNull(all.query("status"))
+        assertNull(all.query("keyword"))
+        assertEquals("4", filtered.query("status"))
+        assertEquals("#12", filtered.query("keyword"))
+        assertEquals("2", filtered.query("p"))
+        assertEquals("20", filtered.query("page_size"))
+
+        assertTrue(page.items.orEmpty().single().adminUnread)
+        assertEquals(10L, stats.total)
+        assertEquals(listOf(false, true), detail.messages.map { it.isFromAdmin })
+        assertEquals("vip", detail.user.group)
+        assertEquals(1, detail.attachmentCount)
+        assertEquals(5, reply.attachments.single().id)
+        assertEquals(TicketStatus.CLOSED, closed.status)
+        assertTrue(imageBytes.contentEquals(attachment))
+
+        // A reply is multipart even without images; the status field is left out for the automatic status.
+        val (withImage, textOnly) = server.requestsTo("/api/ticket/admin/12/reply")
+        assertTrue(withImage.header("Content-Type")!!.startsWith("multipart/form-data; boundary="))
+        assertTrue(withImage.body.contains("name=\"content\"\r\nContent-Length: 5\r\n\r\nFixed\r\n"))
+        assertTrue(withImage.body.contains("name=\"status\"\r\nContent-Length: 1\r\n\r\n3\r\n"))
+        assertTrue(withImage.body.contains("name=\"files\"; filename=\"image-1.png\"\r\nContent-Type: image/png\r\nContent-Length: 9\r\n\r\npng-bytes\r\n"))
+        assertTrue(textOnly.header("Content-Type")!!.startsWith("multipart/form-data; boundary="))
+        assertTrue(textOnly.body.contains("name=\"content\""))
+        assertTrue("name=\"status\"" !in textOnly.body && "name=\"files\"" !in textOnly.body)
+        // The status is a JSON number: the server rejects "4".
+        assertEquals(buildJsonObject { put("status", 4) }, server.requestsTo("/api/ticket/admin/12/status").single().json())
+    }
+
+    @Test
+    fun ticketAttachmentFailuresAreTyped() {
+        val cases = listOf(
+            jsonResponse("""{"success":false,"message":"Attachment not found"}""", 404) to ApiError.Http::class.java,
+            // A database error is a 200 envelope, not an image.
+            jsonResponse("""{"success":false,"message":"Database error"}""") to ApiError.Business::class.java,
+            MockResponse().setHeader("Content-Type", "text/html").setBody("<html></html>") to ApiError.InvalidResponse::class.java,
+        )
+        for ((response, type) in cases) {
+            server.handler = { response }
+            assertThrows(type) { runBlocking { api.ticketAttachment(12, 5) } }
+        }
     }
 
     @Test

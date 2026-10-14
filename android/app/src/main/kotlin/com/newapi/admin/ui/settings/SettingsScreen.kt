@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.outlined.SupportAgent
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -90,14 +91,16 @@ import com.newapi.admin.ui.theme.Tone
 import com.newapi.admin.ui.theme.colors
 import java.math.BigDecimal
 
-/** The "Me" tab: signed-in account, server details, password change, sign-out and app version. */
+/** The "Me" tab: signed-in account, server details, support tickets, password change, sign-out and app version. */
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onOpenTickets: () -> Unit) {
     val container = LocalAppContainer.current
     val viewModel = viewModel { SettingsViewModel(container) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val account by viewModel.account.collectAsStateWithLifecycle()
     val status by container.status.collectAsStateWithLifecycle()
+    val ticketStats by container.ticketStats.collectAsStateWithLifecycle()
+    val ticketsSupported by container.ticketsSupported.collectAsStateWithLifecycle()
     val formatter = rememberQuotaFormatter()
     val snackbarHostState = remember { SnackbarHostState() }
     var confirmSignOut by rememberSaveable { mutableStateOf(false) }
@@ -152,6 +155,26 @@ fun SettingsScreen() {
             ) {
                 AccountCard(current, formatter)
                 ServerCard(current.baseUrl, status, formatter)
+                AppCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(top = 16.dp, bottom = 6.dp)) {
+                    Text(
+                        stringResource(R.string.tickets_card_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    val stats = ticketStats
+                    ActionRow(
+                        icon = Icons.Outlined.SupportAgent,
+                        title = stringResource(R.string.tickets_title),
+                        subtitle = when {
+                            !ticketsSupported -> stringResource(R.string.tickets_summary_unsupported)
+                            stats != null -> stringResource(R.string.tickets_summary, Formats.count(stats.unread), Formats.count(stats.pending))
+                            else -> stringResource(R.string.tickets_summary_idle)
+                        },
+                        enabled = ticketsSupported,
+                        onClick = onOpenTickets,
+                    )
+                }
                 // Rows run edge to edge, so the card only pads its title.
                 AppCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(top = 16.dp, bottom = 6.dp)) {
                     Text(

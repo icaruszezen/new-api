@@ -165,6 +165,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
         reloadJob?.cancel()
         mutableState.update { it.copy(isRefreshing = userInitiated) }
         container.refreshStatus()
+        container.refreshTicketStats()
         reloadJob = viewModelScope.launch {
             try {
                 auth.reloadProfile()

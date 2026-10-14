@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Support ticket list and detail screens, and the tickets entry on the Me tab. -->
+<resources>
+    <!-- Me tab entry -->
+    <string name="tickets_card_title">Support</string>
+    <string name="tickets_summary">%1$s unread · %2$s awaiting support</string>
+    <string name="tickets_summary_idle">Reply to users and update ticket status</string>
+    <string name="tickets_summary_unsupported">Not available on this server</string>
+    <plurals name="tickets_badge_description">
+        <item quantity="one">%1$s unread ticket</item>
+        <item quantity="other">%1$s unread tickets</item>
+    </plurals>
+
+    <!-- List -->
+    <string name="tickets_title">Tickets</string>
+    <string name="tickets_search_placeholder">Ticket ID, subject or username</string>
+    <plurals name="tickets_count">
+        <item quantity="one">%1$s ticket</item>
+        <item quantity="other">%1$s tickets</item>
+    </plurals>
+    <plurals name="tickets_unread_count">
+        <item quantity="one">%1$s unread</item>
+        <item quantity="other">%1$s unread</item>
+    </plurals>
+    <plurals name="tickets_message_count">
+        <item quantity="one">%1$s message</item>
+        <item quantity="other">%1$s messages</item>
+    </plurals>
+    <string name="tickets_empty">No tickets yet</string>
+    <string name="tickets_empty_filtered">No tickets match these filters</string>
+    <string name="tickets_unsupported">This server has no ticket system. Tickets need a new-api version that includes them.</string>
+    <string name="tickets_unread">Unread</string>
+    <string name="tickets_status_pending">Awaiting support</string>
+    <string name="tickets_status_processing">In progress</string>
+    <string name="tickets_status_resolved">Resolved</string>
+    <string name="tickets_status_closed">Closed</string>
+    <string name="tickets_status_unknown">Status %1$d</string>
+
+    <!-- Detail -->
+    <string name="tickets_detail_title">Ticket #%1$d</string>
+    <string name="tickets_created_at">Created %1$s</string>
+    <string name="tickets_updated_at">Updated %1$s</string>
+    <string name="tickets_closed_at">Closed %1$s</string>
+    <string name="tickets_change_status">Change status</string>
+    <string name="tickets_status_sheet_title">Ticket status</string>
+    <string name="tickets_status_sheet_desc">The user cannot reply to a closed ticket. You can still reply to it or reopen it.</string>
+    <string name="tickets_msg_status_updated">Ticket status updated</string>
+    <string name="tickets_section_user">Submitted by</string>
+    <string name="tickets_field_username">Username</string>
+    <string name="tickets_field_display_name">Display name</string>
+    <string name="tickets_field_email">Email</string>
+    <string name="tickets_field_group">Group</string>
+    <string name="tickets_field_user_id">User ID</string>
+    <string name="tickets_user_deleted">This user no longer exists</string>
+    <string name="tickets_open_user">View user</string>
+    <string name="tickets_author_support">Support</string>
+    <string name="tickets_author_admin">Admin</string>
+    <string name="tickets_author_user">User</string>
+    <string name="tickets_view_attachment">View attachment %1$d</string>
+    <string name="tickets_attachment_failed">Attachment %1$d could not be loaded. Tap to retry.</string>
+    <string name="tickets_image_failed">The image could not be loaded</string>
+
+    <!-- Reply -->
+    <string name="tickets_reply_placeholder">Write a reply…</string>
+    <string name="tickets_send_reply">Send reply</string>
+    <string name="tickets_add_images">Add images</string>
+    <string name="tickets_remove_image">Remove image</string>
+    <string name="tickets_image_count">%1$d/%2$d images</string>
+    <string name="tickets_reply_status">Status after reply</string>
+    <string name="tickets_reply_status_auto">Keep automatic</string>
+    <string name="tickets_reply_status_value">After reply: %1$s</string>
+    <string name="tickets_reply_status_auto_desc">An awaiting ticket moves to In progress; any other status stays.</string>
+    <string name="tickets_msg_reply_sent">Reply sent</string>
+    <string name="tickets_error_too_long">A reply can have at most %1$d characters</string>
+    <string name="tickets_error_upload_too_large">The upload is too large. Try fewer or smaller images.</string>
+    <string name="tickets_error_image_unreadable">The image could not be read</string>
+    <string name="tickets_error_image_unsupported">This image format is not supported</string>
+    <string name="tickets_error_image_too_large">The image is too large</string>
+    <string name="tickets_message_limit">This ticket has reached %1$d messages and cannot take more replies.</string>
+    <string name="tickets_attachment_limit">This ticket already has %1$d images. You can still reply with text.</string>
+    <string name="tickets_closed_note">Closed: the user cannot reply. A reply keeps it closed unless you pick another status.</string>
+    <string name="tickets_discard_title">Discard reply?</string>
+    <string name="tickets_discard_message">Your reply has not been sent. Leave and discard it?</string>
+    <string name="tickets_discard_confirm">Discard</string>
+</resources>

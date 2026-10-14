@@ -73,7 +73,7 @@ class AdminApi(
     private val client: OkHttpClient,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    /** Channel test, balance and model fetch wait on the upstream provider. */
+    /** Channel test, balance and model fetch wait on the upstream provider; a ticket reply uploads images the server re-encodes one at a time. */
     private val slowClient: OkHttpClient by lazy {
         client.newBuilder()
             .readTimeout(SLOW_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)

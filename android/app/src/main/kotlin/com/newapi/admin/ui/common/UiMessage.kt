@@ -38,5 +38,6 @@ fun errorMessage(error: Throwable): String = when (error) {
     is UpdateError.Http -> stringResource(R.string.update_error_http, error.status)
     is UpdateError.InvalidResponse -> stringResource(R.string.update_error_invalid)
     is UpdateError.CorruptDownload -> stringResource(R.string.update_error_corrupt)
+    is UpdateError.Storage -> stringResource(R.string.update_error_storage)
     else -> error.message?.takeIf { it.isNotBlank() } ?: stringResource(R.string.error_unknown)
 }

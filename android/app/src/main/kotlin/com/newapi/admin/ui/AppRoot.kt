@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -89,6 +90,7 @@ fun AppRoot() {
         }
     }
     // Updates are app-wide, so the dialog also shows over the login screen.
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { container.updates.onForeground() }
     UpdatePrompt()
 }
 

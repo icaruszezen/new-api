@@ -51,6 +51,9 @@ sealed class UpdateError(message: String, cause: Throwable? = null) : Exception(
 
     /** The downloaded APK's size or SHA-256 does not match the release. Nothing was kept. */
     class CorruptDownload(detail: String) : UpdateError(detail)
+
+    /** The APK could not be written to the device, usually for lack of space. Nothing was kept. */
+    class Storage(cause: IOException) : UpdateError(cause.message ?: cause.javaClass.simpleName, cause)
 }
 
 /**
@@ -94,9 +97,11 @@ class AppUpdater(
                 if (release.isBeta && !includeBeta) continue
                 if (best == null || release.versionCode > best.versionCode) best = release
             }
-            // GitHub lists newest first and build numbers only grow, so every release after the
-            // first stable one is older than it.
-            if (sawStable || releases.size < PAGE_SIZE) break
+            // GitHub lists releases newest first by the date of the tagged commit. Stable builds tag
+            // the merge commit, so for the stable channel every release after the first stable one is
+            // older. Betas tag the pull request's head, which can be older than releases published
+            // before the beta, so a beta check reads all [MAX_PAGES] pages.
+            if ((sawStable && !includeBeta) || releases.size < PAGE_SIZE) break
         }
         return best?.takeIf { it.versionCode > installedVersionCode }
     }
@@ -132,25 +137,34 @@ class AppUpdater(
                     val total = release.apkSize.takeIf { it > 0 } ?: body.contentLength().coerceAtLeast(0)
                     val digest = MessageDigest.getInstance("SHA-256")
                     var downloaded = 0L
-                    try {
-                        body.byteStream().use { input ->
-                            partial.outputStream().use { output ->
-                                val buffer = ByteArray(64 * 1024)
-                                while (true) {
+                    body.byteStream().use { input ->
+                        val output = try {
+                            partial.outputStream()
+                        } catch (e: IOException) {
+                            throw UpdateError.Storage(e)
+                        }
+                        output.use {
+                            val buffer = ByteArray(64 * 1024)
+                            while (true) {
+                                ensureActive()
+                                val read = try {
+                                    input.read(buffer)
+                                } catch (e: IOException) {
                                     ensureActive()
-                                    val read = input.read(buffer)
-                                    if (read < 0) break
-                                    downloaded += read
-                                    if (downloaded > MAX_APK_BYTES) throw UpdateError.CorruptDownload("download exceeds $MAX_APK_BYTES bytes")
-                                    output.write(buffer, 0, read)
-                                    digest.update(buffer, 0, read)
-                                    onProgress(downloaded, total)
+                                    throw UpdateError.Network(e)
                                 }
+                                if (read < 0) break
+                                downloaded += read
+                                if (downloaded > MAX_APK_BYTES) throw UpdateError.CorruptDownload("download exceeds $MAX_APK_BYTES bytes")
+                                try {
+                                    output.write(buffer, 0, read)
+                                } catch (e: IOException) {
+                                    throw UpdateError.Storage(e)
+                                }
+                                digest.update(buffer, 0, read)
+                                onProgress(downloaded, total)
                             }
                         }
-                    } catch (e: IOException) {
-                        ensureActive()
-                        throw UpdateError.Network(e)
                     }
                     if (release.apkSize > 0 && downloaded != release.apkSize) {
                         throw UpdateError.CorruptDownload("expected ${release.apkSize} bytes, got $downloaded")
@@ -161,7 +175,7 @@ class AppUpdater(
                     }
                 }
                 target.delete()
-                if (!partial.renameTo(target)) throw IOException("cannot move the download to $target")
+                if (!partial.renameTo(target)) throw UpdateError.Storage(IOException("cannot move the download to $target"))
             } catch (e: Throwable) {
                 partial.delete()
                 throw e
@@ -201,8 +215,8 @@ class AppUpdater(
     }
 
     private companion object {
-        const val PAGE_SIZE = 50
-        const val MAX_PAGES = 4
+        const val PAGE_SIZE = 100
+        const val MAX_PAGES = 2
         const val MAX_APK_BYTES = 100L * 1024 * 1024
     }
 }

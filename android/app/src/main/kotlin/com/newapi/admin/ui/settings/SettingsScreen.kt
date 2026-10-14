@@ -237,7 +237,7 @@ private fun AboutCard() {
             },
             enabled = updates.isSupported && !update.isChecking,
             busy = update.isChecking,
-            onClick = { if (available != null) updates.showPrompt() else updates.checkNow() },
+            onClick = updates::checkNow,
         )
         if (updates.isSupported) {
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = AppTheme.colors.border)

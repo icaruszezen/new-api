@@ -70,10 +70,15 @@ class UpdateController(
     private var checkJob: Job? = null
     private var downloadJob: Job? = null
 
-    /** Clears downloads of earlier runs and checks quietly, at most once per [AUTO_CHECK_INTERVAL_MILLIS]. */
+    /** Clears the downloads of earlier runs; called once per process. */
     fun onAppStart() {
         // Downloads run in this process only, so anything left over is from a run that has ended.
         scope.launch(Dispatchers.IO) { downloadDir.listFiles()?.forEach { it.delete() } }
+    }
+
+    /** The app came to the foreground: checks quietly, at most once per [AUTO_CHECK_INTERVAL_MILLIS]. */
+    fun onForeground() {
+        if (checkJob?.isActive == true) return
         val sinceLastCheck = clock() - preferences.lastUpdateCheckMillis
         if (sinceLastCheck in 0 until AUTO_CHECK_INTERVAL_MILLIS) return
         check(report = false, prompt = true)
@@ -96,10 +101,6 @@ class UpdateController(
         }
         // Opting in is a request to see betas now; opting out only refreshes what Settings shows.
         check(report = include, prompt = include)
-    }
-
-    fun showPrompt() {
-        mutableState.update { if (it.available != null) it.copy(promptVisible = true) else it }
     }
 
     /** Closes the dialog. A running download keeps the dialog open; cancel it with [cancelDownload]. */
@@ -161,7 +162,9 @@ class UpdateController(
                         is UpdateDownload.Ready -> release != null && release.versionCode == state.available?.versionCode
                         else -> false
                     }
-                    if (keepDownload) return@update state.copy(isChecking = false, lastCheckedMillis = now)
+                    if (keepDownload) {
+                        return@update state.copy(isChecking = false, lastCheckedMillis = now, promptVisible = state.promptVisible || (prompt && report))
+                    }
                     // A quiet check opens the dialog only for a build the user has not been shown yet.
                     val isNew = release != null && release.versionCode != state.available?.versionCode
                     state.copy(

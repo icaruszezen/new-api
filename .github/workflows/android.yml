@@ -1,18 +1,21 @@
 name: Android App
 
 # Pull requests that change the app build it and publish a beta release; merging into main publishes a
-# stable release. The app looks for updates in these releases (see android/README.md).
+# stable release. The app looks for updates in these releases (see android/README.md). Documentation
+# changes publish nothing, and neither does a workflow-only change merged into main, since every release
+# makes the app offer an update.
 on:
   pull_request:
     paths:
       - 'android/**'
       - '.github/workflows/android.yml'
+      - '!android/**/*.md'
   push:
     branches:
       - main
     paths:
       - 'android/**'
-      - '.github/workflows/android.yml'
+      - '!android/**/*.md'
   workflow_dispatch:
 
 permissions:
@@ -192,7 +195,8 @@ jobs:
           tag="android-v$VERSION_NAME"
           apk="dist/new-api-admin-$VERSION_NAME.apk"
           # The notes are what the app's update dialog shows: the pull request title for a beta, the
-          # merge commit's subject for a stable build.
+          # commit subject for a stable build. A merge commit's subject only names the branch, so its
+          # notes are the pull request title from the first line of the body.
           if [ "$CHANNEL" = beta ]; then
             target="$PR_HEAD_SHA"
             prerelease=true
@@ -200,7 +204,12 @@ jobs:
           else
             target="$GITHUB_SHA"
             prerelease=false
-            printf '%s\n' "${COMMIT_MESSAGE%%$'\n'*}" > notes.md
+            subject="${COMMIT_MESSAGE%%$'\n'*}"
+            if [[ $subject =~ ^Merge\ pull\ request\ (#[0-9]+)\  && $COMMIT_MESSAGE == *$'\n\n'* ]]; then
+              body="${COMMIT_MESSAGE#*$'\n\n'}"
+              subject="${body%%$'\n'*} (${BASH_REMATCH[1]})"
+            fi
+            printf '%s\n' "$subject" > notes.md
           fi
           if gh release view "$tag" > /dev/null 2>&1; then
             # A re-run of the same build replaces its APK.

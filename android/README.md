@@ -34,12 +34,13 @@ NEWAPI_IT_BASE_URL=http://127.0.0.1:3000 NEWAPI_IT_USERNAME=root NEWAPI_IT_PASSW
 
 ## CI 与发布
 
-`.github/workflows/android.yml` 在 PR 改到 `android/` 时运行，改动合并进 `main` 后也会运行：
+`.github/workflows/android.yml` 在 PR 改到 `android/` 时运行，改动合并进 `main` 后也会运行。每次发布都会让 App 提示更新，所以只改 Markdown 文档时不运行，合并进 `main` 的改动只涉及工作流文件时也不运行。
 
 - 用当前代码编译服务端，以 SQLite 启动，跑单元测试和契约测试。
 - 编译 release APK，上传为 Actions artifact（`new-api-admin-apk`）。
 - 测试通过且配置了签名密钥时，把 APK 发布到本仓库的 GitHub Releases：
   - PR 发布**测试版**：tag 为 `android-v<版本>-beta`，标记为 pre-release。PR 每推送一次就发布一个新的测试版。
+    同时开着多个改 App 的 PR 时，测试版只有一条线，App 提供的总是最新推送的那个 PR 的构建。
   - 合并进 `main` 发布**正式版**：tag 为 `android-v<版本>`。
   - 两种都不会标记为 Latest，仓库的 Latest 仍然是服务端的版本。
 
@@ -51,9 +52,9 @@ NEWAPI_IT_BASE_URL=http://127.0.0.1:3000 NEWAPI_IT_USERNAME=root NEWAPI_IT_PASSW
 
 ### 应用内更新
 
-App 会到本仓库的 GitHub Releases 检查更新：启动时自动检查（最多每 6 小时一次），也可以在「我的 → 检查更新」手动检查。默认只检查正式版，打开「接收测试版」后也会检查测试版。发现新版本时，App 下载 APK，校验大小和 SHA-256，然后交给系统安装。
+App 会到本仓库的 GitHub Releases 检查更新：打开 App 或切回 App 时自动检查（最多每 6 小时一次），也可以在「我的 → 检查更新」手动检查。默认只检查正式版，打开「接收测试版」后也会检查测试版。发现新版本时，App 下载 APK，校验大小和 SHA-256，然后交给系统安装。
 
-- 检查更新调用不登录的 GitHub API，每个 IP 每小时限 60 次。
+- 检查更新调用不登录的 GitHub API，每个 IP 每小时限 60 次。每次检查最多请求 2 次。
 - 只有用签名密钥打包的 CI 构建才会检查更新。本地构建和没有配置签名密钥的构建签名不同，无法覆盖安装，所以不显示更新功能。
 - 检查的仓库默认是构建时的 `GITHUB_REPOSITORY`，可以用环境变量 `ANDROID_UPDATE_REPOSITORY`（`owner/name`）覆盖。
 

@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,11 +67,16 @@ fun UpdatePrompt() {
     val download = state.download
     val ready = download as? UpdateDownload.Ready
     var installerMissing by remember(ready) { mutableStateOf(false) }
+    // Saved so that recreating the activity (rotation, dark mode) does not open the installer again.
+    var installerOpened by rememberSaveable(ready?.apk?.path) { mutableStateOf(false) }
     val install = { apk: File ->
         if (apk.exists()) installerMissing = !context.installApk(apk) else updates.forgetDownload()
     }
     LaunchedEffect(ready) {
-        if (ready != null) install(ready.apk)
+        if (ready != null && !installerOpened) {
+            installerOpened = true
+            install(ready.apk)
+        }
     }
     val openInBrowser = {
         // No browser at all: nothing more the app can offer.
@@ -101,7 +107,8 @@ fun UpdatePrompt() {
             }
         },
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Scrolls on short windows (landscape, large fonts), so the alerts and their actions stay reachable.
+        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(release.versionName, style = MaterialTheme.typography.titleMedium)

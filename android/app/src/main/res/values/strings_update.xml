@@ -4,7 +4,7 @@
     <string name="update_checking">Checking…</string>
     <string name="update_last_checked">Last checked %1$s</string>
     <string name="update_available_short">Version %1$s is available</string>
-    <string name="update_unsupported">Not available in this build. Install a build from GitHub Releases to get updates.</string>
+    <string name="update_unsupported">Not available in this build. Uninstall it, then install a build from GitHub Releases to get updates in the app.</string>
     <string name="update_up_to_date">You have the latest version.</string>
     <string name="update_beta_title">Beta updates</string>
     <string name="update_beta_desc">Also offer beta builds, which carry features still being tested and may be unstable.</string>
@@ -27,4 +27,5 @@
     <string name="update_error_http">GitHub returned an error (HTTP %1$d).</string>
     <string name="update_error_invalid">GitHub returned an unexpected response.</string>
     <string name="update_error_corrupt">The download was incomplete or damaged. Try again.</string>
+    <string name="update_error_storage">Cannot save the update. Free up some storage and try again.</string>
 </resources>

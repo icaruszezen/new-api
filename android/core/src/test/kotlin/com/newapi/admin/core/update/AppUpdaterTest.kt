@@ -117,21 +117,22 @@ class AppUpdaterTest {
     }
 
     @Test
-    fun pagingStopsAtTheFirstPageWithAStableBuild() = runBlocking {
-        val serverReleases = (1..50).map { release("v1.0.0-rc.$it") }
+    fun stableChecksStopAtTheFirstPageWithAStableBuildAndBetaChecksReadEveryPage() = runBlocking {
+        // Releases are ordered by the tagged commit's date, so a beta of an older pull request head
+        // can sort below newer releases.
         servePages(
-            serverReleases,
-            listOf(release("android-v0.2.12-beta", prerelease = true)) + List(49) { release("v0.9.$it") },
-            listOf(release("android-v0.2.11"), release("android-v0.2.10-beta", prerelease = true)),
-            listOf(release("android-v0.2.9")),
+            listOf(release("android-v0.2.11")) + List(99) { release("v1.0.0-rc.$it") },
+            listOf(release("android-v0.2.12-beta", prerelease = true), release("android-v0.2.10")) + List(98) { release("v0.9.$it") },
+            listOf(release("android-v0.2.13-beta", prerelease = true)),
         )
 
         assertEquals(11, updater.findUpdate(1, includeBeta = false)!!.versionCode)
-        assertEquals(listOf("1", "2", "3"), server.requests.map { it.query("page") })
+        assertEquals(listOf("1"), server.requests.map { it.query("page") })
 
+        // At most two pages, to stay well inside GitHub's 60 unauthenticated requests per hour.
         server.requests.clear()
         assertEquals(12, updater.findUpdate(1, includeBeta = true)!!.versionCode)
-        assertEquals(listOf("1", "2", "3"), server.requests.map { it.query("page") })
+        assertEquals(listOf("1", "2"), server.requests.map { it.query("page") })
     }
 
     @Test
@@ -183,6 +184,15 @@ class AppUpdaterTest {
         val truncated = update.copy(apkSize = apk.size + 1L, apkSha256 = null)
         assertThrows(UpdateError.CorruptDownload::class.java) { runBlocking { updater.download(truncated, target) { _, _ -> } } }
         assertFalse(target.exists())
+    }
+
+    @Test
+    fun aDownloadThatCannotBeWrittenIsAStorageErrorNotANetworkError() {
+        server.handler = { MockResponse().setBody(Buffer().write(ByteArray(10))) }
+        val release = AppRelease("0.2.20", 20, false, "", "", "${server.baseUrl}/download/x.apk", 10, null)
+        val notADirectory = File(workDir, "updates").apply { writeText("") }
+
+        assertThrows(UpdateError.Storage::class.java) { runBlocking { updater.download(release, File(notADirectory, "20.apk")) { _, _ -> } } }
     }
 
     @Test

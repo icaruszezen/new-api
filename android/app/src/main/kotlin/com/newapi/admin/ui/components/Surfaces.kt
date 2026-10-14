@@ -7,6 +7,7 @@ import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -46,6 +47,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -363,5 +365,43 @@ fun ActionRow(
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.mutedForeground)
             }
         }
+    }
+}
+
+/**
+ * An [ActionRow] with a switch at the end for an on/off setting; the whole row toggles. Disabled rows
+ * fade the icon, title and switch.
+ */
+@Composable
+fun ToggleRow(
+    icon: ImageVector,
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    enabled: Boolean = true,
+) {
+    val colors = AppTheme.colors
+    val tint = if (enabled) colors.foreground else colors.foreground.copy(alpha = colors.foreground.alpha * 0.5f)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(32.dp).background(colors.muted, MaterialTheme.shapes.small), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.labelLarge, color = tint)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.mutedForeground)
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        AppSwitch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }

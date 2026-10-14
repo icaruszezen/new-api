@@ -41,6 +41,19 @@ object Formats {
         else -> JsNumbers.toFixed(value / 1_000_000.0, 2) + "M"
     }
 
+    /** Download sizes, 1024-based: "512 B", "12.3 KB", "2.0 MB". */
+    fun fileSize(bytes: Long): String {
+        if (bytes < 1024) return "${bytes.coerceAtLeast(0)} B"
+        val units = listOf("KB", "MB", "GB")
+        var value = bytes / 1024.0
+        var unit = 0
+        while (value >= 1024 && unit < units.lastIndex) {
+            value /= 1024
+            unit++
+        }
+        return JsNumbers.toFixed(value, 1) + " " + units[unit]
+    }
+
     /** Ratio like the web (`1.5x`), trailing zeros removed, at most 4 decimals; "-" when not finite. */
     fun ratio(value: Double): String {
         if (!value.isFinite()) return "-"

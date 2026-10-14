@@ -59,6 +59,7 @@ import com.newapi.admin.ui.navigation.UserDetailRoute
 import com.newapi.admin.ui.navigation.UsersRoute
 import com.newapi.admin.ui.settings.SettingsScreen
 import com.newapi.admin.ui.theme.AppTheme
+import com.newapi.admin.ui.update.UpdatePrompt
 import com.newapi.admin.ui.users.UserCreateScreen
 import com.newapi.admin.ui.users.UserDetailScreen
 import com.newapi.admin.ui.users.UsersScreen
@@ -87,6 +88,8 @@ fun AppRoot() {
             CompositionLocalProvider(LocalViewModelStoreOwner provides sessionViewModels) { MainScaffold() }
         }
     }
+    // Updates are app-wide, so the dialog also shows over the login screen.
+    UpdatePrompt()
 }
 
 @Composable

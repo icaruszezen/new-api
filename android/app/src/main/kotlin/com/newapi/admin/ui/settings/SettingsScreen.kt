@@ -23,6 +23,8 @@ import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -81,6 +83,7 @@ import com.newapi.admin.ui.components.InfoRow
 import com.newapi.admin.ui.components.SectionCard
 import com.newapi.admin.ui.components.StatTile
 import com.newapi.admin.ui.components.StatusPill
+import com.newapi.admin.ui.components.ToggleRow
 import com.newapi.admin.ui.components.rememberQuotaFormatter
 import com.newapi.admin.ui.theme.AppTheme
 import com.newapi.admin.ui.theme.Tone
@@ -103,6 +106,9 @@ fun SettingsScreen() {
     var snackbarMessage by remember { mutableStateOf<UiMessage?>(null) }
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { snackbarMessage = it }
+    }
+    LaunchedEffect(container.updates) {
+        container.updates.messages.collect { snackbarMessage = it }
     }
     snackbarMessage?.let { message ->
         val text = message.text()
@@ -174,9 +180,7 @@ fun SettingsScreen() {
                         onClick = { confirmSignOut = true },
                     )
                 }
-                SectionCard(title = stringResource(R.string.settings_about_title)) {
-                    InfoRow(stringResource(R.string.settings_app_version), container.appVersion)
-                }
+                AboutCard()
             }
         }
 
@@ -196,6 +200,54 @@ fun SettingsScreen() {
 
         state.passwordDialog?.let { dialog ->
             ChangePasswordDialog(viewModel, dialog)
+        }
+    }
+}
+
+/** App version, update checks and the beta opt-in. */
+@Composable
+private fun AboutCard() {
+    val container = LocalAppContainer.current
+    val updates = container.updates
+    val update by updates.state.collectAsStateWithLifecycle()
+    val available = update.available
+    // Rows run edge to edge, so the card only pads its title and the version line.
+    AppCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(top = 16.dp, bottom = 6.dp)) {
+        Text(
+            stringResource(R.string.settings_about_title),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        Spacer(Modifier.height(6.dp))
+        InfoRow(
+            stringResource(R.string.settings_app_version),
+            "${container.appVersion} (${container.appVersionCode})",
+            Modifier.padding(horizontal = 16.dp),
+        )
+        HorizontalDivider(Modifier.padding(vertical = 4.dp), color = AppTheme.colors.border)
+        ActionRow(
+            icon = Icons.Outlined.SystemUpdate,
+            title = stringResource(R.string.update_check),
+            subtitle = when {
+                !updates.isSupported -> stringResource(R.string.update_unsupported)
+                update.isChecking -> stringResource(R.string.update_checking)
+                available != null -> stringResource(R.string.update_available_short, available.versionName)
+                update.lastCheckedMillis > 0 -> stringResource(R.string.update_last_checked, Formats.dateTime(update.lastCheckedMillis / 1000))
+                else -> null
+            },
+            enabled = updates.isSupported && !update.isChecking,
+            busy = update.isChecking,
+            onClick = { if (available != null) updates.showPrompt() else updates.checkNow() },
+        )
+        if (updates.isSupported) {
+            HorizontalDivider(Modifier.padding(vertical = 4.dp), color = AppTheme.colors.border)
+            ToggleRow(
+                icon = Icons.Outlined.Science,
+                title = stringResource(R.string.update_beta_title),
+                subtitle = stringResource(R.string.update_beta_desc),
+                checked = update.includeBeta,
+                onCheckedChange = updates::setIncludeBeta,
+            )
         }
     }
 }

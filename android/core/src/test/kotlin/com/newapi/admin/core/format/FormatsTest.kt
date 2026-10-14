@@ -51,6 +51,16 @@ class FormatsTest {
     }
 
     @Test
+    fun fileSizesAre1024BasedWithOneDecimal() {
+        assertEquals("0 B", Formats.fileSize(0))
+        assertEquals("1023 B", Formats.fileSize(1023))
+        assertEquals("1.0 KB", Formats.fileSize(1024))
+        assertEquals("12.3 KB", Formats.fileSize(12_595))
+        assertEquals("2.0 MB", Formats.fileSize(2_059_243))
+        assertEquals("1.5 GB", Formats.fileSize(1_610_612_736))
+    }
+
+    @Test
     fun ratiosDropTrailingZerosAndKeepAtMostFourDecimals() {
         assertEquals("1.5x", Formats.ratio(1.5))
         assertEquals("2x", Formats.ratio(2.0))

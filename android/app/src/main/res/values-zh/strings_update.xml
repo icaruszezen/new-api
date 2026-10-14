@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_check">检查更新</string>
+    <string name="update_checking">正在检查…</string>
+    <string name="update_last_checked">上次检查：%1$s</string>
+    <string name="update_available_short">发现新版本 %1$s</string>
+    <string name="update_unsupported">这个安装包不支持应用内更新。从 GitHub Releases 安装后即可自动更新。</string>
+    <string name="update_up_to_date">已经是最新版本。</string>
+    <string name="update_beta_title">接收测试版</string>
+    <string name="update_beta_desc">同时检查测试版。测试版包含还在验证的新功能，可能不稳定。</string>
+    <string name="update_beta_badge">测试版</string>
+
+    <string name="update_dialog_title">发现新版本</string>
+    <string name="update_version_detail">当前版本：%1$s · 下载大小：%2$s</string>
+    <string name="update_now">立即更新</string>
+    <string name="update_later">稍后</string>
+    <string name="update_downloading">正在下载</string>
+    <string name="update_progress">%1$s / %2$s</string>
+    <string name="update_install">安装</string>
+    <string name="update_install_hint">第一次更新时，系统会要求允许本应用安装应用。</string>
+    <string name="update_ready">下载完成。如果没有弹出安装界面，请点击“安装”。</string>
+    <string name="update_installer_missing">这台设备上没有可以安装更新的应用，请改用浏览器下载。</string>
+    <string name="update_open_in_browser">用浏览器下载</string>
+
+    <string name="update_error_network">无法连接 GitHub，请检查网络。</string>
+    <string name="update_error_rate_limited">GitHub 限制了检查更新的频率，请稍后再试。</string>
+    <string name="update_error_http">GitHub 返回错误（HTTP %1$d）。</string>
+    <string name="update_error_invalid">GitHub 返回了无法识别的内容。</string>
+    <string name="update_error_corrupt">下载的文件不完整或已损坏，请重试。</string>
+</resources>

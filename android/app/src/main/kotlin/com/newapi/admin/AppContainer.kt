@@ -9,7 +9,10 @@ import com.newapi.admin.core.format.QuotaFormatter
 import com.newapi.admin.core.model.SelfUser
 import com.newapi.admin.core.model.SystemStatus
 import com.newapi.admin.core.net.NewApiClient
+import com.newapi.admin.core.update.AppUpdater
 import com.newapi.admin.data.AppPreferences
+import com.newapi.admin.update.UpdateController
+import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,8 +34,13 @@ class AppContainer(
     sessionStore: SessionStore,
     val preferences: AppPreferences,
     userAgent: String,
-    /** Shown on the settings screen. */
+    /** versionName and versionCode, shown on the settings screen. */
     val appVersion: String,
+    val appVersionCode: Int,
+    /** Null for builds that cannot update themselves (see [UpdateController]). */
+    updater: AppUpdater?,
+    /** Private cache directory for downloaded updates. */
+    updateDir: File,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -61,7 +69,10 @@ class AppContainer(
 
     val events = AppEvents()
 
+    val updates = UpdateController(updater, preferences, appVersionCode, updateDir, scope)
+
     init {
+        updates.onAppStart()
         scope.launch {
             auth.state
                 .map { (it as? AuthState.SignedIn)?.account?.baseUrl }

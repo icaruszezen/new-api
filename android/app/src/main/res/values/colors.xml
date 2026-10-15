@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Outer stop of drawable/ic_launcher_background. -->
-    <color name="ic_launcher_background">#FF15192F</color>
+    <!-- Bottom-right stop of drawable/ic_launcher_background. -->
+    <color name="ic_launcher_background">#FF6A2FD4</color>
     <!-- Window background shown before the first Compose frame; matches LightAppColors.background. -->
     <color name="window_background">#FFFFFFFF</color>
 </resources>

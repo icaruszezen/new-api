@@ -9,6 +9,8 @@ import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Redeem
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -18,6 +20,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -25,11 +28,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
@@ -45,6 +54,7 @@ import androidx.navigation.toRoute
 import com.newapi.admin.LocalAppContainer
 import com.newapi.admin.R
 import com.newapi.admin.core.auth.AuthState
+import com.newapi.admin.core.format.Formats
 import com.newapi.admin.ui.channels.ChannelDetailScreen
 import com.newapi.admin.ui.channels.ChannelEditScreen
 import com.newapi.admin.ui.channels.ChannelsScreen
@@ -59,6 +69,8 @@ import com.newapi.admin.ui.navigation.RedemptionDetailRoute
 import com.newapi.admin.ui.navigation.RedemptionEditRoute
 import com.newapi.admin.ui.navigation.RedemptionsRoute
 import com.newapi.admin.ui.navigation.SettingsRoute
+import com.newapi.admin.ui.navigation.TicketDetailRoute
+import com.newapi.admin.ui.navigation.TicketsRoute
 import com.newapi.admin.ui.navigation.UserCreateRoute
 import com.newapi.admin.ui.navigation.UserDetailRoute
 import com.newapi.admin.ui.navigation.UsersRoute
@@ -67,10 +79,13 @@ import com.newapi.admin.ui.redemptions.RedemptionEditScreen
 import com.newapi.admin.ui.redemptions.RedemptionsScreen
 import com.newapi.admin.ui.settings.SettingsScreen
 import com.newapi.admin.ui.theme.AppTheme
+import com.newapi.admin.ui.tickets.TicketDetailScreen
+import com.newapi.admin.ui.tickets.TicketsScreen
 import com.newapi.admin.ui.update.UpdatePrompt
 import com.newapi.admin.ui.users.UserCreateScreen
 import com.newapi.admin.ui.users.UserDetailScreen
 import com.newapi.admin.ui.users.UsersScreen
+import kotlinx.coroutines.delay
 
 private enum class TopLevelTab(val route: Any, val label: Int, val icon: ImageVector) {
     Logs(LogsRoute, R.string.nav_logs, Icons.AutoMirrored.Outlined.ReceiptLong),
@@ -102,9 +117,24 @@ fun AppRoot() {
     UpdatePrompt()
 }
 
+/** How often the ticket counts behind the Me tab badge reload while the app is on screen. */
+private const val TICKET_STATS_INTERVAL_MILLIS = 60_000L
+
 @Composable
 private fun MainScaffold() {
+    val container = LocalAppContainer.current
     val navController = rememberNavController()
+    val ticketStats by container.ticketStats.collectAsStateWithLifecycle()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        // There are no push notifications: new tickets show up through this reload, also right after returning.
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                container.refreshTicketStats()
+                delay(TICKET_STATS_INTERVAL_MILLIS)
+            }
+        }
+    }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val destination = backStackEntry?.destination
     val selectedTab = TopLevelTab.entries.firstOrNull { tab ->
@@ -125,6 +155,16 @@ private fun MainScaffold() {
                     tonalElevation = 0.dp,
                 ) {
                     TopLevelTab.entries.forEach { tab ->
+                        val unread = if (tab == TopLevelTab.Me) ticketStats?.unread ?: 0 else 0
+                        val badgeDescription = if (unread > 0) {
+                            pluralStringResource(
+                                R.plurals.tickets_badge_description,
+                                unread.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                                Formats.count(unread),
+                            )
+                        } else {
+                            null
+                        }
                         NavigationBarItem(
                             selected = tab == selectedTab,
                             onClick = {
@@ -134,7 +174,27 @@ private fun MainScaffold() {
                                     restoreState = true
                                 }
                             },
-                            icon = { Icon(tab.icon, contentDescription = null) },
+                            icon = {
+                                if (unread > 0) {
+                                    BadgedBox(
+                                        badge = {
+                                            // The tab itself announces the count, after its name.
+                                            Badge(
+                                                containerColor = colors.primary,
+                                                contentColor = colors.primaryForeground,
+                                                modifier = Modifier.clearAndSetSemantics {},
+                                            ) {
+                                                Text(if (unread > 99) "99+" else unread.toString())
+                                            }
+                                        },
+                                    ) {
+                                        Icon(tab.icon, contentDescription = null)
+                                    }
+                                } else {
+                                    Icon(tab.icon, contentDescription = null)
+                                }
+                            },
+                            modifier = if (badgeDescription != null) Modifier.semantics { stateDescription = badgeDescription } else Modifier,
                             label = { Text(stringResource(tab.label), style = MaterialTheme.typography.labelMedium) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = colors.foreground,
@@ -231,7 +291,22 @@ private fun MainScaffold() {
                     onDone = { navController.backFrom(entry) },
                 )
             }
-            composable<SettingsRoute> { SettingsScreen() }
+            composable<SettingsRoute> { entry ->
+                SettingsScreen(onOpenTickets = { navController.navigateFrom(entry, TicketsRoute) })
+            }
+            composable<TicketsRoute> { entry ->
+                TicketsScreen(
+                    onBack = { navController.backFrom(entry) },
+                    onOpenTicket = { navController.navigateFrom(entry, TicketDetailRoute(it)) },
+                )
+            }
+            composable<TicketDetailRoute> { entry ->
+                TicketDetailScreen(
+                    ticketId = entry.toRoute<TicketDetailRoute>().id,
+                    onBack = { navController.backFrom(entry) },
+                    onOpenUser = { navController.navigateFrom(entry, UserDetailRoute(it)) },
+                )
+            }
         }
     }
 }

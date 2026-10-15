@@ -8,15 +8,20 @@ import com.newapi.admin.core.auth.SessionStore
 import com.newapi.admin.core.format.QuotaFormatter
 import com.newapi.admin.core.model.SelfUser
 import com.newapi.admin.core.model.SystemStatus
+import com.newapi.admin.core.model.Ticket
+import com.newapi.admin.core.model.TicketStats
+import com.newapi.admin.core.net.ApiError
 import com.newapi.admin.core.net.NewApiClient
 import com.newapi.admin.core.update.AppUpdater
 import com.newapi.admin.data.AppPreferences
 import com.newapi.admin.update.UpdateController
 import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -24,8 +29,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -67,6 +74,18 @@ class AppContainer(
         .map { status -> status?.let(::QuotaFormatter) ?: QuotaFormatter.Default }
         .stateIn(scope, SharingStarted.Eagerly, QuotaFormatter.Default)
 
+    private val ticketStatsFlow = MutableStateFlow<TicketStats?>(null)
+
+    /** Ticket counts of the signed-in server; null until loaded, or when the server has no ticket system. */
+    val ticketStats: StateFlow<TicketStats?> = ticketStatsFlow.asStateFlow()
+
+    private val ticketsSupportedFlow = MutableStateFlow(true)
+
+    /** False once the server answered the ticket stats with 404: a new-api without the ticket system. */
+    val ticketsSupported: StateFlow<Boolean> = ticketsSupportedFlow.asStateFlow()
+
+    private val ticketStatsRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
     val events = AppEvents()
 
     val updates = UpdateController(updater, preferences, appVersionCode, updateDir, scope)
@@ -82,6 +101,19 @@ class AppContainer(
                     if (baseUrl != null) refreshStatus()
                 }
         }
+        // A new account drops the old counts and cancels a stats request still running for it.
+        scope.launch {
+            auth.state
+                .map { (it as? AuthState.SignedIn)?.account?.let { account -> account.baseUrl to account.user.id } }
+                .distinctUntilChanged()
+                .collectLatest { account ->
+                    ticketStatsFlow.value = null
+                    ticketsSupportedFlow.value = true
+                    if (account == null) return@collectLatest
+                    // A newer request replaces one still running, so a slow old answer cannot overwrite a fresh one.
+                    ticketStatsRequests.onSubscription { emit(Unit) }.collectLatest { loadTicketStats() }
+                }
+        }
     }
 
     fun refreshStatus() {
@@ -89,20 +121,44 @@ class AppContainer(
             runCatching { api.status() }.onSuccess { statusFlow.value = it }
         }
     }
+
+    /** Reloads [ticketStats] (the unread badge and per-status counts) in the background. */
+    fun refreshTicketStats() {
+        ticketStatsRequests.tryEmit(Unit)
+    }
+
+    private suspend fun loadTicketStats() {
+        try {
+            ticketStatsFlow.value = api.ticketStats()
+            ticketsSupportedFlow.value = true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: ApiError.Http) {
+            if (e.status == 404) {
+                ticketStatsFlow.value = null
+                ticketsSupportedFlow.value = false
+            }
+        } catch (e: Throwable) {
+            // Keep the last counts; the next refresh tries again.
+        }
+    }
 }
 
 /**
  * Lets list screens catch up after a detail/edit screen changed something. The payload is the id of
  * the changed (or deleted) row, or null when the list should reload from the top (a row was created).
+ * Tickets carry the changed row itself, since the only way to fetch one also marks it read.
  */
 class AppEvents {
     private val users = MutableSharedFlow<Int?>(extraBufferCapacity = 8)
     private val channels = MutableSharedFlow<Int?>(extraBufferCapacity = 8)
     private val redemptions = MutableSharedFlow<Int?>(extraBufferCapacity = 8)
+    private val tickets = MutableSharedFlow<Ticket?>(extraBufferCapacity = 8)
 
     val usersChanged: SharedFlow<Int?> = users.asSharedFlow()
     val channelsChanged: SharedFlow<Int?> = channels.asSharedFlow()
     val redemptionsChanged: SharedFlow<Int?> = redemptions.asSharedFlow()
+    val ticketsChanged: SharedFlow<Ticket?> = tickets.asSharedFlow()
 
     fun notifyUsersChanged(id: Int? = null) {
         users.tryEmit(id)
@@ -114,6 +170,11 @@ class AppEvents {
 
     fun notifyRedemptionsChanged(id: Int? = null) {
         redemptions.tryEmit(id)
+    }
+
+    /** [ticket] as it is now after it was opened (read), answered or moved to another status; null reloads the list. */
+    fun notifyTicketsChanged(ticket: Ticket? = null) {
+        tickets.tryEmit(ticket)
     }
 }
 

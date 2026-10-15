@@ -27,6 +27,7 @@ import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import okio.Buffer
 import okio.BufferedSink
 
 /** Parser for every server response: tolerant of unknown keys, nulls, missing fields and quoted numbers. */
@@ -203,6 +204,53 @@ internal suspend fun OkHttpClient.await(request: Request, clock: () -> Long): Ht
             }
         })
     }
+
+/**
+ * Like [await], for an image download of at most [maxBytes]. Any response that is not a 2xx image is read as
+ * text and fails like an envelope does (a 404, or a 200 `success:false` the server sends for a database error).
+ */
+internal suspend fun OkHttpClient.awaitImage(request: Request, maxBytes: Long, clock: () -> Long): ByteArray =
+    suspendCancellableCoroutine { continuation ->
+        val call = newCall(request)
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                continuation.resumeWithException(e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val bytes = try {
+                    response.use { it.toImage(maxBytes, clock) }
+                } catch (e: ApiError) {
+                    continuation.resumeWithException(e)
+                    return
+                } catch (e: IOException) {
+                    continuation.resumeWithException(e)
+                    return
+                }
+                continuation.resume(bytes)
+            }
+        })
+    }
+
+private fun Response.toImage(maxBytes: Long, clock: () -> Long): ByteArray {
+    val body = this.body
+    if (body == null || !isSuccessful || body.contentType()?.type != "image") {
+        val result = HttpResult(code, headers, body?.string().orEmpty(), clock())
+        if (!result.isSuccessful) throw result.toApiError()
+        result.envelope()
+        throw ApiError.InvalidResponse("HTTP $code: response is not an image")
+    }
+    val tooLarge = ApiError.InvalidResponse("image larger than $maxBytes bytes")
+    if (body.contentLength() > maxBytes) throw tooLarge
+    val buffer = Buffer()
+    body.source().use { source ->
+        while (source.read(buffer, 64 * 1024L) != -1L) {
+            if (buffer.size > maxBytes) throw tooLarge
+        }
+    }
+    return buffer.readByteArray()
+}
 
 /**
  * Thrown on OkHttp threads when a session refresh failed for a transient reason (network, 429, 5xx).

@@ -14,16 +14,28 @@ import com.newapi.admin.core.model.LogType
 import com.newapi.admin.core.model.QuotaMode
 import com.newapi.admin.core.model.RedemptionStatus
 import com.newapi.admin.core.model.RedemptionStatusFilter
+import com.newapi.admin.core.model.TicketImage
+import com.newapi.admin.core.model.TicketStatus
 import com.newapi.admin.core.model.UserAction
 import com.newapi.admin.core.model.UserStatus
 import com.newapi.admin.core.model.UserUpdate
 import com.newapi.admin.core.net.ApiError
 import com.newapi.admin.core.net.NewApiClient
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
+import javax.imageio.ImageIO
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -228,6 +240,107 @@ class LiveServerContractTest {
         assertThrows(ApiError.Business::class.java) { runBlocking { api.redemption(ids.single()) } }
         assertTrue(api.redemptions(page = 1, pageSize = 20, keyword = name).items.orEmpty().isEmpty())
     }
+
+    @Test
+    fun f3_ticketLifecycle() = runBlocking<Unit> {
+        val username = "it_tk_$suffix"
+        val subject = "it-ticket-$suffix"
+        val baseUrl = store.load()!!.baseUrl
+        val admin = store.load()!!.user.username
+        api.createUser(username, "ItPass-12345", displayName = "", role = 1)
+        var userId = 0
+        try {
+            userId = api.users(page = 1, pageSize = 10, keyword = username).items.orEmpty().single { it.username == username }.id
+            val ticketId = openTicketAs(baseUrl, username, "ItPass-12345", subject, "Cannot top up", png(4, 3))
+
+            val listed = api.tickets(page = 1, pageSize = 20, keyword = subject).items.orEmpty().single()
+            assertEquals(ticketId, listed.id)
+            assertEquals(TicketStatus.PENDING, listed.status)
+            assertEquals(username, listed.username)
+            assertTrue(listed.adminUnread)
+            assertEquals(listOf(ticketId), api.tickets(page = 1, pageSize = 20, keyword = "#$ticketId").items.orEmpty().map { it.id })
+            assertTrue(api.tickets(page = 1, pageSize = 20, keyword = subject, status = TicketStatus.CLOSED).items.orEmpty().isEmpty())
+            assertTrue(api.ticketStats().unread >= 1)
+
+            val detail = api.ticket(ticketId)
+            assertEquals(userId, detail.user.id)
+            assertEquals(username, detail.user.username)
+            val first = detail.messages.single()
+            assertFalse(first.isFromAdmin)
+            assertEquals("Cannot top up", first.content)
+            val attachment = first.attachments.single()
+            assertEquals(4 to 3, attachment.width to attachment.height)
+            assertFalse(api.tickets(page = 1, pageSize = 20, keyword = subject).items.orEmpty().single().adminUnread)
+            val stored = api.ticketAttachment(ticketId, attachment.id)
+            assertEquals(attachment.size, stored.size.toLong())
+            assertTrue(stored.isPng() || stored.isJpeg())
+
+            val reply = api.replyTicket(ticketId, " Looking into it ", listOf(TicketImage(png(2, 2), "image/png")))
+            assertTrue(reply.isFromAdmin)
+            assertEquals(admin, reply.authorName)
+            assertEquals("Looking into it", reply.content)
+            assertEquals(1, reply.attachments.size)
+            assertEquals(TicketStatus.PROCESSING, api.ticket(ticketId).ticket.status)
+
+            val imageOnly = api.replyTicket(ticketId, "", listOf(TicketImage(png(3, 3), "image/png")), status = TicketStatus.RESOLVED)
+            assertEquals("", imageOnly.content)
+            assertEquals(TicketStatus.RESOLVED, api.ticket(ticketId).ticket.status)
+
+            val closed = api.setTicketStatus(ticketId, TicketStatus.CLOSED)
+            assertEquals(TicketStatus.CLOSED, closed.status)
+            assertTrue(closed.closedTime > 0)
+            api.replyTicket(ticketId, "Closing note")
+            val final = api.ticket(ticketId)
+            assertEquals(TicketStatus.CLOSED, final.ticket.status)
+            assertEquals(4, final.messages.size)
+            assertEquals(3, final.attachmentCount)
+
+            for (invalid in listOf<suspend () -> Any?>(
+                { api.replyTicket(ticketId, "   ") },
+                { api.replyTicket(ticketId, "x".repeat(5001)) },
+                { api.replyTicket(ticketId, "", listOf(TicketImage("not an image".toByteArray(), "image/png"))) },
+                { api.ticket(Int.MAX_VALUE) },
+            )) {
+                val error = assertThrows(ApiError.Business::class.java) { runBlocking { invalid() } }
+                assertTrue(error.message.orEmpty().isNotBlank())
+            }
+            val missing = assertThrows(ApiError.Http::class.java) { runBlocking { api.ticketAttachment(ticketId, Int.MAX_VALUE) } }
+            assertEquals(404, missing.status)
+        } finally {
+            // Tickets cannot be deleted; deleting the owner leaves this one behind with its user id only.
+            if (userId > 0) api.deleteUser(userId)
+        }
+    }
+
+    /** Logs in as a normal user without touching [store], and opens a ticket with one image. */
+    private fun openTicketAs(baseUrl: String, username: String, password: String, subject: String, content: String, image: ByteArray): Int {
+        val http = OkHttpClient()
+        val login = Request.Builder()
+            .url("$baseUrl/api/user/login")
+            .post("""{"username":"$username","password":"$password"}""".toRequestBody("application/json".toMediaType()))
+            .build()
+        val token = http.newCall(login).execute().use { response ->
+            Json.parseToJsonElement(response.body!!.string()).jsonObject["data"]!!.jsonObject["access_token"]!!.jsonPrimitive.content
+        }
+        val form = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("subject", subject)
+            .addFormDataPart("content", content)
+            .addFormDataPart("files", "shot.png", image.toRequestBody("image/png".toMediaType()))
+            .build()
+        val create = Request.Builder().url("$baseUrl/api/ticket/self").header("Authorization", "Bearer $token").post(form).build()
+        val created = http.newCall(create).execute().use { Json.parseToJsonElement(it.body!!.string()).jsonObject }
+        assertEquals(created.toString(), "true", created["success"]!!.jsonPrimitive.content)
+        return created["data"]!!.jsonObject["id"]!!.jsonPrimitive.int
+    }
+
+    private fun png(width: Int, height: Int): ByteArray {
+        val image = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+        return ByteArrayOutputStream().also { ImageIO.write(image, "png", it) }.toByteArray()
+    }
+
+    private fun ByteArray.isPng() = size > 4 && this[0] == 0x89.toByte() && this[1] == 'P'.code.toByte()
+
+    private fun ByteArray.isJpeg() = size > 3 && this[0] == 0xFF.toByte() && this[1] == 0xD8.toByte()
 
     @Test
     fun f_channelLifecycle() = runBlocking<Unit> {

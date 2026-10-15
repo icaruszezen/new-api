@@ -102,20 +102,23 @@ func NewChannelSortOptions(sortBy string, sortOrder string, idSort bool) Channel
 }
 
 func (options ChannelSortOptions) Apply(query *gorm.DB) *gorm.DB {
-	if columnName, ok := channelSortColumns[options.SortBy]; ok {
-		return query.Order(clause.OrderByColumn{
-			Column: clause.Column{Name: columnName},
-			Desc:   options.SortOrder != "asc",
-		})
+	columnName, desc := "priority", true
+	if sortColumn, ok := channelSortColumns[options.SortBy]; ok {
+		columnName, desc = sortColumn, options.SortOrder != "asc"
+	} else if options.IDSort {
+		columnName = "id"
 	}
-	if options.IDSort {
-		return query.Order(clause.OrderByColumn{
-			Column: clause.Column{Name: "id"},
-			Desc:   true,
-		})
+	query = query.Order(clause.OrderByColumn{
+		Column: clause.Column{Name: columnName},
+		Desc:   desc,
+	})
+	if columnName == "id" {
+		return query
 	}
+	// Many channels share a priority, name or balance. Without a unique last key, PostgreSQL and MySQL may order
+	// tied rows differently for each LIMIT/OFFSET page, so paging repeats some channels and skips others.
 	return query.Order(clause.OrderByColumn{
-		Column: clause.Column{Name: "priority"},
+		Column: clause.Column{Name: "id"},
 		Desc:   true,
 	})
 }

@@ -31,3 +31,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class RedemptionEditRoute(val id: Int = 0)
 
 @Serializable data object SettingsRoute
+
+@Serializable data object TicketsRoute
+
+@Serializable data class TicketDetailRoute(val id: Int)

@@ -19,11 +19,19 @@ import com.newapi.admin.core.model.Redemption
 import com.newapi.admin.core.model.RedemptionStatus
 import com.newapi.admin.core.model.RedemptionStatusFilter
 import com.newapi.admin.core.model.SystemStatus
+import com.newapi.admin.core.model.Ticket
+import com.newapi.admin.core.model.TicketDetail
+import com.newapi.admin.core.model.TicketImage
+import com.newapi.admin.core.model.TicketLimits
+import com.newapi.admin.core.model.TicketMessage
+import com.newapi.admin.core.model.TicketStats
+import com.newapi.admin.core.model.TicketStatus
 import com.newapi.admin.core.model.UserAction
 import com.newapi.admin.core.model.UserUpdate
 import com.newapi.admin.core.net.ApiError
 import com.newapi.admin.core.net.HttpResult
 import com.newapi.admin.core.net.await
+import com.newapi.admin.core.net.awaitImage
 import com.newapi.admin.core.net.bool
 import com.newapi.admin.core.net.decodeData
 import com.newapi.admin.core.net.double
@@ -46,8 +54,11 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 
 /**
  * Admin endpoints of the signed-in server. Every call throws [com.newapi.admin.core.net.ApiError] on failure
@@ -62,7 +73,7 @@ class AdminApi(
     private val client: OkHttpClient,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    /** Channel test, balance and model fetch wait on the upstream provider. */
+    /** Channel test, balance and model fetch wait on the upstream provider; a ticket reply uploads images the server re-encodes one at a time. */
     private val slowClient: OkHttpClient by lazy {
         client.newBuilder()
             .readTimeout(SLOW_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -373,6 +384,64 @@ class AdminApi(
 
     /** `DELETE /api/redemption/invalid`: deletes every used, disabled and expired code; returns how many. */
     suspend fun deleteInvalidRedemptions(): Long = send("DELETE", "/api/redemption/invalid").long("data") ?: 0
+
+    // ---- Tickets ----
+
+    /**
+     * `GET /api/ticket/admin`, latest activity first. [keyword] matches the ticket id (`#12` or `12`), the subject
+     * or the owner's username; [status] is a [TicketStatus], null for every ticket.
+     */
+    suspend fun tickets(page: Int, pageSize: Int, keyword: String = "", status: Int? = null): PageData<Ticket> {
+        val params = listOf("keyword" to keyword.trim().ifEmpty { null }, "status" to status?.toString()) + pageParams(page, pageSize)
+        return get("/api/ticket/admin", params).decodeData(PageData.serializer(Ticket.serializer()), "ticket page") { PageData() }
+    }
+
+    /** `GET /api/ticket/admin/stats`. */
+    suspend fun ticketStats(): TicketStats = get("/api/ticket/admin/stats").decodeData(TicketStats.serializer(), "ticket stats")
+
+    /** `GET /api/ticket/admin/{id}`: the ticket, its owner and every message. Marks the ticket read for every admin. */
+    suspend fun ticket(id: Int): TicketDetail =
+        get("/api/ticket/admin/${requireId(id)}").decodeData(TicketDetail.serializer(), "ticket")
+
+    /**
+     * `POST /api/ticket/admin/{id}/reply` (multipart). [content] may be blank when [images] are attached. A null
+     * [status] moves a pending ticket to processing and keeps any other status, so a closed ticket stays closed.
+     * Returns the new message; reload the ticket for its status. Slow: the server re-encodes each image in turn.
+     */
+    suspend fun replyTicket(id: Int, content: String, images: List<TicketImage> = emptyList(), status: Int? = null): TicketMessage {
+        require(status == null || status in TicketStatus.all) { "invalid ticket status $status" }
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM).apply {
+            addFormDataPart("content", content.trim())
+            // An empty or "0" status is rejected; leaving the field out asks for the automatic one.
+            if (status != null) addFormDataPart("status", status.toString())
+            // The server reads only parts named "files" and ignores their file names and types.
+            images.forEachIndexed { index, image ->
+                val fileName = "image-${index + 1}.${image.mimeType.substringAfter('/')}"
+                addFormDataPart("files", fileName, image.bytes.toRequestBody(image.mimeType.toMediaTypeOrNull()))
+            }
+        }.build()
+        val request = Request.Builder().url(url("/api/ticket/admin/${requireId(id)}/reply", emptyList())).post(body).build()
+        return execute(request, slow = true).envelope().decodeData(TicketMessage.serializer(), "ticket message")
+    }
+
+    /** `PUT /api/ticket/admin/{id}/status {status}`: any [TicketStatus] from any other. Returns the ticket without its username. */
+    suspend fun setTicketStatus(id: Int, status: Int): Ticket {
+        val body = buildJsonObject { put("status", status) }
+        return send("PUT", "/api/ticket/admin/${requireId(id)}/status", body = body).decodeData(Ticket.serializer(), "ticket")
+    }
+
+    /** `GET /api/ticket/admin/{ticketId}/attachments/{attachmentId}`: the stored PNG or JPEG. */
+    suspend fun ticketAttachment(ticketId: Int, attachmentId: Int): ByteArray {
+        val path = "/api/ticket/admin/${requireId(ticketId)}/attachments/${requireId(attachmentId)}"
+        val request = Request.Builder().url(url(path, emptyList())).build()
+        return withContext(Dispatchers.IO) {
+            try {
+                client.awaitImage(request, TicketLimits.MAX_IMAGE_BYTES.toLong(), clock)
+            } catch (e: IOException) {
+                throw e.toApiError()
+            }
+        }
+    }
 
     // ---- Internals ----
 

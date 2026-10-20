@@ -392,9 +392,15 @@ func DoWssRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 		targetHeader.Set(key, value)
 	}
 	targetHeader.Set("Content-Type", c.Request.Header.Get("Content-Type"))
-	targetConn, _, err := websocket.DefaultDialer.Dial(fullRequestURL, targetHeader)
+	targetConn, handshakeResp, err := websocket.DefaultDialer.Dial(fullRequestURL, targetHeader)
 	if err != nil {
-		return nil, fmt.Errorf("dial failed to %s: %w", common.SanitizeURLForLog(fullRequestURL), err)
+		dialErr := fmt.Errorf("dial failed to %s: %w", common.SanitizeURLForLog(fullRequestURL), err)
+		if handshakeResp == nil {
+			return nil, dialErr
+		}
+		// The upstream rejected the handshake with an HTTP status; keep it so a
+		// channel-level retry can match it. The reported status stays 500.
+		return nil, types.NewError(dialErr, types.ErrorCodeDoRequestFailed, types.ErrOptionWithUpstreamStatusCode(handshakeResp.StatusCode))
 	}
 	// send request body
 	//all, err := io.ReadAll(requestBody)

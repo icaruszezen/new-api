@@ -4,12 +4,15 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -298,4 +301,58 @@ func TestProcessHeaderOverride_PassHeadersTemplateSetsRuntimeHeaders(t *testing.
 	require.Equal(t, "Codex CLI", upstreamReq.Header.Get("Originator"))
 	require.Equal(t, "sess-123", upstreamReq.Header.Get("Session_id"))
 	require.Empty(t, upstreamReq.Header.Get("X-Codex-Beta-Features"))
+}
+
+// wssDialTestAdaptor dials url; DoWssRequest needs nothing else from an adaptor.
+type wssDialTestAdaptor struct {
+	Adaptor
+	url string
+}
+
+func (a wssDialTestAdaptor) GetRequestURL(*relaycommon.RelayInfo) (string, error) {
+	return a.url, nil
+}
+
+func (a wssDialTestAdaptor) SetupRequestHeader(*gin.Context, *http.Header, *relaycommon.RelayInfo) error {
+	return nil
+}
+
+// A realtime channel retry matches the status the upstream rejected the
+// websocket handshake with, so DoWssRequest must keep it as the upstream
+// status while still reporting a 500.
+func TestDoWssRequestRecordsHandshakeRejectionStatus(t *testing.T) {
+	rejecting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+	}))
+	t.Cleanup(rejecting.Close)
+	closed := httptest.NewServer(http.NotFoundHandler())
+	closedURL := closed.URL
+	closed.Close()
+
+	tests := []struct {
+		name               string
+		url                string
+		wantUpstreamStatus int
+	}{
+		{name: "handshake rejected with an HTTP status", url: "ws" + strings.TrimPrefix(rejecting.URL, "http"), wantUpstreamStatus: http.StatusTooManyRequests},
+		{name: "no HTTP response", url: "ws" + strings.TrimPrefix(closedURL, "http"), wantUpstreamStatus: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/realtime", nil)
+			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
+
+			conn, err := DoWssRequest(wssDialTestAdaptor{url: tt.url}, ctx, info, nil)
+
+			require.Nil(t, conn)
+			require.Error(t, err)
+			// WssHelper wraps the dial error the same way before returning it.
+			apiErr := types.NewError(err, types.ErrorCodeDoRequestFailed)
+			assert.Equal(t, http.StatusInternalServerError, apiErr.StatusCode)
+			assert.Equal(t, tt.wantUpstreamStatus, apiErr.UpstreamStatusCode())
+		})
+	}
 }

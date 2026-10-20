@@ -16,7 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import i18next from 'i18next'
 import { z } from 'zod'
+
+import { parseHttpStatusCodeRules } from '@/lib/http-status-code-rules'
 
 import {
   CLAUDE_FIELD_PASSTHROUGH_TYPES,
@@ -76,6 +79,12 @@ function isOptionalProxyURL(value: string | undefined): boolean {
 export const HTTP_PROTOCOL_AUTO = 'auto'
 export const HTTP_PROTOCOL_HTTP1 = 'http1'
 export const MAX_HTTP2_CONNECTION_SHARDS = 8
+
+// Same-channel retry bounds and defaults; mirror relaykit/dto/channel_settings.go.
+export const MAX_CHANNEL_RETRY_TIMES = 10
+export const MAX_CHANNEL_RETRY_INTERVAL_MS = 60000
+export const DEFAULT_CHANNEL_RETRY_STATUS_CODES = '429,503'
+export const DEFAULT_CHANNEL_RETRY_INTERVAL_MS = 200
 
 export function normalizeHttpProtocol(
   value: string | undefined | null
@@ -275,6 +284,10 @@ export const channelFormSchema = z
     stream_prelude_delay_min_seconds: z.number().optional(),
     stream_prelude_delay_max_seconds: z.number().optional(),
     responses_client_disconnect_drain_enabled: z.boolean().optional(),
+    // nullish: a cleared number input stores null (see the drawer)
+    retry_times: z.number().nullish(),
+    retry_status_codes: z.string().optional(),
+    retry_interval_ms: z.number().nullish(),
     // Type-specific settings (stored in settings JSON)
     is_enterprise_account: z.boolean().optional(), // OpenRouter specific
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
@@ -488,6 +501,45 @@ export const channelFormSchema = z
       }
     }
 
+    const retryTimes = data.retry_times
+    if (
+      retryTimes != null &&
+      (!Number.isInteger(retryTimes) ||
+        retryTimes < 0 ||
+        retryTimes > MAX_CHANNEL_RETRY_TIMES)
+    ) {
+      addRequiredIssue(
+        ctx,
+        'retry_times',
+        'Retry times must be an integer between 0 and 10'
+      )
+    }
+    if (retryTimes != null && retryTimes > 0) {
+      const retryStatusCodes = parseHttpStatusCodeRules(data.retry_status_codes)
+      if (!retryStatusCodes.ok) {
+        addRequiredIssue(
+          ctx,
+          'retry_status_codes',
+          i18next.t('Invalid status code rules: {{tokens}}', {
+            tokens: retryStatusCodes.invalidTokens.join(', '),
+          })
+        )
+      }
+      const retryIntervalMs = data.retry_interval_ms
+      if (
+        retryIntervalMs != null &&
+        (!Number.isInteger(retryIntervalMs) ||
+          retryIntervalMs < 0 ||
+          retryIntervalMs > MAX_CHANNEL_RETRY_INTERVAL_MS)
+      ) {
+        addRequiredIssue(
+          ctx,
+          'retry_interval_ms',
+          'Retry interval must be an integer between 0 and 60000 ms'
+        )
+      }
+    }
+
     const protocol = normalizeHttpProtocol(data.http_protocol)
     const shards = data.http2_connection_shards ?? 1
     if (shards < 1 || shards > MAX_HTTP2_CONNECTION_SHARDS) {
@@ -558,6 +610,9 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   stream_prelude_delay_min_seconds: 0,
   stream_prelude_delay_max_seconds: 5,
   responses_client_disconnect_drain_enabled: false,
+  retry_times: undefined,
+  retry_status_codes: DEFAULT_CHANNEL_RETRY_STATUS_CODES,
+  retry_interval_ms: DEFAULT_CHANNEL_RETRY_INTERVAL_MS,
   // Type-specific settings
   is_enterprise_account: false,
   vertex_key_type: 'json',
@@ -609,6 +664,9 @@ export function transformChannelToFormDefaults(
     stream_prelude_delay_min_seconds: 0,
     stream_prelude_delay_max_seconds: 5,
     responses_client_disconnect_drain_enabled: false,
+    retry_times: undefined as number | undefined,
+    retry_status_codes: DEFAULT_CHANNEL_RETRY_STATUS_CODES,
+    retry_interval_ms: DEFAULT_CHANNEL_RETRY_INTERVAL_MS,
   }
 
   if (channel.setting) {
@@ -662,6 +720,19 @@ export function transformChannelToFormDefaults(
             : 5,
         responses_client_disconnect_drain_enabled:
           parsed.responses_client_disconnect_drain_enabled === true,
+        retry_times:
+          typeof parsed.retry_times === 'number' && parsed.retry_times > 0
+            ? parsed.retry_times
+            : undefined,
+        retry_status_codes:
+          typeof parsed.retry_status_codes === 'string' &&
+          parsed.retry_status_codes.trim()
+            ? parsed.retry_status_codes
+            : DEFAULT_CHANNEL_RETRY_STATUS_CODES,
+        retry_interval_ms:
+          typeof parsed.retry_interval_ms === 'number'
+            ? parsed.retry_interval_ms
+            : DEFAULT_CHANNEL_RETRY_INTERVAL_MS,
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -772,6 +843,9 @@ export function transformChannelToFormDefaults(
  * Build the setting JSON string from form extra settings
  */
 export function buildSettingJSON(formData: ChannelFormValues): string {
+  // Status codes and interval only matter while the channel retries; omitted
+  // fields fall back to the backend defaults (429,503 and 200 ms).
+  const retryEnabled = (formData.retry_times ?? 0) > 0
   const settingObj: Record<string, unknown> = {
     force_format: formData.force_format || false,
     thinking_to_content: formData.thinking_to_content || false,
@@ -783,7 +857,8 @@ export function buildSettingJSON(formData: ChannelFormValues): string {
     system_prompt_override: formData.system_prompt_override || false,
     cache_billing_ratio_enabled: formData.cache_billing_ratio_enabled || false,
     cache_billing_ratio:
-      formData.cache_billing_ratio_enabled && !formData.cache_billing_ratio_range
+      formData.cache_billing_ratio_enabled &&
+      !formData.cache_billing_ratio_range
         ? formData.cache_billing_ratio || 1
         : undefined,
     cache_billing_ratio_range:
@@ -811,6 +886,14 @@ export function buildSettingJSON(formData: ChannelFormValues): string {
       formData.responses_client_disconnect_drain_enabled === true
         ? true
         : undefined,
+    retry_times: retryEnabled ? formData.retry_times : undefined,
+    retry_status_codes: retryEnabled
+      ? parseHttpStatusCodeRules(formData.retry_status_codes).normalized ||
+        undefined
+      : undefined,
+    retry_interval_ms: retryEnabled
+      ? (formData.retry_interval_ms ?? undefined)
+      : undefined,
   }
 
   const protocol = normalizeHttpProtocol(formData.http_protocol)

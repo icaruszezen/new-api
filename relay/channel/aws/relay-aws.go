@@ -29,17 +29,6 @@ import (
 	"github.com/aws/smithy-go/auth/bearer"
 )
 
-// getAwsErrorStatusCode extracts HTTP status code from AWS SDK error
-func getAwsErrorStatusCode(err error) int {
-	// Check for HTTP response error which contains status code
-	var httpErr interface{ HTTPStatusCode() int }
-	if errors.As(err, &httpErr) {
-		return httpErr.HTTPStatusCode()
-	}
-	// Default to 500 if we can't determine the status code
-	return http.StatusInternalServerError
-}
-
 func newAwsInvokeContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if common.RelayTimeout <= 0 {
 		return context.WithCancel(parent)
@@ -48,14 +37,23 @@ func newAwsInvokeContext(parent context.Context) (context.Context, context.Cance
 }
 
 func newAwsInvokeError(requestContext context.Context, err error, operation string) *types.NewAPIError {
-	options := make([]types.NewAPIErrorOptions, 0, 1)
+	options := make([]types.NewAPIErrorOptions, 0, 2)
 	if requestContext.Err() != nil {
 		options = append(options, types.ErrOptionWithSkipRetry())
+	}
+	// Errors carrying an HTTP response report the upstream status; anything
+	// else (e.g. a connection failure, which the SDK still wraps in a response
+	// error with status 0) defaults to 500.
+	statusCode := http.StatusInternalServerError
+	var httpErr interface{ HTTPStatusCode() int }
+	if errors.As(err, &httpErr) && httpErr.HTTPStatusCode() > 0 {
+		statusCode = httpErr.HTTPStatusCode()
+		options = append(options, types.ErrOptionWithUpstreamStatusCode(statusCode))
 	}
 	return types.NewOpenAIError(
 		errors.Wrap(err, operation),
 		types.ErrorCodeAwsInvokeError,
-		getAwsErrorStatusCode(err),
+		statusCode,
 		options...,
 	)
 }

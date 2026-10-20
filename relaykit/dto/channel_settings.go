@@ -39,12 +39,29 @@ type ChannelSettings struct {
 	// HTTP2ConnectionShards spreads HTTP/2 traffic across N independent transports
 	// (1-8). Zero/unset means 1. Ignored when HTTPProtocol is "http1".
 	HTTP2ConnectionShards int `json:"http2_connection_shards,omitempty"`
+	// RetryTimes re-sends a failed request to this same channel up to N times
+	// before the global retry switches channels. 0/unset disables it.
+	RetryTimes int `json:"retry_times,omitempty"`
+	// RetryStatusCodes lists the upstream HTTP statuses that trigger a
+	// same-channel retry, e.g. "429,503" or "500-599". Empty means "429,503".
+	RetryStatusCodes string `json:"retry_status_codes,omitempty"`
+	// RetryIntervalMs is the wait before each same-channel retry. nil means
+	// 200ms; an explicit 0 retries immediately.
+	RetryIntervalMs *int `json:"retry_interval_ms,omitempty"`
 }
 
 const (
 	HTTPProtocolAuto         = "auto"
 	HTTPProtocolHTTP1        = "http1"
 	MaxHTTP2ConnectionShards = 8
+)
+
+// Bounds and defaults of the same-channel retry settings.
+const (
+	MaxChannelRetryTimes           = 10
+	MaxChannelRetryIntervalMs      = 60000
+	DefaultChannelRetryStatusCodes = "429,503"
+	DefaultChannelRetryIntervalMs  = 200
 )
 
 // ValidateHTTPTransport validates save-time HTTP transport channel settings.

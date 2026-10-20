@@ -99,6 +99,9 @@ export interface ChannelSettings {
   responses_client_disconnect_drain_enabled?: boolean
   http_protocol?: 'auto' | 'http1' | string
   http2_connection_shards?: number
+  retry_times?: number
+  retry_status_codes?: string
+  retry_interval_ms?: number
 }
 
 export interface ChannelOtherSettings {

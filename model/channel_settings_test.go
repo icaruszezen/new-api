@@ -41,6 +41,43 @@ func TestChannelValidateSettingsRejectsInvalidHTTPTransport(t *testing.T) {
 	}
 }
 
+func TestChannelValidateSettingsChannelRetry(t *testing.T) {
+	intPtr := func(v int) *int { return &v }
+	tests := []struct {
+		name    string
+		setting dto.ChannelSettings
+		wantErr string
+	}{
+		{name: "retry not configured", setting: dto.ChannelSettings{}},
+		{name: "retry_times negative", setting: dto.ChannelSettings{RetryTimes: -1}, wantErr: "retry_times must be between 0 and 10"},
+		{name: "retry_times at the maximum", setting: dto.ChannelSettings{RetryTimes: 10}},
+		{name: "retry_times above the maximum", setting: dto.ChannelSettings{RetryTimes: 11}, wantErr: "retry_times must be between 0 and 10"},
+		{name: "retry_status_codes list", setting: dto.ChannelSettings{RetryTimes: 1, RetryStatusCodes: "429,503"}},
+		{name: "retry_status_codes range and full-width comma", setting: dto.ChannelSettings{RetryTimes: 1, RetryStatusCodes: "429，500-599"}},
+		{name: "retry_status_codes invalid token", setting: dto.ChannelSettings{RetryTimes: 1, RetryStatusCodes: "429,abc"}, wantErr: "invalid retry_status_codes"},
+		{name: "retry_status_codes out of range", setting: dto.ChannelSettings{RetryTimes: 1, RetryStatusCodes: "600"}, wantErr: "invalid retry_status_codes"},
+		{name: "retry_interval_ms unset", setting: dto.ChannelSettings{RetryTimes: 1, RetryIntervalMs: nil}},
+		{name: "retry_interval_ms zero", setting: dto.ChannelSettings{RetryTimes: 1, RetryIntervalMs: intPtr(0)}},
+		{name: "retry_interval_ms at the maximum", setting: dto.ChannelSettings{RetryTimes: 1, RetryIntervalMs: intPtr(60000)}},
+		{name: "retry_interval_ms above the maximum", setting: dto.ChannelSettings{RetryTimes: 1, RetryIntervalMs: intPtr(60001)}, wantErr: "retry_interval_ms must be between 0 and 60000"},
+		{name: "retry_interval_ms negative", setting: dto.ChannelSettings{RetryTimes: 1, RetryIntervalMs: intPtr(-1)}, wantErr: "retry_interval_ms must be between 0 and 60000"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			channel := &Channel{}
+			channel.SetSetting(tt.setting)
+			err := channel.ValidateSettings()
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
 func TestChannelValidateSettingsCacheBillingRatio(t *testing.T) {
 	tests := []struct {
 		name    string

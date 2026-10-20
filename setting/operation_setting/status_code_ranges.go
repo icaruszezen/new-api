@@ -51,7 +51,7 @@ func AutomaticDisableStatusCodesFromString(s string) error {
 }
 
 func ShouldDisableByStatusCode(code int) bool {
-	return shouldMatchStatusCodeRanges(AutomaticDisableStatusCodeRanges, code)
+	return MatchHTTPStatusCodeRanges(AutomaticDisableStatusCodeRanges, code)
 }
 
 func AutomaticRetryStatusCodesToString() string {
@@ -81,7 +81,7 @@ func ShouldRetryByStatusCode(code int) bool {
 	if IsAlwaysSkipRetryStatusCode(code) {
 		return false
 	}
-	return shouldMatchStatusCodeRanges(AutomaticRetryStatusCodeRanges, code)
+	return MatchHTTPStatusCodeRanges(AutomaticRetryStatusCodeRanges, code)
 }
 
 func statusCodeRangesToString(ranges []StatusCodeRange) string {
@@ -99,7 +99,9 @@ func statusCodeRangesToString(ranges []StatusCodeRange) string {
 	return strings.Join(parts, ",")
 }
 
-func shouldMatchStatusCodeRanges(ranges []StatusCodeRange, code int) bool {
+// MatchHTTPStatusCodeRanges reports whether code falls in one of ranges, which
+// must be sorted and merged as ParseHTTPStatusCodeRanges returns them.
+func MatchHTTPStatusCodeRanges(ranges []StatusCodeRange, code int) bool {
 	if code < 100 || code > 599 {
 		return false
 	}

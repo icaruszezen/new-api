@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -902,6 +903,38 @@ func (info *RelayInfo) StreamWriteMutex() *sync.Mutex {
 		info.streamWriteMu = &sync.Mutex{}
 	}
 	return info.streamWriteMu
+}
+
+// AttemptState is the part of RelayInfo that a relay helper may rewrite while
+// sending one upstream request. Restoring it before a same-channel retry makes
+// the retry resend the request exactly as the first attempt did.
+type AttemptState struct {
+	isStream                  bool
+	originModelName           string
+	runtimeHeadersOverride    map[string]interface{}
+	useRuntimeHeadersOverride bool
+	requestConversionChain    []types.RelayFormat
+	finalRequestRelayFormat   types.RelayFormat
+}
+
+func (info *RelayInfo) SaveAttemptState() AttemptState {
+	return AttemptState{
+		isStream:                  info.IsStream,
+		originModelName:           info.OriginModelName,
+		runtimeHeadersOverride:    info.RuntimeHeadersOverride,
+		useRuntimeHeadersOverride: info.UseRuntimeHeadersOverride,
+		requestConversionChain:    slices.Clone(info.RequestConversionChain),
+		finalRequestRelayFormat:   info.FinalRequestRelayFormat,
+	}
+}
+
+func (info *RelayInfo) RestoreAttemptState(state AttemptState) {
+	info.IsStream = state.isStream
+	info.OriginModelName = state.originModelName
+	info.RuntimeHeadersOverride = state.runtimeHeadersOverride
+	info.UseRuntimeHeadersOverride = state.useRuntimeHeadersOverride
+	info.RequestConversionChain = slices.Clone(state.requestConversionChain)
+	info.FinalRequestRelayFormat = state.finalRequestRelayFormat
 }
 
 // ApplyResponsesClientDisconnectDrain copies the per-channel setting onto

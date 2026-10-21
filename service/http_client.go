@@ -305,8 +305,29 @@ func newTransportFactory(proxyURL *url.URL, tlsConfig *tls.Config) (func() *http
 		if tlsConfig != nil {
 			transport.TLSClientConfig = tlsConfig.Clone()
 		}
+		transport.DialContext = dialEarlyResponseConn(transport.DialContext)
+		transport.OnProxyConnectResponse = rejectProxyConnect
 		return transport
 	}, nil
+}
+
+// ProxyConnectError is an HTTP proxy refusing to open the tunnel to an
+// https upstream. net/http would otherwise report only the reason phrase,
+// dropping the status a channel retry policy can match.
+type ProxyConnectError struct {
+	StatusCode int
+	Status     string
+}
+
+func (e *ProxyConnectError) Error() string {
+	return "proxy refused CONNECT: " + e.Status
+}
+
+func rejectProxyConnect(_ context.Context, _ *url.URL, _ *http.Request, resp *http.Response) error {
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+	return &ProxyConnectError{StatusCode: resp.StatusCode, Status: resp.Status}
 }
 
 func newHTTPClientFromPolicy(policy HTTPTransportPolicy, proxyURL *url.URL, tlsConfig *tls.Config) (*http.Client, error) {

@@ -99,9 +99,10 @@ type NewAPIError struct {
 	// overriddenFrom keeps the upstream message after an administrator-authored
 	// override replaced it, so logs and diagnostics stay on the real failure.
 	overriddenFrom string
-	// upstreamStatusCode is the HTTP status the upstream actually answered with.
-	// It stays 0 for local failures, and a channel's status code mapping does
-	// not change it, unlike StatusCode.
+	// upstreamStatusCode is the HTTP status the upstream actually answered with,
+	// or the channel proxy when it refused the tunnel to the upstream. It stays
+	// 0 for local failures, and a channel's status code mapping does not change
+	// it, unlike StatusCode.
 	upstreamStatusCode int
 }
 

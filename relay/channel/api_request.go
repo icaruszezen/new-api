@@ -537,10 +537,17 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		}
 	}
 
-	resp, err := relayClient.Do(req)
+	resp, err := relayClient.Do(service.TraceEarlyUpstreamResponse(req))
 	if err != nil {
 		logger.LogError(c, "do request failed: "+err.Error())
-		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithHideErrMsg("upstream error: do request failed"))
+		options := []types.NewAPIErrorOptions{types.ErrOptionWithHideErrMsg("upstream error: do request failed")}
+		// A proxy refusing the tunnel is the hop the channel talks to, and the
+		// request never reached the upstream, so its status may be retried.
+		var proxyErr *service.ProxyConnectError
+		if errors.As(err, &proxyErr) {
+			options = append(options, types.ErrOptionWithUpstreamStatusCode(proxyErr.StatusCode))
+		}
+		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, options...)
 	}
 	if resp == nil {
 		return nil, errors.New("resp is nil")

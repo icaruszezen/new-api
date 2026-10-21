@@ -30,10 +30,12 @@ var (
 // earlyRejectConn is an upstream that answers after reading only the request
 // headers and then resets the connection with the body unread. Its answer
 // becomes readable a moment after a body write has failed, the order in which
-// net/http used to report the write error and drop the answer.
+// net/http used to report the write error and drop the answer. Once the answer
+// has been read, reads block as if the reset had not been noticed yet.
 type earlyRejectConn struct {
 	mu        sync.Mutex
 	answer    *strings.Reader
+	answered  bool
 	wrote     bool
 	reset     chan struct{}
 	resetOnce sync.Once
@@ -42,7 +44,7 @@ type earlyRejectConn struct {
 }
 
 func newEarlyRejectConn(answer string) *earlyRejectConn {
-	return &earlyRejectConn{answer: strings.NewReader(answer), reset: make(chan struct{}), closed: make(chan struct{})}
+	return &earlyRejectConn{answer: strings.NewReader(answer), answered: answer != "", reset: make(chan struct{}), closed: make(chan struct{})}
 }
 
 func (c *earlyRejectConn) Write(p []byte) (int, error) {
@@ -68,11 +70,17 @@ func (c *earlyRejectConn) Read(p []byte) (int, error) {
 		return 0, net.ErrClosed
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.answer.Len() == 0 {
+	if c.answer.Len() > 0 {
+		defer c.mu.Unlock()
+		return c.answer.Read(p)
+	}
+	answered := c.answered
+	c.mu.Unlock()
+	if !answered {
 		return 0, errReadReset
 	}
-	return c.answer.Read(p)
+	<-c.closed
+	return 0, net.ErrClosed
 }
 
 func (c *earlyRejectConn) Close() error {
@@ -92,26 +100,34 @@ func (c *earlyRejectConn) SetWriteDeadline(time.Time) error { return nil }
 
 func TestRelayConnKeepsUpstreamAnswerSentBeforeBodyWasRead(t *testing.T) {
 	const answerBody = `{"error":{"message":"No available accounts"}}`
-	rejection := "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\n\r\n" + answerBody
+	const answerHead = "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: 45\r\n"
 
 	tests := []struct {
 		name       string
 		answer     string
 		wantStatus int
 	}{
-		{name: "upstream answer is returned", answer: rejection, wantStatus: http.StatusServiceUnavailable},
+		{name: "answer closing the connection", answer: answerHead + "Connection: close\r\n\r\n" + answerBody, wantStatus: http.StatusServiceUnavailable},
+		{name: "keep-alive answer", answer: answerHead + "\r\n" + answerBody, wantStatus: http.StatusServiceUnavailable},
 		{name: "reset without an answer still fails", answer: ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			upstream := newEarlyRejectConn(tt.answer)
+			var dials atomic.Int32
 			client := &http.Client{
-				Timeout: 5 * time.Second,
+				Timeout: 2 * time.Second,
 				Transport: &http.Transport{DialContext: dialEarlyResponseConn(func(context.Context, string, string) (net.Conn, error) {
-					return upstream, nil
+					if dials.Add(1) == 1 {
+						return upstream, nil
+					}
+					clientEnd, serverEnd := net.Pipe()
+					go serveOKOverPipe(serverEnd)
+					return clientEnd, nil
 				})},
 			}
+			t.Cleanup(client.CloseIdleConnections)
 			req, err := http.NewRequest(http.MethodPost, "http://upstream.test/v1/messages", bytes.NewReader(make([]byte, 1<<20)))
 			require.NoError(t, err)
 
@@ -123,11 +139,21 @@ func TestRelayConnKeepsUpstreamAnswerSentBeforeBodyWasRead(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			defer resp.Body.Close()
 			assert.Equal(t, tt.wantStatus, resp.StatusCode)
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
 			assert.JSONEq(t, answerBody, string(body))
+
+			// The reset connection must not be handed to the next request,
+			// which may come from a caller that does not trace its requests.
+			next, err := client.Post("http://upstream.test/v1/models", "application/json", strings.NewReader(`{}`))
+			require.NoError(t, err)
+			nextBody, err := io.ReadAll(next.Body)
+			require.NoError(t, err)
+			require.NoError(t, next.Body.Close())
+			assert.Equal(t, "ok", string(nextBody))
+			assert.Equal(t, int32(2), dials.Load())
 		})
 	}
 }
@@ -166,7 +192,7 @@ func TestRelayConnStillResendsOnDeadPooledConnection(t *testing.T) {
 	var dials atomic.Int32
 	var firstConn *resettableConn
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: 2 * time.Second,
 		Transport: &http.Transport{DialContext: dialEarlyResponseConn(func(context.Context, string, string) (net.Conn, error) {
 			clientEnd, serverEnd := net.Pipe()
 			go serveOKOverPipe(serverEnd)
@@ -179,8 +205,15 @@ func TestRelayConnStillResendsOnDeadPooledConnection(t *testing.T) {
 	}
 	t.Cleanup(client.CloseIdleConnections)
 	send := func() *http.Response {
-		req, err := http.NewRequest(http.MethodPost, "http://upstream.test/v1/messages", strings.NewReader(`{"model":"m"}`))
+		const payload = `{"model":"m"}`
+		req, err := http.NewRequest(http.MethodPost, "http://upstream.test/v1/messages", nil)
 		require.NoError(t, err)
+		// An opaque body with a known length and GetBody, like the relay's
+		// replayable bodies, makes net/http flush the headers on their own
+		// while the request is being traced.
+		req.Body = io.NopCloser(struct{ io.Reader }{strings.NewReader(payload)})
+		req.ContentLength = int64(len(payload))
+		req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(payload)), nil }
 		resp, err := client.Do(TraceEarlyUpstreamResponse(req))
 		require.NoError(t, err)
 		body, err := io.ReadAll(resp.Body)

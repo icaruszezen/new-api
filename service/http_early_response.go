@@ -21,37 +21,41 @@ import (
 // and the channel's retry policy cannot match it.
 //
 // Once a traced relay request (see TraceEarlyUpstreamResponse) has put bytes
-// on the wire, a peer reset on a later write is swallowed and the rest of that
-// request is discarded, so the transport goes on to read whatever the
-// upstream answered. If nothing was answered, the read side fails with the
-// reset instead. The first write of a request is never swallowed: net/http
-// relies on that failure to resend a request on a fresh connection when a
-// pooled one turns out to be dead, and a later request on a connection that
-// was reset fails its first write with the stored error for the same reason.
+// on the wire, a later write failing with a peer reset is held back until the
+// transport closes the connection. Meanwhile the transport reads and returns
+// whatever the upstream answered, or the read error if nothing was answered,
+// and it never pools the connection because the write never succeeded. The
+// first write of a request is not held back: net/http relies on that failure
+// to resend a request on a fresh connection when a pooled one turns out to be
+// dead.
+//
+// HTTP/2 connections carry concurrent streams, and their read loop needs the
+// connection's write lock, so a held-back write would stall it. There the
+// reset write is reported as successful instead and the rest of the stream is
+// discarded; the read loop fails on the reset socket and retires the
+// connection.
 type earlyResponseConn struct {
 	net.Conn
 
-	mu sync.Mutex
-	// multiplexed is set for HTTP/2 connections, which carry concurrent
-	// requests and have no resend-on-dead-connection rule to preserve.
+	closed    chan struct{}
+	closeOnce sync.Once
+
+	mu          sync.Mutex
 	multiplexed bool
 	// armed covers the writes of the traced HTTP/1 request using the
 	// connection, from GotConn to WroteRequest.
 	armed bool
 	// wrote reports that the armed request has put bytes on the wire.
-	wrote bool
-	// discarding stays set from a swallowed reset until the next request,
-	// which also covers the transport's final buffer flush after WroteRequest.
-	discarding bool
-	resetErr   error
+	wrote    bool
+	resetErr error
 }
 
 func (c *earlyResponseConn) Write(p []byte) (int, error) {
 	c.mu.Lock()
 	if c.resetErr != nil {
-		discarding, resetErr := c.discarding, c.resetErr
+		multiplexed, resetErr := c.multiplexed, c.resetErr
 		c.mu.Unlock()
-		if discarding {
+		if multiplexed {
 			return len(p), nil
 		}
 		return 0, resetErr
@@ -61,17 +65,27 @@ func (c *earlyResponseConn) Write(p []byte) (int, error) {
 	n, err := c.Conn.Write(p)
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	tracked := c.armed || c.multiplexed
 	if tracked && n > 0 {
 		c.wrote = true
 	}
 	if err == nil || !tracked || !c.wrote || !isPeerResetError(err) {
+		c.mu.Unlock()
 		return n, err
 	}
 	c.resetErr = err
-	c.discarding = true
-	return len(p), nil
+	multiplexed := c.multiplexed
+	c.mu.Unlock()
+	if multiplexed {
+		return len(p), nil
+	}
+	<-c.closed
+	return n, err
+}
+
+func (c *earlyResponseConn) Close() error {
+	c.closeOnce.Do(func() { close(c.closed) })
+	return c.Conn.Close()
 }
 
 func (c *earlyResponseConn) beginRequest(multiplexed bool) {
@@ -86,7 +100,6 @@ func (c *earlyResponseConn) beginRequest(multiplexed bool) {
 	}
 	c.armed = true
 	c.wrote = false
-	c.discarding = false
 }
 
 func (c *earlyResponseConn) endRequestWrite() {
@@ -104,7 +117,7 @@ func dialEarlyResponseConn(dial func(ctx context.Context, network, address strin
 		if err != nil {
 			return nil, err
 		}
-		return &earlyResponseConn{Conn: conn}, nil
+		return &earlyResponseConn{Conn: conn, closed: make(chan struct{})}, nil
 	}
 }
 

@@ -456,3 +456,74 @@ func TestAwsStreamHandlerStopsAtClientCancellationAndKeepsPartialBillingUsage(t 
 		t.Fatal("upstream producer did not observe the closed stream")
 	}
 }
+
+// A channel's same-channel retry matches the HTTP status Bedrock answered
+// with, which only an SDK error carrying an HTTP response reports.
+func TestAwsHandlersRecordUpstreamStatus(t *testing.T) {
+	originalRelayTimeout := common.RelayTimeout
+	common.RelayTimeout = 0
+	t.Cleanup(func() {
+		common.RelayTimeout = originalRelayTimeout
+	})
+
+	handlers := []struct {
+		name    string
+		request func() any
+		handle  func(*gin.Context, *relaycommon.RelayInfo, *Adaptor) (*relaytypes.NewAPIError, *dto.Usage)
+	}{
+		{name: "non-stream", request: func() any { return newAwsInvokeModelInput() }, handle: awsHandler},
+		{name: "stream", request: func() any { return newAwsStreamInput() }, handle: awsStreamHandler},
+		{name: "nova", request: func() any { return newAwsInvokeModelInput() }, handle: handleNovaRequest},
+	}
+	upstreams := []struct {
+		name               string
+		do                 func(*http.Request) (*http.Response, error)
+		wantStatus         int
+		wantUpstreamStatus int
+	}{
+		{
+			name: "throttled by Bedrock",
+			do: func(request *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusTooManyRequests,
+					Status:     "429 Too Many Requests",
+					Header: http.Header{
+						"Content-Type":      []string{"application/json"},
+						"X-Amzn-Errortype":  []string{"ThrottlingException"},
+						"X-Amzn-Requestid":  []string{"request-id"},
+						"X-Amzn-Error-Code": []string{"ThrottlingException"},
+					},
+					Body:    io.NopCloser(bytes.NewReader([]byte(`{"message":"Too many requests"}`))),
+					Request: request,
+				}, nil
+			},
+			wantStatus:         http.StatusTooManyRequests,
+			wantUpstreamStatus: http.StatusTooManyRequests,
+		},
+		{
+			name: "connection failure",
+			do: func(*http.Request) (*http.Response, error) {
+				return nil, errors.New("connection refused")
+			},
+			wantStatus:         http.StatusInternalServerError,
+			wantUpstreamStatus: 0,
+		},
+	}
+
+	for _, handler := range handlers {
+		for _, upstream := range upstreams {
+			t.Run(handler.name+"/"+upstream.name, func(t *testing.T) {
+				adaptor := &Adaptor{AwsClient: newAwsTestClient(awsHTTPClientFunc(upstream.do)), AwsReq: handler.request()}
+				c := newAwsTestContext(httptest.NewRecorder(), context.Background())
+
+				err, usage := handler.handle(c, newAwsTestRelayInfo(), adaptor)
+
+				require.NotNil(t, err)
+				assert.Nil(t, usage)
+				assert.Equal(t, upstream.wantStatus, err.StatusCode)
+				assert.Equal(t, upstream.wantUpstreamStatus, err.UpstreamStatusCode())
+				assert.False(t, relaytypes.IsSkipRetryError(err))
+			})
+		}
+	}
+}

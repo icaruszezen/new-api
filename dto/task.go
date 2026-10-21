@@ -11,6 +11,9 @@ type TaskError struct {
 	StatusCode int    `json:"-"`
 	LocalError bool   `json:"-"`
 	Error      error  `json:"-"`
+	// UpstreamStatusCode is the HTTP status the upstream answered the submit
+	// with; 0 when the error did not come from an upstream HTTP response.
+	UpstreamStatusCode int `json:"-"`
 }
 
 type TaskData interface {

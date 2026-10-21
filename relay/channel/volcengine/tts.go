@@ -216,6 +216,7 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 				fmt.Errorf("failed to connect to websocket: %w, status: %d", dialErr, resp.StatusCode),
 				types.ErrorCodeBadResponseStatusCode,
 				http.StatusBadGateway,
+				types.ErrOptionWithUpstreamStatusCode(resp.StatusCode),
 			)
 		}
 		return nil, types.NewErrorWithStatusCode(

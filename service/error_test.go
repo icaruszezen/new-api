@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,6 +62,42 @@ func TestResetStatusCode(t *testing.T) {
 			}
 			ResetStatusCode(newAPIError, tc.statusCodeConfig)
 			require.Equal(t, tc.expectedCode, newAPIError.StatusCode)
+		})
+	}
+}
+
+type failingResponseBody struct{}
+
+func (failingResponseBody) Read([]byte) (int, error) { return 0, errors.New("connection reset") }
+func (failingResponseBody) Close() error             { return nil }
+
+// A channel's same-channel retry matches the status the upstream answered
+// with, so every RelayErrorHandler branch must record it and the channel's
+// status code mapping must leave it alone.
+func TestRelayErrorHandlerRecordsUpstreamStatusThroughStatusCodeMapping(t *testing.T) {
+	tests := []struct {
+		name string
+		body io.ReadCloser
+	}{
+		{name: "unreadable body", body: failingResponseBody{}},
+		{name: "body is not JSON", body: io.NopCloser(strings.NewReader("<html>too many requests</html>"))},
+		{name: "OpenAI-style error object", body: io.NopCloser(strings.NewReader(`{"error":{"message":"rate limited","type":"rate_limit_error","code":"rate_limit"}}`))},
+		{name: "message-only body", body: io.NopCloser(strings.NewReader(`{"message":"rate limited"}`))},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := &http.Response{StatusCode: http.StatusTooManyRequests, Body: tt.body}
+
+			newAPIError := RelayErrorHandler(context.Background(), resp, false)
+
+			require.NotNil(t, newAPIError)
+			assert.Equal(t, http.StatusTooManyRequests, newAPIError.StatusCode)
+			assert.Equal(t, http.StatusTooManyRequests, newAPIError.UpstreamStatusCode())
+
+			ResetStatusCode(newAPIError, `{"429":"503"}`)
+			assert.Equal(t, http.StatusServiceUnavailable, newAPIError.StatusCode)
+			assert.Equal(t, http.StatusTooManyRequests, newAPIError.UpstreamStatusCode())
 		})
 	}
 }

@@ -13,6 +13,7 @@ import (
 // BodyStorage 请求体存储接口
 type BodyStorage interface {
 	io.ReadSeeker
+	io.ReaderAt
 	io.Closer
 	// Bytes 获取全部内容
 	Bytes() ([]byte, error)
@@ -66,6 +67,16 @@ func (m *memoryStorage) Read(p []byte) (n int, err error) {
 		return 0, ErrStorageClosed
 	}
 	return m.reader.Read(p)
+}
+
+func (m *memoryStorage) ReadAt(p []byte, off int64) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if atomic.LoadInt32(&m.closed) == 1 {
+		return 0, ErrStorageClosed
+	}
+	// bytes.Reader.ReadAt never touches the shared cursor.
+	return m.reader.ReadAt(p, off)
 }
 
 func (m *memoryStorage) Seek(offset int64, whence int) (int64, error) {
@@ -200,6 +211,15 @@ func (d *diskStorage) Read(p []byte) (n int, err error) {
 		return 0, ErrStorageClosed
 	}
 	return d.file.Read(p)
+}
+
+func (d *diskStorage) ReadAt(p []byte, off int64) (int, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if atomic.LoadInt32(&d.closed) == 1 {
+		return 0, ErrStorageClosed
+	}
+	return d.file.ReadAt(p, off)
 }
 
 func (d *diskStorage) Seek(offset int64, whence int) (int64, error) {
@@ -347,27 +367,35 @@ func CreateBodyStorageFromReader(reader io.Reader, contentLength int64, maxBytes
 	return storage, nil
 }
 
+// replayableBodyReader reads storage through its own offset rather than the
+// storage's shared cursor. A request whose upstream answered early may still
+// have its body being written by the transport when the same storage is sent
+// again (a retry), and the two must not move each other's position.
 type replayableBodyReader struct {
 	storage BodyStorage
+	offset  int64
 }
 
-func (r replayableBodyReader) Read(p []byte) (int, error) {
-	return r.storage.Read(p)
+func (r *replayableBodyReader) Read(p []byte) (int, error) {
+	n, err := r.storage.ReadAt(p, r.offset)
+	r.offset += int64(n)
+	return n, err
 }
 
-func (r replayableBodyReader) Size() int64 {
+func (r *replayableBodyReader) Size() int64 {
 	return r.storage.Size()
 }
 
-func (r replayableBodyReader) NewReader() (io.ReadCloser, error) {
+func (r *replayableBodyReader) NewReader() (io.ReadCloser, error) {
 	return r.storage.NewReader()
 }
 
 // NewReplayableBodyReader exposes the replay capabilities of storage without
 // exposing io.Closer. This keeps ownership of the storage lifecycle with the
-// caller instead of allowing net/http to close it as the request body.
+// caller instead of allowing net/http to close it as the request body. The
+// returned body always starts at the beginning of the payload.
 func NewReplayableBodyReader(storage BodyStorage) ReplayableBody {
-	return replayableBodyReader{storage: storage}
+	return &replayableBodyReader{storage: storage}
 }
 
 // CleanupOldCacheFiles 清理旧的缓存文件（用于启动时清理残留）

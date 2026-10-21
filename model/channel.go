@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/samber/lo"
 	"gorm.io/gorm"
@@ -1017,6 +1018,15 @@ func (channel *Channel) ValidateSettings() error {
 		if channelParams.StreamPreludeDelayMaxSeconds > 30 {
 			return fmt.Errorf("stream_prelude_delay_max_seconds must not exceed 30")
 		}
+	}
+	if channelParams.RetryTimes < 0 || channelParams.RetryTimes > dto.MaxChannelRetryTimes {
+		return fmt.Errorf("retry_times must be between 0 and %d", dto.MaxChannelRetryTimes)
+	}
+	if _, err := operation_setting.ParseHTTPStatusCodeRanges(channelParams.RetryStatusCodes); err != nil {
+		return fmt.Errorf("invalid retry_status_codes: %w", err)
+	}
+	if interval := channelParams.RetryIntervalMs; interval != nil && (*interval < 0 || *interval > dto.MaxChannelRetryIntervalMs) {
+		return fmt.Errorf("retry_interval_ms must be between 0 and %d", dto.MaxChannelRetryIntervalMs)
 	}
 	channelOtherSettings := &dto.ChannelOtherSettings{}
 	if channel.OtherSettings != "" {

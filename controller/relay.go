@@ -229,23 +229,43 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
 
-		switch relayFormat {
-		case types.RelayFormatOpenAIRealtime:
-			newAPIError = relay.WssHelper(c, relayInfo)
-		case types.RelayFormatClaude:
-			newAPIError = relay.ClaudeHelper(c, relayInfo)
-		case types.RelayFormatGemini:
-			newAPIError = geminiRelayHandler(c, relayInfo)
-		default:
-			newAPIError = relayHandler(c, relayInfo)
-		}
+		// The channel's own retries re-send the request to this same channel
+		// and do not count against the global retries below.
+		channelRetry := service.GetChannelRetryPolicy(c)
+		attemptState := relayInfo.SaveAttemptState()
+		for channelRetried := 0; ; channelRetried++ {
+			switch relayFormat {
+			case types.RelayFormatOpenAIRealtime:
+				newAPIError = relay.WssHelper(c, relayInfo)
+			case types.RelayFormatClaude:
+				newAPIError = relay.ClaudeHelper(c, relayInfo)
+			case types.RelayFormatGemini:
+				newAPIError = geminiRelayHandler(c, relayInfo)
+			default:
+				newAPIError = relayHandler(c, relayInfo)
+			}
 
-		if newAPIError == nil {
-			relayInfo.LastError = nil
-			return
-		}
+			if newAPIError == nil {
+				relayInfo.LastError = nil
+				return
+			}
 
-		newAPIError = service.NormalizeViolationFeeError(newAPIError)
+			newAPIError = service.NormalizeViolationFeeError(newAPIError)
+			if !shouldRetrySameChannel(c, relayFormat, channelRetry, channel.GetAutoBan(), newAPIError, channelRetried) {
+				break
+			}
+			logger.LogWarn(c, fmt.Sprintf("channel #%d returned upstream status %d, retrying the same channel (%d/%d) after %dms",
+				channel.Id, newAPIError.UpstreamStatusCode(), channelRetried+1, channelRetry.Times, channelRetry.Interval.Milliseconds()))
+			if !channelRetry.WaitBeforeRetry(c.Request.Context()) {
+				break
+			}
+			if bodyStorage, bodyErr = common.GetBodyStorage(c); bodyErr != nil {
+				break
+			}
+			c.Request.Body = io.NopCloser(bodyStorage)
+			relayInfo.RestoreAttemptState(attemptState)
+			addUsedChannel(c, channel.Id)
+		}
 		relayInfo.LastError = newAPIError
 
 		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
@@ -371,6 +391,34 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 		return false
 	}
 	return operation_setting.ShouldRetryByStatusCode(code)
+}
+
+// shouldRetrySameChannel reports whether a failed attempt is re-sent to the
+// channel that just served it, per that channel's own retry setting. It matches
+// the status the upstream actually answered with, before the channel's status
+// code mapping, so local and network failures never qualify.
+func shouldRetrySameChannel(c *gin.Context, relayFormat types.RelayFormat, policy service.ChannelRetryPolicy, autoBan bool, err *types.NewAPIError, retried int) bool {
+	if err == nil || retried >= policy.Times {
+		return false
+	}
+	if types.IsSkipRetryError(err) || types.IsChannelError(err) {
+		return false
+	}
+	if !policy.RetriesUpstreamStatus(err.UpstreamStatusCode()) {
+		return false
+	}
+	// A channel that is about to be disabled is not worth another attempt.
+	if autoBan && service.ShouldDisableChannel(err) {
+		return false
+	}
+	if c.Request.Context().Err() != nil {
+		return false
+	}
+	// Nothing may have reached the client yet. Realtime hijacks the connection
+	// before the first attempt, so Written() is always true there; its upstream
+	// status is only recorded when the handshake is rejected, before any frame
+	// is relayed.
+	return relayFormat == types.RelayFormatOpenAIRealtime || !c.Writer.Written()
 }
 
 func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError) {
@@ -567,7 +615,25 @@ func RelayTask(c *gin.Context) {
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
 
-		result, taskErr = relay.RelayTaskSubmit(c, relayInfo)
+		// The channel's own retries re-send the submit to this same channel
+		// and do not count against the global retries below.
+		channelRetry := service.GetChannelRetryPolicy(c)
+		for channelRetried := 0; ; channelRetried++ {
+			result, taskErr = relay.RelayTaskSubmit(c, relayInfo)
+			if !shouldRetryTaskSameChannel(c, channelRetry, channel.GetAutoBan(), taskErr, channelRetried) {
+				break
+			}
+			logger.LogWarn(c, fmt.Sprintf("channel #%d returned upstream status %d, retrying the same channel (%d/%d) after %dms",
+				channel.Id, taskErr.UpstreamStatusCode, channelRetried+1, channelRetry.Times, channelRetry.Interval.Milliseconds()))
+			if !channelRetry.WaitBeforeRetry(c.Request.Context()) {
+				break
+			}
+			if bodyStorage, bodyErr = common.GetBodyStorage(c); bodyErr != nil {
+				break
+			}
+			c.Request.Body = io.NopCloser(bodyStorage)
+			addUsedChannel(c, channel.Id)
+		}
 		if taskErr == nil {
 			break
 		}
@@ -635,6 +701,22 @@ func respondTaskError(c *gin.Context, taskErr *taskdto.TaskError) {
 		}
 	}
 	c.JSON(taskErr.StatusCode, taskErr)
+}
+
+// shouldRetryTaskSameChannel is shouldRetrySameChannel for task submits, whose
+// upstream status is never remapped.
+func shouldRetryTaskSameChannel(c *gin.Context, policy service.ChannelRetryPolicy, autoBan bool, taskErr *taskdto.TaskError, retried int) bool {
+	if taskErr == nil || retried >= policy.Times {
+		return false
+	}
+	if !policy.RetriesUpstreamStatus(taskErr.UpstreamStatusCode) {
+		return false
+	}
+	// Same check processChannelError makes before disabling the channel.
+	if autoBan && service.ShouldDisableChannel(types.NewOpenAIError(taskErr.Error, types.ErrorCodeBadResponseStatusCode, taskErr.StatusCode)) {
+		return false
+	}
+	return c.Request.Context().Err() == nil && !c.Writer.Written()
 }
 
 func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *taskdto.TaskError, retryTimes int) bool {

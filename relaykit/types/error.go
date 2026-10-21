@@ -99,6 +99,10 @@ type NewAPIError struct {
 	// overriddenFrom keeps the upstream message after an administrator-authored
 	// override replaced it, so logs and diagnostics stay on the real failure.
 	overriddenFrom string
+	// upstreamStatusCode is the HTTP status the upstream actually answered with.
+	// It stays 0 for local failures, and a channel's status code mapping does
+	// not change it, unlike StatusCode.
+	upstreamStatusCode int
 }
 
 // Unwrap enables errors.Is / errors.As to work with NewAPIError by exposing the underlying error.
@@ -114,6 +118,15 @@ func (e *NewAPIError) GetErrorCode() ErrorCode {
 		return ""
 	}
 	return e.errorCode
+}
+
+// UpstreamStatusCode returns the HTTP status the upstream answered with, or 0
+// when the error did not come from an upstream HTTP response.
+func (e *NewAPIError) UpstreamStatusCode() int {
+	if e == nil {
+		return 0
+	}
+	return e.upstreamStatusCode
 }
 
 func (e *NewAPIError) GetErrorType() ErrorType {
@@ -418,6 +431,14 @@ func IsSkipRetryError(err *NewAPIError) bool {
 func ErrOptionWithSkipRetry() NewAPIErrorOptions {
 	return func(e *NewAPIError) {
 		e.skipRetry = true
+	}
+}
+
+// ErrOptionWithUpstreamStatusCode records the HTTP status the upstream
+// answered with, so it survives a later status code mapping.
+func ErrOptionWithUpstreamStatusCode(statusCode int) NewAPIErrorOptions {
+	return func(e *NewAPIError) {
+		e.upstreamStatusCode = statusCode
 	}
 }
 

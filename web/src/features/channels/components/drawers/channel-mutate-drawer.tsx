@@ -290,6 +290,9 @@ const SENSITIVE_FORM_FIELDS = [
   'proxy',
   'http_protocol',
   'http2_connection_shards',
+  'retry_times',
+  'retry_status_codes',
+  'retry_interval_ms',
   'pass_through_body_enabled',
   'responses_client_disconnect_drain_enabled',
   'system_prompt',
@@ -354,6 +357,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     (values.http_protocol && values.http_protocol !== 'auto') ||
     (values.http2_connection_shards != null &&
       values.http2_connection_shards > 1) ||
+    (values.retry_times != null && values.retry_times > 0) ||
     values.claude_beta_query ||
     values.upstream_model_update_check_enabled ||
     values.upstream_model_update_auto_sync_enabled ||
@@ -762,6 +766,8 @@ export function ChannelMutateDrawer({
   const currentProxy = form.watch('proxy')
   const currentHttpProtocol = form.watch('http_protocol')
   const currentHttp2ConnectionShards = form.watch('http2_connection_shards')
+  const currentRetryTimes = form.watch('retry_times')
+  const channelRetryEnabled = currentRetryTimes != null && currentRetryTimes > 0
   const currentSystemPrompt = form.watch('system_prompt')
   const currentSystemPromptOverride = form.watch('system_prompt_override')
   const currentAllowServiceTier = form.watch('allow_service_tier')
@@ -1033,7 +1039,9 @@ export function ChannelMutateDrawer({
     currentSystemPrompt?.trim() ||
     currentSystemPromptOverride ||
     (currentHttpProtocol && currentHttpProtocol !== 'auto') ||
-    (currentHttp2ConnectionShards != null && currentHttp2ConnectionShards > 1)
+    (currentHttp2ConnectionShards != null &&
+      currentHttp2ConnectionShards > 1) ||
+    channelRetryEnabled
   )
   let fieldPassthroughConfigured = false
   if (OPENAI_FIELD_PASSTHROUGH_TYPES.has(currentType)) {
@@ -4696,6 +4704,104 @@ export function ChannelMutateDrawer({
                                 )
                               }}
                             />
+
+                            <FormField
+                              control={form.control}
+                              name='retry_times'
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>{t('Retry Times')}</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type='number'
+                                      min={0}
+                                      max={10}
+                                      step={1}
+                                      placeholder={t('No Retry')}
+                                      {...field}
+                                      value={field.value ?? ''}
+                                      onChange={(event) => {
+                                        const next = event.target.value
+                                        // null, not undefined: RHF would
+                                        // fall back to the mounted value.
+                                        field.onChange(
+                                          next === '' ? null : Number(next)
+                                        )
+                                      }}
+                                    />
+                                  </FormControl>
+                                  <FormDescription>
+                                    {t(
+                                      'Re-send the request to this channel when the upstream returns one of the status codes below. Leave empty or 0 to disable. Runs before the global retry that switches channels.'
+                                    )}
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            {channelRetryEnabled && (
+                              <div className='grid gap-4 sm:grid-cols-2'>
+                                <FormField
+                                  control={form.control}
+                                  name='retry_status_codes'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('Retry Status Codes')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder='429,503'
+                                          {...field}
+                                          value={field.value ?? ''}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          "Matches the upstream's original HTTP status, before status code mapping. Separate multiple codes with commas; ranges like 500-599 are allowed. Defaults to 429,503."
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='retry_interval_ms'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('Retry Interval (ms)')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type='number'
+                                          min={0}
+                                          max={60000}
+                                          step={1}
+                                          placeholder='200'
+                                          {...field}
+                                          value={field.value ?? ''}
+                                          onChange={(event) => {
+                                            const next = event.target.value
+                                            field.onChange(
+                                              next === '' ? null : Number(next)
+                                            )
+                                          }}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          'Wait time before each retry. Defaults to 200 ms.'
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+                            )}
 
                             <FormField
                               control={form.control}

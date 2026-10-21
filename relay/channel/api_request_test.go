@@ -1,7 +1,9 @@
 package channel
 
 import (
+	"bufio"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +11,7 @@ import (
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
@@ -355,4 +358,40 @@ func TestDoWssRequestRecordsHandshakeRejectionStatus(t *testing.T) {
 			assert.Equal(t, tt.wantUpstreamStatus, apiErr.UpstreamStatusCode())
 		})
 	}
+}
+
+func TestDoRequestRecordsProxyConnectRefusalStatus(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			if _, err := http.ReadRequest(bufio.NewReader(conn)); err == nil {
+				_, _ = io.WriteString(conn, "HTTP/1.1 503 No available proxy\r\nContent-Length: 0\r\n\r\n")
+			}
+			_ = conn.Close()
+		}
+	}()
+	proxyURL := "http://" + listener.Addr().String()
+	t.Cleanup(func() { service.InvalidateProxyClient(proxyURL) })
+
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelSetting: dto.ChannelSettings{Proxy: proxyURL}}}
+	req, err := http.NewRequest(http.MethodPost, "https://upstream.invalid/v1/chat/completions", strings.NewReader(`{}`))
+	require.NoError(t, err)
+
+	resp, err := doRequest(ctx, req, info)
+
+	require.Nil(t, resp)
+	var apiErr *types.NewAPIError
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, types.ErrorCodeDoRequestFailed, apiErr.GetErrorCode())
+	assert.Equal(t, http.StatusInternalServerError, apiErr.StatusCode)
+	assert.Equal(t, http.StatusServiceUnavailable, apiErr.UpstreamStatusCode())
 }

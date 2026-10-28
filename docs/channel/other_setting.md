@@ -21,7 +21,7 @@
    - 类型为布尔值，默认 false（客户端断开即关闭上游连接，上游停止生成）
    - 对所有中继路径生效（Chat Completions、Claude Messages、Gemini、Responses、图片、音频等），包括开启透传的渠道；按哪种协议解析上游由渠道的上游 API 类型对应的适配器决定
    - 排水在以下任一情况结束：上游正常结束或报错；上游空闲超过 `STREAMING_TIMEOUT`；排水时长超过 `STREAM_DRAIN_MAX_SECONDS`（默认 1800 秒）
-   - 透传渠道的 OpenAI Chat 流式请求在开启本项时，会在转发的请求体里补上 `stream_options.include_usage=true`，让上游返回 usage；客户端未要求 usage 时不会看到这一块
+   - 透传渠道的 OpenAI Chat 流式请求在开启本项时（且渠道支持 `stream_options`、`FORCE_STREAM_OPTION` 未关闭），会在转发的请求体里补上 `stream_options.include_usage=true`，让上游返回 usage；客户端未要求 usage 时不会看到这一块
    - 客户端断开后不再切换到其它渠道重试
 
 --------------------------------------------------------------

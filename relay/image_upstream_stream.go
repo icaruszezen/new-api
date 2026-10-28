@@ -6,6 +6,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,7 +31,8 @@ func shouldImageUpstreamStreamSynthesize(c *gin.Context, info *relaycommon.Relay
 	if !info.ChannelSetting.ImageNonStreamViaUpstreamStreamEnabled {
 		return false
 	}
-	if info.ChannelSetting.PassThroughBodyEnabled {
+	// 透传（全局或渠道）原样转发请求体，补不上 stream:true，不能走上游流式聚合
+	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
 		return false
 	}
 	if !isOpenAICompatibleImageApiType(info.ApiType) {

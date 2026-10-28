@@ -18,6 +18,8 @@ import (
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/samber/lo"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 
 	"github.com/gin-gonic/gin"
 )
@@ -102,14 +104,26 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
 		requestBody = common.NewReplayableBodyReader(storage)
-		if info.ChannelSetting.AutoSetReasoningEffortByModel {
+		// 透传发送的是原始请求体，上面 ForceStreamOption 只改了解析副本，include_usage 到不了上游，
+		// 客户端没要 usage 时流（含断开后排水的流）只能按本地估算计费。开启断开后排水时在原始请求体上
+		// 补 stream_options.include_usage=true；客户端是否看到 usage 块仍由 ShouldIncludeUsage 决定。
+		forceStreamUsage := info.DrainUpstreamOnClientDisconnect && constant.ForceStreamOption &&
+			info.SupportStreamOptions && lo.FromPtrOr(request.Stream, false)
+		if info.ChannelSetting.AutoSetReasoningEffortByModel || forceStreamUsage {
 			bodyBytes, bErr := storage.Bytes()
 			if bErr != nil {
 				return types.NewError(bErr, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 			}
-			updatedBody, changed, applyErr := applyOpenAIPassThroughReasoningEffortFromModel(bodyBytes, true)
+			updatedBody, changed, applyErr := applyOpenAIPassThroughReasoningEffortFromModel(bodyBytes, info.ChannelSetting.AutoSetReasoningEffortByModel)
 			if applyErr != nil {
 				return types.NewError(applyErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			}
+			if forceStreamUsage && gjson.GetBytes(updatedBody, "stream_options.include_usage").Type != gjson.True {
+				updatedBody, applyErr = sjson.SetBytes(updatedBody, "stream_options.include_usage", true)
+				if applyErr != nil {
+					return types.NewError(applyErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+				}
+				changed = true
 			}
 			if changed {
 				body, closer, createErr := relaycommon.NewOutboundJSONBody(updatedBody)

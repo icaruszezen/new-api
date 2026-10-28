@@ -3,13 +3,16 @@ package volcengine
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -154,7 +157,7 @@ func handleTTSResponse(c *gin.Context, resp *http.Response, info *relaycommon.Re
 	defer resp.Body.Close()
 
 	var volcResp VolcengineTTSResponse
-	if unmarshalErr := json.Unmarshal(body, &volcResp); unmarshalErr != nil {
+	if unmarshalErr := common.Unmarshal(body, &volcResp); unmarshalErr != nil {
 		return nil, types.NewErrorWithStatusCode(
 			errors.New("failed to parse volcengine response"),
 			types.ErrorCodeBadResponseBody,
@@ -227,7 +230,7 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 	}
 	defer conn.Close()
 
-	payload, marshalErr := json.Marshal(volcRequest)
+	payload, marshalErr := common.Marshal(volcRequest)
 	if marshalErr != nil {
 		return nil, types.NewErrorWithStatusCode(
 			fmt.Errorf("failed to marshal request: %w", marshalErr),
@@ -248,11 +251,44 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 	c.Header("Content-Type", contentType)
 	c.Header("Transfer-Encoding", "chunked")
 
+	usage = &dto.Usage{
+		PromptTokens:     info.GetEstimatePromptTokens(),
+		CompletionTokens: 0,
+		TotalTokens:      info.GetEstimatePromptTokens(),
+	}
+	// 客户端断开时上游已在合成，按输入预估计费而不是报错退款。未开启断开后排水时停止接收，
+	// 由 defer 关闭 websocket；开启时继续收到最终帧让上游正常结束，空闲受 STREAMING_TIMEOUT、
+	// 总时长受 STREAM_DRAIN_MAX_SECONDS 约束。计费与上游输出无关，排水不改变计费结果。
+	clientGone := false
+	var drainStart time.Time
 	for {
+		if !clientGone && c.Request.Context().Err() != nil {
+			clientGone = true
+		}
+		if clientGone {
+			if !info.DrainUpstreamOnClientDisconnect {
+				logger.LogInfo(c, "volcengine tts: client disconnected, closing the upstream websocket")
+				return usage, nil
+			}
+			if drainStart.IsZero() {
+				drainStart = time.Now()
+				logger.LogInfo(c, "volcengine tts: client disconnected, receiving the upstream to its final frame")
+			}
+			readDeadline := time.Now().Add(time.Duration(constant.StreamingTimeout) * time.Second)
+			if maxDrain := time.Duration(constant.StreamDrainMaxSeconds) * time.Second; maxDrain > 0 && drainStart.Add(maxDrain).Before(readDeadline) {
+				readDeadline = drainStart.Add(maxDrain)
+			}
+			_ = conn.SetReadDeadline(readDeadline)
+		}
+
 		msg, recvErr := ReceiveMessage(conn)
 		if recvErr != nil {
 			if websocket.IsCloseError(recvErr, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				break
+			}
+			if clientGone {
+				logger.LogWarn(c, fmt.Sprintf("volcengine tts: upstream ended before the final frame after the client disconnected: %v", recvErr))
+				return usage, nil
 			}
 			return nil, types.NewErrorWithStatusCode(
 				fmt.Errorf("failed to receive message: %w", recvErr),
@@ -263,6 +299,10 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 
 		switch msg.MsgType {
 		case MsgTypeError:
+			if clientGone {
+				logger.LogWarn(c, fmt.Sprintf("volcengine tts: upstream error after the client disconnected: code=%d, %s", msg.ErrorCode, string(msg.Payload)))
+				return usage, nil
+			}
 			return nil, types.NewErrorWithStatusCode(
 				fmt.Errorf("received error from server: code=%d, %s", msg.ErrorCode, string(msg.Payload)),
 				types.ErrorCodeBadResponse,
@@ -271,24 +311,17 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 		case MsgTypeFrontEndResultServer:
 			continue
 		case MsgTypeAudioOnlyServer:
-			if len(msg.Payload) > 0 {
+			if len(msg.Payload) > 0 && !clientGone {
 				if _, writeErr := c.Writer.Write(msg.Payload); writeErr != nil {
-					return nil, types.NewErrorWithStatusCode(
-						fmt.Errorf("failed to write audio data: %w", writeErr),
-						types.ErrorCodeBadResponse,
-						http.StatusInternalServerError,
-					)
+					logger.LogWarn(c, fmt.Sprintf("volcengine tts: failed to write audio data to the client: %v", writeErr))
+					clientGone = true
+				} else {
+					c.Writer.Flush()
 				}
-				c.Writer.Flush()
 			}
 
 			if msg.Sequence < 0 {
 				c.Status(http.StatusOK)
-				usage = &dto.Usage{
-					PromptTokens:     info.GetEstimatePromptTokens(),
-					CompletionTokens: 0,
-					TotalTokens:      info.GetEstimatePromptTokens(),
-				}
 				return usage, nil
 			}
 		default:
@@ -297,10 +330,5 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 	}
 
 	c.Status(http.StatusOK)
-	usage = &dto.Usage{
-		PromptTokens:     info.GetEstimatePromptTokens(),
-		CompletionTokens: 0,
-		TotalTokens:      info.GetEstimatePromptTokens(),
-	}
 	return usage, nil
 }

@@ -21,9 +21,6 @@ import (
 
 func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
 	info.InitChannelMeta(c)
-	if info.IsStream && info.RelayMode == relayconstant.RelayModeResponses {
-		info.ApplyResponsesClientDisconnectDrain()
-	}
 	if info.RelayMode == relayconstant.RelayModeResponsesCompact &&
 		!common.SupportsResponsesCompact(info.ChannelType, info.ApiType) {
 		return types.NewErrorWithStatusCode(

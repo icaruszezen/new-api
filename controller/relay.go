@@ -365,6 +365,11 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if openaiErr == nil {
 		return false
 	}
+	// Nobody is waiting for another channel's answer. On a channel that drains
+	// after a client disconnect, a retry would also be read to the end and billed.
+	if c.Request.Context().Err() != nil {
+		return false
+	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		return false
 	}

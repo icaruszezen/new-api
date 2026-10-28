@@ -180,6 +180,13 @@ func positiveUserSessionEnv(name string, fallback int) int {
 
 func initConstantEnv() {
 	constant.StreamingTimeout = GetEnvOrDefault("STREAMING_TIMEOUT", 300)
+	if constant.StreamingTimeout <= 0 {
+		// time.NewTicker panics on a non-positive interval, which would fail every stream.
+		SysError(fmt.Sprintf("STREAMING_TIMEOUT must be positive, using default value: %d", 300))
+		constant.StreamingTimeout = 300
+	}
+	// 客户端断开后继续排水的最长时间（秒），<=0 不限（仍受 STREAMING_TIMEOUT 空闲超时约束）
+	constant.StreamDrainMaxSeconds = GetEnvOrDefault("STREAM_DRAIN_MAX_SECONDS", 1800)
 	constant.DifyDebug = GetEnvOrDefaultBool("DIFY_DEBUG", true)
 	constant.MaxFileDownloadMB = GetEnvOrDefault("MAX_FILE_DOWNLOAD_MB", 64)
 	constant.StreamScannerMaxBufferMB = GetEnvOrDefault("STREAM_SCANNER_MAX_BUFFER_MB", 128)

@@ -807,3 +807,25 @@ func TestShouldRetryTaskSameChannel(t *testing.T) {
 		})
 	}
 }
+
+func TestShouldRetryStopsOnceClientIsGone(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	newContext := func(cancelRequest bool) *gin.Context {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(ctx)
+		if cancelRequest {
+			cancel()
+		}
+		return c
+	}
+	upstreamFailure := types.NewOpenAIError(errors.New("bad response"), types.ErrorCodeBadResponse, http.StatusInternalServerError)
+	channelFailure := types.NewError(errors.New("no key"), types.ErrorCodeChannelNoAvailableKey)
+
+	assert.True(t, shouldRetry(newContext(false), upstreamFailure, 1), "a connected client gets another channel")
+	// After the client disconnected, a retry would be read to the end and
+	// billed on a channel that drains, with nobody waiting for the answer.
+	assert.False(t, shouldRetry(newContext(true), upstreamFailure, 1))
+	assert.False(t, shouldRetry(newContext(true), channelFailure, 1))
+}

@@ -68,8 +68,6 @@ func OaiChatToResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	}
 	defer service.CloseResponseBodyGracefully(resp)
 
-	info.ApplyResponsesClientDisconnectDrain()
-
 	responseID := helper.GetResponseID(c)
 	state, err := relayconvert.NewResponseStreamState(types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses, relayconvert.ResponseStreamOptions{
 		ID:    responseID,

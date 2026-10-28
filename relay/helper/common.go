@@ -27,7 +27,7 @@ func FlushWriter(c *gin.Context) (err error) {
 	}
 
 	if requestContextDone(c) {
-		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+		return clientGoneError(c)
 	}
 
 	flusher, ok := c.Writer.(http.Flusher)
@@ -41,6 +41,16 @@ func FlushWriter(c *gin.Context) (err error) {
 
 func requestContextDone(c *gin.Context) bool {
 	return c != nil && c.Request != nil && c.Request.Context().Err() != nil
+}
+
+// ErrClientGone wraps every stream write skipped because the client has
+// disconnected. It never means the upstream failed: handlers keep parsing the
+// upstream so a client-disconnect drain still sees the final usage, and
+// StreamResult.Error does not count it as a stream error.
+var ErrClientGone = errors.New("request context done")
+
+func clientGoneError(c *gin.Context) error {
+	return fmt.Errorf("%w: %w", ErrClientGone, c.Request.Context().Err())
 }
 
 func SetEventStreamHeaders(c *gin.Context) {
@@ -87,7 +97,7 @@ func ClaudeChunkData(c *gin.Context, resp dto.ClaudeResponse, data string) {
 
 func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data string) error {
 	if requestContextDone(c) {
-		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+		return clientGoneError(c)
 	}
 
 	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
@@ -101,7 +111,7 @@ func StringData(c *gin.Context, str string) error {
 	}
 
 	if requestContextDone(c) {
-		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+		return clientGoneError(c)
 	}
 
 	c.Render(-1, common.CustomEvent{Data: "data: " + service.RewriteStreamErrorPayload(c, str)})
@@ -116,7 +126,7 @@ func CommentData(c *gin.Context, comment string) error {
 	}
 
 	if requestContextDone(c) {
-		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+		return clientGoneError(c)
 	}
 
 	if _, err := c.Writer.Write([]byte(": " + comment + "\n\n")); err != nil {

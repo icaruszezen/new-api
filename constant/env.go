@@ -1,6 +1,11 @@
 package constant
 
 var StreamingTimeout int
+
+// StreamDrainMaxSeconds caps how long a stream keeps reading the upstream after
+// the client disconnected (channel setting client_disconnect_drain_enabled).
+// Zero or negative means no cap beyond the STREAMING_TIMEOUT idle watchdog.
+var StreamDrainMaxSeconds int
 var DifyDebug bool
 var MaxFileDownloadMB int
 var StreamScannerMaxBufferMB int

@@ -290,13 +290,11 @@ func TestOaiResponsesStreamHandlerDrainUsesCompletedUsage(t *testing.T) {
 	c.Set(common.RequestIdKey, "responses-drain-billing-test")
 
 	info := &relaycommon.RelayInfo{
-		OriginModelName: "gpt-5.1",
-		DisablePing:     true,
+		OriginModelName:                 "gpt-5.1",
+		DisablePing:                     true,
+		DrainUpstreamOnClientDisconnect: true,
 		ChannelMeta: &relaycommon.ChannelMeta{
 			UpstreamModelName: "gpt-5.1",
-			ChannelSetting: dto.ChannelSettings{
-				ResponsesClientDisconnectDrainEnabled: true,
-			},
 		},
 	}
 

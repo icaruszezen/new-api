@@ -83,8 +83,6 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	defer service.CloseResponseBodyGracefully(resp)
 
-	info.ApplyResponsesClientDisconnectDrain()
-
 	var usage = &dto.Usage{}
 	var responseTextBuilder strings.Builder
 	cacheBillingApplied := false
@@ -180,10 +178,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 	dirty.TotalTokens = dirty.PromptTokens + dirty.CompletionTokens
 
-	endReason := relaycommon.StreamEndReasonNone
-	if info.StreamStatus != nil {
-		endReason = info.StreamStatus.EndReason
-	}
+	// A drained stream reports the upstream's own end, so an upstream that cut
+	// off after the client left still meets criterion 4 like a connected one.
+	endReason := info.StreamStatus.UpstreamEndReason()
 	if common.FirstTokenErrorCorrectionEnabled {
 		decision := decideResponsesFirstTokenError(firstTokenScan, decisionTokens, endReason, common.FirstTokenErrorTreatAllOutputOneEnabled)
 		if decision.Hit {

@@ -13,6 +13,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -280,6 +281,69 @@ func TestOpenaiImageStreamHandlerClientDisconnectRaisesCount(t *testing.T) {
 		[]relaycommon.StreamEndReason{relaycommon.StreamEndReasonClientGone, relaycommon.StreamEndReasonHandlerStop},
 		info.StreamStatus.EndReason)
 	require.Equal(t, 2.0, info.PriceData.OtherRatios()["n"], "completed events beyond the recorded n must raise the charge even on abort")
+}
+
+// With drain on, a disconnect only skips client writes: the completed event
+// and usage sent after it are still counted, and since the upstream reached
+// its own [DONE] the completed count is trusted exactly as for a connected
+// client, both ways (here it lowers the requested n of 3 to the 2 generated).
+func TestOpenaiImageStreamHandlerDrainCountsEventsAfterDisconnect(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		ChannelMeta:                     &relaycommon.ChannelMeta{},
+		IsStream:                        true,
+		DisablePing:                     true,
+		DrainUpstreamOnClientDisconnect: true,
+	}
+	info.PriceData.UsePrice = true
+	info.PriceData.AddOtherRatio("n", 3)
+
+	s := startDisconnectingStream(t, "/v1/images/generations", "first", info, OpenaiImageStreamHandler)
+	s.send(t, `{"type":"image_generation.completed","b64_json":"first"}`)
+	s.waitClientGone(t)
+	s.send(t,
+		`{"type":"image_generation.completed","b64_json":"second","usage":{"input_tokens":3,"output_tokens":4,"total_tokens":7}}`,
+		`[DONE]`,
+	)
+	usage, apiErr := s.wait(t)
+
+	require.Nil(t, apiErr)
+	require.NotNil(t, usage)
+	assert.Equal(t, 3, usage.PromptTokens)
+	assert.Equal(t, 4, usage.CompletionTokens)
+	assert.Equal(t, 7, usage.TotalTokens)
+	assert.Equal(t, 2.0, info.PriceData.OtherRatios()["n"])
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonDrained, info.StreamStatus.EndReason)
+	assert.False(t, info.StreamStatus.HasErrors())
+}
+
+// A JSON upstream is read whole before the synthetic SSE writes, so a client
+// that leaves after the first image is still billed for every image and the
+// upstream usage, and the disconnect is recorded.
+func TestOpenaiImageStreamHandlerJSONClientDisconnectBillsWholeBody(t *testing.T) {
+	oldMode := gin.Mode()
+	gin.SetMode(gin.TestMode)
+	t.Cleanup(func() { gin.SetMode(oldMode) })
+
+	body := `{"created":1710000000,"data":[{"b64_json":"first"},{"b64_json":"second"}],"usage":{"input_tokens":3,"output_tokens":4,"total_tokens":7}}`
+	c, recorder, resp, info := newImageTestContext(t, body, "application/json", true)
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	t.Cleanup(cancel)
+	c.Request = c.Request.WithContext(ctx)
+	c.Writer = &cancelAfterWriter{ResponseWriter: c.Writer, needle: "first", cancel: cancel}
+	info.PriceData.UsePrice = true
+	info.PriceData.AddOtherRatio("n", 3)
+
+	usage, apiErr := OpenaiImageStreamHandler(c, info, resp)
+
+	require.Nil(t, apiErr)
+	require.NotNil(t, usage)
+	assert.Equal(t, 7, usage.TotalTokens)
+	assert.Equal(t, 2.0, info.PriceData.OtherRatios()["n"])
+	assert.NotContains(t, recorder.Body.String(), `"b64_json":"second"`)
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+	assert.True(t, info.StreamStatus.ClientGone)
 }
 
 // TestOpenaiImageStreamHandlerWrapsJSONResponse covers the non-SSE fallback:

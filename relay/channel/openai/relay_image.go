@@ -2,6 +2,7 @@ package openai
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -139,19 +140,25 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 				completedImages++
 			}
 		}
-		if err := writeOpenaiImageStreamChunk(c, raw); err != nil {
+		// A gone client only skips the write; parsing goes on so a drain still
+		// counts the completed events and usage the upstream sends after it.
+		if err := writeOpenaiImageStreamChunk(c, raw); err != nil && !errors.Is(err, helper.ErrClientGone) {
 			sr.Stop(err)
 		}
 	})
 
+	// A drained stream reports the done/eof its upstream reached.
+	upstreamEnd := info.StreamStatus.UpstreamEndReason()
+
 	// StreamScannerHandler consumes the upstream [DONE]; re-emit it so the
 	// client still receives a terminal data: [DONE].
-	if info.StreamStatus != nil && info.StreamStatus.EndReason == relaycommon.StreamEndReasonDone {
+	if upstreamEnd == relaycommon.StreamEndReasonDone {
 		helper.Done(c)
 	}
 
 	applyUsagePostProcessing(info, usage, lastStreamData)
-	// Only trust completedImages when upstream finished the stream (done/eof).
+	// Only trust completedImages when upstream finished the stream (done/eof),
+	// also when a drain read it to that end after the client disconnected.
 	// On client-side aborts (client_gone, or handler_stop from a failed client
 	// write) the counter undercounts what upstream actually generated and
 	// charged, so keep the requested n — otherwise a client could pay for one
@@ -159,8 +166,8 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 	// guard only blocks lowering the charge: if completed events already
 	// exceed the recorded n, bill the higher actual count regardless.
 	if info.StreamStatus != nil {
-		upstreamFinished := info.StreamStatus.EndReason == relaycommon.StreamEndReasonDone ||
-			info.StreamStatus.EndReason == relaycommon.StreamEndReasonEOF
+		upstreamFinished := upstreamEnd == relaycommon.StreamEndReasonDone ||
+			upstreamEnd == relaycommon.StreamEndReasonEOF
 		requestedN := 1.0
 		if n, ok := info.PriceData.OtherRatios()["n"]; ok {
 			requestedN = n
@@ -269,6 +276,11 @@ func openaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 	}
 	if info != nil {
 		info.SetFirstResponseTime()
+		// A fresh status per attempt, as StreamScannerHandler does, so a client
+		// that leaves during the synthetic SSE writes is always recorded. Usage
+		// and the image count above come from the fully read upstream body, so
+		// there is nothing left to drain and billing never depends on the writes.
+		info.StreamStatus = relaycommon.NewStreamStatus()
 	}
 
 	validUsage := service.ValidUsage(&usageResp.Usage)
@@ -311,23 +323,22 @@ func openaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 			}
 		}
 		if writeErr := helper.ResponseChunkData(c, dto.ResponsesStreamResponse{Type: "image_generation.completed"}, string(payload)); writeErr != nil {
-			if info != nil && info.StreamStatus != nil {
+			if info != nil {
+				info.StreamStatus.ClientGone = true
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, writeErr)
 			}
 			return &usageResp.Usage, nil
 		}
 	}
 	if err := writeOpenaiImageStreamDone(c); err != nil {
-		if info != nil && info.StreamStatus != nil {
+		if info != nil {
+			info.StreamStatus.ClientGone = true
 			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, err)
 		}
 		return &usageResp.Usage, nil
 	}
 	if info != nil {
 		info.ReceivedResponseCount += int(imageCount)
-		if info.StreamStatus == nil {
-			info.StreamStatus = relaycommon.NewStreamStatus()
-		}
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 	}
 	return &usageResp.Usage, nil

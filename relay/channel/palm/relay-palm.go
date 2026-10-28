@@ -1,9 +1,10 @@
 package palm
 
 import (
-	"encoding/json"
+	"context"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -50,55 +51,55 @@ func streamResponsePaLM2OpenAI(palmResponse *PaLMChatResponse) *dto.ChatCompleti
 	return &response
 }
 
-func palmStreamHandler(c *gin.Context, resp *http.Response) (*types.NewAPIError, string) {
-	responseText := ""
+// palmStreamHandler: PaLM 的"流式"上游其实只返回一个 JSON。先同步读完再转成一个
+// SSE 块，计费只依赖读到的全文。客户端断开后写入一律跳过；未开启排水时立即关闭
+// 上游让读取返回，开启排水时照常读完。
+func palmStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) string {
 	responseId := helper.GetResponseID(c)
 	createdTime := common.GetTimestamp()
-	dataChan := make(chan string)
-	stopChan := make(chan bool)
-	go func() {
-		responseBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			common.SysLog("error reading stream response: " + err.Error())
-			stopChan <- true
-			return
-		}
-		service.CloseResponseBodyGracefully(resp)
-		var palmResponse PaLMChatResponse
-		err = json.Unmarshal(responseBody, &palmResponse)
-		if err != nil {
-			common.SysLog("error unmarshalling stream response: " + err.Error())
-			stopChan <- true
-			return
-		}
-		fullTextResponse := streamResponsePaLM2OpenAI(&palmResponse)
-		fullTextResponse.Id = responseId
-		fullTextResponse.Created = createdTime
-		if len(palmResponse.Candidates) > 0 {
-			responseText = palmResponse.Candidates[0].Content
-		}
-		jsonResponse, err := json.Marshal(fullTextResponse)
-		if err != nil {
-			common.SysLog("error marshalling stream response: " + err.Error())
-			stopChan <- true
-			return
-		}
-		dataChan <- string(jsonResponse)
-		stopChan <- true
-	}()
+	info.StreamStatus = relaycommon.NewStreamStatus()
 	helper.SetEventStreamHeaders(c)
-	c.Stream(func(w io.Writer) bool {
-		select {
-		case data := <-dataChan:
-			c.Render(-1, common.CustomEvent{Data: "data: " + data})
-			return true
-		case <-stopChan:
-			c.Render(-1, common.CustomEvent{Data: "data: [DONE]"})
-			return false
+	defer helper.Done(c)
+
+	clientGoneAt := make(chan time.Time, 1)
+	stopWatchingClient := context.AfterFunc(c.Request.Context(), func() {
+		clientGoneAt <- time.Now()
+		if !info.DrainUpstreamOnClientDisconnect {
+			_ = resp.Body.Close()
 		}
 	})
+	responseBody, err := io.ReadAll(resp.Body)
+	clientGone := !stopWatchingClient()
 	service.CloseResponseBodyGracefully(resp)
-	return nil, responseText
+	info.StreamStatus.ClientGone = clientGone
+	if err != nil {
+		if clientGone && !info.DrainUpstreamOnClientDisconnect {
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+			return ""
+		}
+		common.SysLog("error reading stream response: " + err.Error())
+		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonScannerErr, err)
+		return ""
+	}
+	info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
+	if clientGone && info.DrainUpstreamOnClientDisconnect {
+		info.StreamStatus.MarkDrained(time.Since(<-clientGoneAt))
+	}
+
+	var palmResponse PaLMChatResponse
+	if err := common.Unmarshal(responseBody, &palmResponse); err != nil {
+		common.SysLog("error unmarshalling stream response: " + err.Error())
+		return ""
+	}
+	responseText := ""
+	if len(palmResponse.Candidates) > 0 {
+		responseText = palmResponse.Candidates[0].Content
+	}
+	fullTextResponse := streamResponsePaLM2OpenAI(&palmResponse)
+	fullTextResponse.Id = responseId
+	fullTextResponse.Created = createdTime
+	_ = helper.ObjectData(c, fullTextResponse)
+	return responseText
 }
 
 func palmHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
@@ -108,7 +109,7 @@ func palmHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respons
 	}
 	service.CloseResponseBodyGracefully(resp)
 	var palmResponse PaLMChatResponse
-	err = json.Unmarshal(responseBody, &palmResponse)
+	err = common.Unmarshal(responseBody, &palmResponse)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}

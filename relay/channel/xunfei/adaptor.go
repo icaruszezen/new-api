@@ -87,12 +87,16 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 	if a.request == nil {
 		return nil, types.NewError(errors.New("request is nil"), types.ErrorCodeInvalidRequest)
 	}
-	if info.IsStream {
-		usage, err = xunfeiStreamHandler(c, *a.request, splits[0], splits[1], splits[2])
-	} else {
-		usage, err = xunfeiHandler(c, *a.request, splits[0], splits[1], splits[2])
+	appId, apiSecret, apiKey := splits[0], splits[1], splits[2]
+	domain, authUrl := getXunfeiAuthUrl(c, apiKey, apiSecret, a.request.Model)
+	conn, dialErr := xunfeiMakeRequest(*a.request, domain, authUrl, appId)
+	if dialErr != nil {
+		return nil, types.NewError(dialErr, types.ErrorCodeDoRequestFailed)
 	}
-	return
+	if info.IsStream {
+		return xunfeiStreamHandler(c, info, conn), nil
+	}
+	return xunfeiHandler(c, conn)
 }
 
 func (a *Adaptor) GetModelList() []string {

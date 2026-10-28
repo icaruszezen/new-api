@@ -24,8 +24,9 @@ import (
 )
 
 const (
-	cozeTestModel = "coze-bot"
-	cozeDoneEvent = "event:done\ndata:\"[DONE]\"\n\n"
+	cozeTestModel        = "coze-bot"
+	cozeTestPromptTokens = 37
+	cozeDoneEvent        = "event:done\ndata:\"[DONE]\"\n\n"
 )
 
 func cozeEvent(event, data string) string {
@@ -42,12 +43,14 @@ func cozeChatCompleted(inputTokens, outputTokens int) string {
 }
 
 func newCozeStreamTestInfo(drain bool) *relaycommon.RelayInfo {
-	return &relaycommon.RelayInfo{
+	info := &relaycommon.RelayInfo{
 		IsStream:                        true,
 		DisablePing:                     true,
 		DrainUpstreamOnClientDisconnect: drain,
 		ChannelMeta:                     &relaycommon.ChannelMeta{UpstreamModelName: cozeTestModel},
 	}
+	info.SetEstimatePromptTokens(cozeTestPromptTokens)
+	return info
 }
 
 func useStreamingTimeout(t *testing.T) {
@@ -183,7 +186,7 @@ func TestCozeChatStreamHandler(t *testing.T) {
 }
 
 // 客户端断开：开排水时读到断开后才到的 chat.completed，按上游用量计费，流记为 drained；
-// 不开时立即关闭上游，没有 chat.completed，按断开前转发的文本估算。
+// 不开时立即关闭上游，没有 chat.completed，按请求预估的 prompt 和断开前转发的文本估算。
 func TestCozeChatStreamHandlerClientDisconnect(t *testing.T) {
 	useStreamingTimeout(t)
 
@@ -205,6 +208,7 @@ func TestCozeChatStreamHandlerClientDisconnect(t *testing.T) {
 		},
 		{
 			name:           "without drain the upstream is closed and the text received is estimated",
+			wantPrompt:     cozeTestPromptTokens,
 			wantCompletion: service.EstimateTokenByModel(cozeTestModel, "hello"),
 			wantEndReason:  relaycommon.StreamEndReasonClientGone,
 		},

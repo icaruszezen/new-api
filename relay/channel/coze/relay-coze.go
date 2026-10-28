@@ -131,8 +131,10 @@ func cozeChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *ht
 	}
 	helper.Done(c)
 
+	// 没收到 conversation.chat.completed（未开排水时客户端断开、排水超时、上游中断）按已收到的文本估算；
+	// coze_input_count 只在非流式路径设置，流式按请求预估的 prompt tokens 计。
 	if usage.TotalTokens == 0 {
-		usage = service.ResponseText2Usage(c, responseText, info.UpstreamModelName, c.GetInt("coze_input_count"))
+		usage = service.ResponseText2Usage(c, responseText, info.UpstreamModelName, info.GetEstimatePromptTokens())
 	}
 
 	return usage, nil

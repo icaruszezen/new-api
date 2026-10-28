@@ -294,7 +294,7 @@ const SENSITIVE_FORM_FIELDS = [
   'retry_status_codes',
   'retry_interval_ms',
   'pass_through_body_enabled',
-  'responses_client_disconnect_drain_enabled',
+  'client_disconnect_drain_enabled',
   'system_prompt',
   'system_prompt_override',
   'allow_service_tier',
@@ -351,7 +351,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.auto_set_reasoning_effort_by_model ||
     values.cache_billing_ratio_enabled ||
     values.stream_prelude_enabled ||
-    values.responses_client_disconnect_drain_enabled ||
+    values.client_disconnect_drain_enabled ||
     values.pass_through_body_enabled ||
     values.system_prompt_override ||
     (values.http_protocol && values.http_protocol !== 'auto') ||
@@ -760,6 +760,9 @@ export function ChannelMutateDrawer({
   const currentForceFormat = form.watch('force_format')
   const currentThinkingToContent = form.watch('thinking_to_content')
   const currentPassThroughBodyEnabled = form.watch('pass_through_body_enabled')
+  const currentClientDisconnectDrainEnabled = form.watch(
+    'client_disconnect_drain_enabled'
+  )
   const currentDisableTaskPollingSleep = form.watch(
     'disable_task_polling_sleep'
   )
@@ -1034,6 +1037,7 @@ export function ChannelMutateDrawer({
     currentForceFormat ||
     currentThinkingToContent ||
     currentPassThroughBodyEnabled ||
+    currentClientDisconnectDrainEnabled ||
     currentDisableTaskPollingSleep ||
     currentProxy?.trim() ||
     currentSystemPrompt?.trim() ||
@@ -4484,18 +4488,18 @@ export function ChannelMutateDrawer({
 
                               <FormField
                                 control={form.control}
-                                name='responses_client_disconnect_drain_enabled'
+                                name='client_disconnect_drain_enabled'
                                 render={({ field }) => (
                                   <FormItem className='flex items-center justify-between px-4 py-3'>
                                     <div className='space-y-0.5'>
                                       <FormLabel>
                                         {t(
-                                          'Drain Responses upstream after client disconnect'
+                                          'Drain upstream after client disconnect'
                                         )}
                                       </FormLabel>
                                       <FormDescription>
                                         {t(
-                                          "When enabled, this channel's POST /v1/responses streams keep reading the upstream SSE after the client disconnects until a terminal event (usage or error) or the streaming idle timeout, then bill. Default off: close upstream immediately."
+                                          'Applies to every streaming endpoint (chat completions, messages, Gemini, responses, images, audio), including pass-through channels. After the client disconnects, the upstream stream is read until it finishes, errors, stays idle for STREAMING_TIMEOUT, or reaches STREAM_DRAIN_MAX_SECONDS (default 30 min), and the request is billed by the upstream usage. Off (default): close the upstream immediately.'
                                         )}
                                       </FormDescription>
                                     </div>

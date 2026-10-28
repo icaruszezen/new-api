@@ -37,6 +37,7 @@ import {
   getFirstResponseTimeColor,
   getResponseTimeColor,
   getStreamEndReasonLabel,
+  isNotableStreamStatus,
 } from '../lib/format'
 import type { LogOtherData } from '../types'
 
@@ -162,8 +163,11 @@ interface StreamTpsCellProps {
 
 export function StreamTpsCell(props: StreamTpsCellProps) {
   const { t } = useTranslation()
-  const showStreamError =
-    props.isStream && props.streamStatus && props.streamStatus.status !== 'ok'
+  const showStreamStatus =
+    props.isStream &&
+    props.streamStatus != null &&
+    isNotableStreamStatus(props.streamStatus)
+  const streamFailed = props.streamStatus?.status !== 'ok'
   const tpsLabel =
     props.tokensPerSecond != null
       ? `${Math.round(props.tokensPerSecond)} t/s`
@@ -184,16 +188,24 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
         )}
       >
         {streamLabel}
-        {showStreamError && (
+        {showStreamStatus && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger
-                render={<CircleAlert className='text-destructive size-3' />}
+                render={
+                  <CircleAlert
+                    className={cn(
+                      'size-3',
+                      streamFailed ? 'text-destructive' : 'text-warning'
+                    )}
+                  />
+                }
               />
               <TooltipContent>
                 <div className='space-y-0.5 text-xs'>
                   <p>
-                    {t('Stream Status')}: {t('Error')}
+                    {t('Stream Status')}:{' '}
+                    {streamFailed ? t('Error') : t('Normal')}
                   </p>
                   <p>
                     {getStreamEndReasonLabel(
@@ -201,6 +213,21 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
                       t
                     )}
                   </p>
+                  {props.streamStatus?.upstream_end_reason && (
+                    <p>
+                      {t('Upstream End Reason')}:{' '}
+                      {getStreamEndReasonLabel(
+                        props.streamStatus.upstream_end_reason,
+                        t
+                      )}
+                    </p>
+                  )}
+                  {props.streamStatus?.drain_ms != null && (
+                    <p>
+                      {t('Drain Duration')}:{' '}
+                      {formatUseTime(props.streamStatus.drain_ms / 1000)}
+                    </p>
+                  )}
                   {(props.streamStatus?.error_count ?? 0) > 0 && (
                     <p>
                       {t('Soft Errors')}: {props.streamStatus?.error_count}

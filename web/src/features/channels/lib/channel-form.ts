@@ -283,7 +283,7 @@ export const channelFormSchema = z
     stream_prelude_enabled: z.boolean().optional(),
     stream_prelude_delay_min_seconds: z.number().optional(),
     stream_prelude_delay_max_seconds: z.number().optional(),
-    responses_client_disconnect_drain_enabled: z.boolean().optional(),
+    client_disconnect_drain_enabled: z.boolean().optional(),
     // nullish: a cleared number input stores null (see the drawer)
     retry_times: z.number().nullish(),
     retry_status_codes: z.string().optional(),
@@ -609,7 +609,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   stream_prelude_enabled: false,
   stream_prelude_delay_min_seconds: 0,
   stream_prelude_delay_max_seconds: 5,
-  responses_client_disconnect_drain_enabled: false,
+  client_disconnect_drain_enabled: false,
   retry_times: undefined,
   retry_status_codes: DEFAULT_CHANNEL_RETRY_STATUS_CODES,
   retry_interval_ms: DEFAULT_CHANNEL_RETRY_INTERVAL_MS,
@@ -663,7 +663,7 @@ export function transformChannelToFormDefaults(
     stream_prelude_enabled: false,
     stream_prelude_delay_min_seconds: 0,
     stream_prelude_delay_max_seconds: 5,
-    responses_client_disconnect_drain_enabled: false,
+    client_disconnect_drain_enabled: false,
     retry_times: undefined as number | undefined,
     retry_status_codes: DEFAULT_CHANNEL_RETRY_STATUS_CODES,
     retry_interval_ms: DEFAULT_CHANNEL_RETRY_INTERVAL_MS,
@@ -718,7 +718,10 @@ export function transformChannelToFormDefaults(
           parsed.stream_prelude_delay_max_seconds >= 0
             ? parsed.stream_prelude_delay_max_seconds
             : 5,
-        responses_client_disconnect_drain_enabled:
+        // responses_client_disconnect_drain_enabled is the legacy Responses-only
+        // key; it loads as on and is rewritten to the new key on save.
+        client_disconnect_drain_enabled:
+          parsed.client_disconnect_drain_enabled === true ||
           parsed.responses_client_disconnect_drain_enabled === true,
         retry_times:
           typeof parsed.retry_times === 'number' && parsed.retry_times > 0
@@ -882,10 +885,8 @@ export function buildSettingJSON(formData: ChannelFormValues): string {
     stream_prelude_delay_max_seconds: formData.stream_prelude_enabled
       ? (formData.stream_prelude_delay_max_seconds ?? 5)
       : undefined,
-    responses_client_disconnect_drain_enabled:
-      formData.responses_client_disconnect_drain_enabled === true
-        ? true
-        : undefined,
+    client_disconnect_drain_enabled:
+      formData.client_disconnect_drain_enabled === true ? true : undefined,
     retry_times: retryEnabled ? formData.retry_times : undefined,
     retry_status_codes: retryEnabled
       ? parseHttpStatusCodeRules(formData.retry_status_codes).normalized ||

@@ -96,7 +96,8 @@ export interface ChannelSettings {
   stream_prelude_enabled?: boolean
   stream_prelude_delay_min_seconds?: number
   stream_prelude_delay_max_seconds?: number
-  responses_client_disconnect_drain_enabled?: boolean
+  client_disconnect_drain_enabled?: boolean
+  responses_client_disconnect_drain_enabled?: boolean // legacy Responses-only key, read but never written
   http_protocol?: 'auto' | 'http1' | string
   http2_connection_shards?: number
   retry_times?: number

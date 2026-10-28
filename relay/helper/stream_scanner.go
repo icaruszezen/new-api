@@ -332,7 +332,7 @@ func scanUpstreamStream(c *gin.Context, resp *http.Response, info *relaycommon.R
 		drainTimer   *time.Timer
 		drainExpired <-chan time.Time
 		// Why a drain was cut short. Recorded only after cleanup, and only if the
-		// upstream did not reach its own end in the same instant.
+		// upstream did not reach its own end in the same instant (not drained).
 		drainCutReason string
 	)
 waitLoop:
@@ -384,10 +384,11 @@ waitLoop:
 	}
 
 	cleanup()
-	if draining && info.StreamStatus.MarkDrained(time.Since(drainStart)) {
+	drained := draining && info.StreamStatus.MarkDrained(time.Since(drainStart))
+	if drained {
 		logger.LogInfo(c, fmt.Sprintf("stream drain: upstream reached %s after client disconnect", info.StreamStatus.DrainedFrom))
 	}
-	if drainCutReason != "" && info.StreamStatus.EndReason == relaycommon.StreamEndReasonClientGone {
+	if drainCutReason != "" && !drained {
 		info.StreamStatus.RecordError(drainCutReason)
 	}
 	if info.StreamStatus.IsNormalEnd() && !info.StreamStatus.HasErrors() {

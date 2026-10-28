@@ -248,6 +248,25 @@ func TestXunfeiStreamHandlerWithoutDrainClosesWebsocketOnDisconnect(t *testing.T
 	assert.True(t, info.StreamStatus.ClientGone)
 }
 
+// Spark rejects a request (auth, rate limit, audit) with a header.code frame
+// after the handshake. That is not a cut-short reply, so nothing is estimated.
+func TestXunfeiStreamHandlerErrorFrameIsNotBilled(t *testing.T) {
+	c, _, _, info := newClientContext(t, false)
+	info.SetEstimatePromptTokens(1500)
+	const errorFrame = `{"header":{"code":11202,"message":"AppIdQpsOverFlowError","sid":"cht1","status":2}}`
+	conn, spark := dialFakeSpark(t, []string{sparkFirstFrame, errorFrame}, nil)
+
+	var usage *dto.Usage
+	done := goDone(func() { usage = xunfeiStreamHandler(c, info, conn) })
+	waitClosed(t, done, 2*time.Second, "handler did not stop at the error frame")
+	waitClosed(t, spark.upstreamClosed, 2*time.Second, "websocket was not closed after the error frame")
+
+	assert.Equal(t, &dto.Usage{}, usage)
+	assert.Equal(t, relaycommon.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
+	require.True(t, info.StreamStatus.HasErrors())
+	assert.Contains(t, info.StreamStatus.Errors[0].Message, "11202")
+}
+
 func TestXunfeiStreamHandlerDrainIdleTimeoutClosesWebsocket(t *testing.T) {
 	// Not parallel: modifies the global constant.StreamingTimeout.
 	oldTimeout := constant.StreamingTimeout

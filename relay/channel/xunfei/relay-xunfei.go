@@ -133,7 +133,8 @@ func buildXunfeiAuthUrl(hostUrl string, apiKey, apiSecret string) string {
 }
 
 // xunfeiStreamHandler 在当前 goroutine 里逐帧读上游 websocket 并转成 SSE，usage 累加自
-// 每帧的 payload.usage（实际只在 status==2 的最后一帧里）；没读到这一帧时按已收到的文本估算。每次读取受 STREAMING_TIMEOUT
+// 每帧的 payload.usage（实际只在 status==2 的最后一帧里）；没读到这一帧时按已收到的文本估算，
+// 上游用 header.code 报错的请求除外。每次读取受 STREAMING_TIMEOUT
 // 空闲超时约束。客户端断开：未开启排水时立即关闭 websocket 让阻塞中的读取返回；开启排水时
 // 跳过写客户端，继续读到最后一帧，另以 STREAM_DRAIN_MAX_SECONDS 封顶（从读取返回后发现
 // 断开时算起，断开时正在进行的那次读取仍只受空闲超时约束）。
@@ -153,6 +154,7 @@ func xunfeiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, conn *webs
 	var (
 		usage         dto.Usage
 		responseText  strings.Builder
+		upstreamError bool
 		draining      bool
 		drainDeadline time.Time
 		drainStart    time.Time
@@ -206,6 +208,15 @@ func xunfeiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, conn *webs
 		}
 		info.SetFirstResponseTime()
 		info.ReceivedResponseCount++
+		if xunfeiResponse.Header.Code != 0 {
+			// Spark 在握手成功后用 header.code 拒绝或中止请求（鉴权、限流、审核等），随后关闭连接；
+			// 这不是被截断的回复，不按文本估算计费
+			upstreamError = true
+			err := fmt.Errorf("xunfei error %d: %s", xunfeiResponse.Header.Code, xunfeiResponse.Header.Message)
+			info.StreamStatus.RecordError(err.Error())
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonHandlerStop, err)
+			break
+		}
 		usage.PromptTokens += xunfeiResponse.Payload.Usage.Text.PromptTokens
 		usage.CompletionTokens += xunfeiResponse.Payload.Usage.Text.CompletionTokens
 		usage.TotalTokens += xunfeiResponse.Payload.Usage.Text.TotalTokens
@@ -222,7 +233,7 @@ func xunfeiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, conn *webs
 		info.StreamStatus.MarkDrained(time.Since(drainStart))
 	}
 	helper.Done(c)
-	if usage.TotalTokens == 0 {
+	if usage.TotalTokens == 0 && !upstreamError {
 		// 没读到最后一帧（未开排水时客户端断开、排水超时、上游中断）
 		return service.ResponseText2Usage(c, responseText.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
 	}

@@ -86,9 +86,9 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 
 // StreamLineScannerHandler is StreamScannerHandler for upstreams that do not
 // frame events as SSE `data:` lines (NDJSON, `event:`/`meta:` lines). Every
-// non-blank line reaches dataHandler trimmed but otherwise untouched, and no
-// line ends the stream by itself: dataHandler calls sr.Done() on the
-// protocol's final event, or the stream ends at EOF.
+// non-blank line reaches dataHandler untouched, and no line ends the stream
+// by itself: dataHandler calls sr.Done() on the protocol's final event, or
+// the stream ends at EOF.
 func StreamLineScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(line string, sr *StreamResult)) {
 	scanUpstreamStream(c, resp, info, true, dataHandler)
 }
@@ -283,7 +283,9 @@ func scanUpstreamStream(c *gin.Context, resp *http.Response, info *relaycommon.R
 			var data string
 			switch {
 			case rawLines:
-				data = strings.TrimSpace(line)
+				if strings.TrimSpace(line) != "" {
+					data = line
+				}
 			case strings.HasPrefix(line, "data:"):
 				data = strings.TrimSpace(line[len("data:"):])
 			case strings.HasPrefix(line, "[DONE]"):
@@ -342,7 +344,17 @@ waitLoop:
 			}
 			break waitLoop
 		case <-stopChan:
-			// EndReason already set by the goroutine that triggered stopChan
+			// EndReason already set by the goroutine that triggered stopChan.
+			// If the client left in the same instant, select may still pick
+			// this case; record the disconnect so the outcome does not depend
+			// on which ready case won.
+			if clientGone != nil && c.Request.Context().Err() != nil {
+				info.StreamStatus.ClientGone = true
+				if info.DrainUpstreamOnClientDisconnect {
+					draining = true
+					drainStart = time.Now()
+				}
+			}
 			break waitLoop
 		case <-clientGone:
 			info.StreamStatus.ClientGone = true

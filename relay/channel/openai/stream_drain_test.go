@@ -6,8 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -26,16 +24,10 @@ import (
 
 // disconnectingStream runs a stream handler against an upstream the test feeds
 // through a pipe. The client disconnects right after a write containing
-// disconnectAfter reaches it (see cancelAfterWriter).
-//
-// A cancelled request context alone does not mean the wait loop in
-// helper.scanUpstreamStream has acted on it. With drain on, the loop must take its clientGone case before an
-// upstream terminal ([DONE] or EOF) closes stopChan: when both are ready,
-// select picks one at random, and if it picks the stop the stream ends as a
-// plain done/eof that never drained. So with drain on, disconnectSeen closes
-// only when the wait loop logs, inside that case, that it has started
-// draining. With drain off it is the request context: those tests send
-// nothing more, so clientGone is the only case the loop can take.
+// disconnectAfter reaches it (see cancelAfterWriter); disconnectSeen is that
+// request context. The stream scanner records the disconnect whether its wait
+// loop sees it first or together with an upstream terminal, so the test may
+// send the terminal as soon as the context is done.
 type disconnectingStream struct {
 	c              *gin.Context
 	upstream       *io.PipeWriter
@@ -43,21 +35,6 @@ type disconnectingStream struct {
 	done           chan struct{}
 	usage          *dto.Usage
 	apiErr         *types.NewAPIError
-}
-
-// drainLogWriter passes log output through and closes draining once the stream
-// scanner logs that it keeps reading the upstream after the client left.
-type drainLogWriter struct {
-	io.Writer
-	draining chan struct{}
-	once     sync.Once
-}
-
-func (w *drainLogWriter) Write(p []byte) (int, error) {
-	if strings.Contains(string(p), "stream drain: client disconnected") {
-		w.once.Do(func() { close(w.draining) })
-	}
-	return w.Writer.Write(p)
 }
 
 func startDisconnectingStream(t *testing.T, path, disconnectAfter string, info *relaycommon.RelayInfo,
@@ -76,19 +53,6 @@ func startDisconnectingStream(t *testing.T, path, disconnectAfter string, info *
 	c.Writer = &cancelAfterWriter{ResponseWriter: c.Writer, needle: disconnectAfter, cancel: cancel}
 
 	s := &disconnectingStream{c: c, upstream: pw, disconnectSeen: ctx.Done(), done: make(chan struct{})}
-	if info.DrainUpstreamOnClientDisconnect {
-		common.LogWriterMu.Lock()
-		logs := &drainLogWriter{Writer: gin.DefaultWriter, draining: make(chan struct{})}
-		gin.DefaultWriter = logs
-		common.LogWriterMu.Unlock()
-		s.disconnectSeen = logs.draining
-		// Registered before the cleanup below, so it runs after the handler returned.
-		t.Cleanup(func() {
-			common.LogWriterMu.Lock()
-			gin.DefaultWriter = logs.Writer
-			common.LogWriterMu.Unlock()
-		})
-	}
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       pr,
@@ -118,14 +82,14 @@ func (s *disconnectingStream) send(t *testing.T, events ...string) {
 	}
 }
 
-// waitClientGone returns once the handler has seen the disconnect (see
-// disconnectingStream); only then may the test send an upstream terminal.
+// waitClientGone returns once the client has disconnected; only then may the
+// test send what the upstream emits after the disconnect.
 func (s *disconnectingStream) waitClientGone(t *testing.T) {
 	t.Helper()
 	select {
 	case <-s.disconnectSeen:
 	case <-time.After(2 * time.Second):
-		t.Fatal("client did not disconnect, or with drain on the handler did not start draining")
+		t.Fatal("client did not disconnect")
 	}
 }
 

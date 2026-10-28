@@ -711,9 +711,10 @@ func TestStreamLineScannerHandler_PassesRawLinesUntilDone(t *testing.T) {
 		}
 	})
 
-	// Blank lines are skipped; nothing else is filtered, and "[DONE]" is only a
-	// terminator for SSE upstreams. Nothing after sr.Done() reaches the handler.
-	assert.Equal(t, []string{`{"done":false}`, `event: message`, `data: [DONE]`, `{"done":true}`}, got)
+	// Blank lines are skipped; other lines arrive untouched (raw-text
+	// protocols keep their whitespace), and "[DONE]" is only a terminator for
+	// SSE upstreams. Nothing after sr.Done() reaches the handler.
+	assert.Equal(t, []string{`{"done":false}`, `  event: message  `, `data: [DONE]`, `{"done":true}`}, got)
 	assert.True(t, info.StreamStatus.IsNormalEnd())
 }
 

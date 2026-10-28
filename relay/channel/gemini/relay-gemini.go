@@ -138,7 +138,8 @@ func handleStream(c *gin.Context, info *relaycommon.RelayInfo, resp *dto.ChatCom
 		return fmt.Errorf("failed to marshal stream response: %w", err)
 	}
 	err = openai.HandleStreamFormat(c, info, string(streamData), info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
-	if err != nil {
+	// 客户端已断开时写入被跳过，不算错误：调用方继续解析上游，不必每块都记一条错误日志
+	if err != nil && !errors.Is(err, helper.ErrClientGone) {
 		return fmt.Errorf("failed to handle stream format: %w", err)
 	}
 	return nil

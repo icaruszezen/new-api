@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -133,8 +134,9 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 
 		countClaudeStreamBillableTools(c, info, &claudeResponse)
 
+		// 客户端已断开时写入被跳过，不是发送失败；usage 已在上面解析，排水继续
 		err = helper.ObjectData(c, response)
-		if err != nil {
+		if err != nil && !errors.Is(err, helper.ErrClientGone) {
 			logger.LogError(c, "send_stream_response_failed: "+err.Error())
 		}
 	}
@@ -176,6 +178,16 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 			claudeInfo.Usage.PromptTokens = fallback.PromptTokens
 		}
 		claudeInfo.Usage.TotalTokens = claudeInfo.Usage.PromptTokens + claudeInfo.Usage.CompletionTokens
+		// 结算读的是 BillingUsage，它按 message_start/message_delta 当时的上游数建好（message_start 的 output_tokens 通常只有 1）。
+		// 上面用本地估算补了输入/输出时（message_delta 没到：客户端断开、排水超时、上游截断）要同步进去，
+		// 否则这类流只按 1 个输出 token 结算；cache 字段保留上游原值。
+		if billing := claudeInfo.Usage.BillingUsage; billing != nil && billing.ClaudeUsage != nil &&
+			(billing.ClaudeUsage.InputTokens != claudeInfo.Usage.PromptTokens ||
+				billing.ClaudeUsage.OutputTokens != claudeInfo.Usage.CompletionTokens) {
+			billing.ClaudeUsage.InputTokens = claudeInfo.Usage.PromptTokens
+			billing.ClaudeUsage.OutputTokens = claudeInfo.Usage.CompletionTokens
+			billing.Estimated = true
+		}
 	}
 	if claudeInfo.Usage != nil {
 		claudeInfo.Usage.UsageSemantic = "anthropic"
@@ -198,7 +210,7 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 			openAIUsage := buildOpenAIStyleUsageFromClaudeUsage(claudeInfo.Usage)
 			response := helper.GenerateFinalUsageResponse(claudeInfo.ResponseId, claudeInfo.Created, info.UpstreamModelName, openAIUsage)
 			err := helper.ObjectData(c, response)
-			if err != nil {
+			if err != nil && !errors.Is(err, helper.ErrClientGone) {
 				common.SysLog("send final response failed: " + err.Error())
 			}
 		}

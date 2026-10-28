@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -83,6 +84,10 @@ func GeminiTextGenerationStreamHandler(c *gin.Context, info *relaycommon.RelayIn
 
 	return geminiStreamHandler(c, info, resp, func(data string, geminiResponse *dto.GeminiChatResponse) bool {
 		err := helper.StringData(c, data)
+		if errors.Is(err, helper.ErrClientGone) {
+			// 客户端已断开：跳过写入但继续解析上游，排水时才能拿到最后一块的 usageMetadata
+			return true
+		}
 		if err != nil {
 			logger.LogError(c, "failed to write stream data: "+err.Error())
 			return false

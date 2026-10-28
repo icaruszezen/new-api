@@ -179,14 +179,19 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 		}
 		claudeInfo.Usage.TotalTokens = claudeInfo.Usage.PromptTokens + claudeInfo.Usage.CompletionTokens
 		// 结算读的是 BillingUsage，它按 message_start/message_delta 当时的上游数建好（message_start 的 output_tokens 通常只有 1）。
-		// 上面用本地估算补了输入/输出时（message_delta 没到：客户端断开、排水超时、上游截断）要同步进去，
-		// 否则这类流只按 1 个输出 token 结算；cache 字段保留上游原值。
-		if billing := claudeInfo.Usage.BillingUsage; billing != nil && billing.ClaudeUsage != nil &&
-			(billing.ClaudeUsage.InputTokens != claudeInfo.Usage.PromptTokens ||
-				billing.ClaudeUsage.OutputTokens != claudeInfo.Usage.CompletionTokens) {
-			billing.ClaudeUsage.InputTokens = claudeInfo.Usage.PromptTokens
-			billing.ClaudeUsage.OutputTokens = claudeInfo.Usage.CompletionTokens
-			billing.Estimated = true
+		// 上面用本地估算补了输出时（message_delta 没到：客户端断开、排水超时、上游截断）要同步进去，
+		// 否则这类流只按 1 个输出 token 结算。输入只在上游一个 prompt token 都没报（连 cache 也没有）时才补：
+		// Anthropic 的 input_tokens 不含 cache，上游报了 cache 时本地估算的整段 prompt 会把缓存部分再按原价计一次。
+		if billing := claudeInfo.Usage.BillingUsage; billing != nil && billing.ClaudeUsage != nil {
+			cu := billing.ClaudeUsage
+			if cu.OutputTokens != claudeInfo.Usage.CompletionTokens {
+				cu.OutputTokens = claudeInfo.Usage.CompletionTokens
+				billing.Estimated = true
+			}
+			if cu.InputTokens == 0 && cu.CacheReadInputTokens == 0 && cu.GetCacheCreationTotalTokens() == 0 && claudeInfo.Usage.PromptTokens > 0 {
+				cu.InputTokens = claudeInfo.Usage.PromptTokens
+				billing.Estimated = true
+			}
 		}
 	}
 	if claudeInfo.Usage != nil {

@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -140,6 +141,13 @@ func sseData(body string) []string {
 	return payloads
 }
 
+// estimatedSparkUsage is the local estimate billed when the final frame with
+// Spark's usage never arrives.
+func estimatedSparkUsage(promptTokens int, text string) *dto.Usage {
+	completion := service.EstimateTokenByModel("", text)
+	return &dto.Usage{PromptTokens: promptTokens, CompletionTokens: completion, TotalTokens: promptTokens + completion}
+}
+
 // chunkSummary renders each chat chunk as "content|finish_reason".
 func chunkSummary(t *testing.T, payloads []string) []string {
 	t.Helper()
@@ -224,6 +232,7 @@ func TestXunfeiStreamHandlerDrainBillsFinalFrameAfterDisconnect(t *testing.T) {
 
 func TestXunfeiStreamHandlerWithoutDrainClosesWebsocketOnDisconnect(t *testing.T) {
 	c, recorder, cancel, info := newClientContext(t, false)
+	info.SetEstimatePromptTokens(7)
 	conn, spark := dialFakeSpark(t, []string{sparkFirstFrame}, []string{sparkFinalFrame})
 
 	var usage *dto.Usage
@@ -233,7 +242,8 @@ func TestXunfeiStreamHandlerWithoutDrainClosesWebsocketOnDisconnect(t *testing.T
 	waitClosed(t, done, 2*time.Second, "handler did not return after the client disconnected")
 	waitClosed(t, spark.upstreamClosed, 2*time.Second, "websocket was not closed after the client disconnected")
 
-	assert.Equal(t, &dto.Usage{}, usage)
+	// The final frame with the usage never came: the text received is estimated.
+	assert.Equal(t, estimatedSparkUsage(7, "你"), usage)
 	assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
 	assert.True(t, info.StreamStatus.ClientGone)
 }
@@ -245,6 +255,7 @@ func TestXunfeiStreamHandlerDrainIdleTimeoutClosesWebsocket(t *testing.T) {
 	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
 
 	c, recorder, cancel, info := newClientContext(t, true)
+	info.SetEstimatePromptTokens(7)
 	conn, spark := dialFakeSpark(t, []string{sparkFirstFrame}, []string{sparkFinalFrame})
 
 	var usage *dto.Usage
@@ -254,7 +265,7 @@ func TestXunfeiStreamHandlerDrainIdleTimeoutClosesWebsocket(t *testing.T) {
 	waitClosed(t, done, 3*time.Second, "handler did not return after the drain idle timeout")
 	waitClosed(t, spark.upstreamClosed, 2*time.Second, "websocket was not closed after the drain idle timeout")
 
-	assert.Equal(t, &dto.Usage{}, usage)
+	assert.Equal(t, estimatedSparkUsage(7, "你"), usage)
 	assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
 	assert.True(t, info.StreamStatus.HasErrors())
 }

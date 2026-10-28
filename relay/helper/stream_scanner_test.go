@@ -517,6 +517,9 @@ func TestStreamScannerHandler_ClientCancelDrainStopsAtMaxDuration(t *testing.T) 
 	cancel()
 
 	// Keepalives alone must not hold a drain open forever.
+	deadline := time.After(3 * time.Second)
+	keepalive := time.NewTicker(100 * time.Millisecond)
+	defer keepalive.Stop()
 	for {
 		select {
 		case <-done:
@@ -526,9 +529,9 @@ func TestStreamScannerHandler_ClientCancelDrainStopsAtMaxDuration(t *testing.T) 
 			require.True(t, info.StreamStatus.HasErrors())
 			assert.Equal(t, "drain max duration reached", info.StreamStatus.Errors[0].Message)
 			return
-		case <-time.After(3 * time.Second):
+		case <-deadline:
 			t.Fatal("drain was not capped by STREAM_DRAIN_MAX_SECONDS")
-		case <-time.After(100 * time.Millisecond):
+		case <-keepalive.C:
 			_, _ = fmt.Fprint(pw, ": keepalive\n")
 		}
 	}

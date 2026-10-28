@@ -331,6 +331,9 @@ func scanUpstreamStream(c *gin.Context, resp *http.Response, info *relaycommon.R
 		drainStart   time.Time
 		drainTimer   *time.Timer
 		drainExpired <-chan time.Time
+		// Why a drain was cut short. Recorded only after cleanup, and only if the
+		// upstream did not reach its own end in the same instant.
+		drainCutReason string
 	)
 waitLoop:
 	for {
@@ -338,7 +341,7 @@ waitLoop:
 		case <-ticker.C:
 			if draining {
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
-				info.StreamStatus.RecordError("drain idle timeout")
+				drainCutReason = "drain idle timeout"
 			} else {
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
 			}
@@ -372,7 +375,7 @@ waitLoop:
 			logger.LogInfo(c, fmt.Sprintf("stream drain: client disconnected, reading upstream to its end for billing (format=%s, path=%s)", info.RelayFormat, info.RequestURLPath))
 		case <-drainExpired:
 			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
-			info.StreamStatus.RecordError("drain max duration reached")
+			drainCutReason = "drain max duration reached"
 			break waitLoop
 		}
 	}
@@ -383,6 +386,9 @@ waitLoop:
 	cleanup()
 	if draining && info.StreamStatus.MarkDrained(time.Since(drainStart)) {
 		logger.LogInfo(c, fmt.Sprintf("stream drain: upstream reached %s after client disconnect", info.StreamStatus.DrainedFrom))
+	}
+	if drainCutReason != "" && info.StreamStatus.EndReason == relaycommon.StreamEndReasonClientGone {
+		info.StreamStatus.RecordError(drainCutReason)
 	}
 	if info.StreamStatus.IsNormalEnd() && !info.StreamStatus.HasErrors() {
 		logger.LogInfo(c, fmt.Sprintf("stream ended: %s", info.StreamStatus.Summary()))

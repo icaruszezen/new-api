@@ -53,7 +53,8 @@ func streamResponsePaLM2OpenAI(palmResponse *PaLMChatResponse) *dto.ChatCompleti
 
 // palmStreamHandler: PaLM 的"流式"上游其实只返回一个 JSON。先同步读完再转成一个
 // SSE 块，计费只依赖读到的全文。客户端断开后写入一律跳过；未开启排水时立即关闭
-// 上游让读取返回，开启排水时照常读完。
+// 上游让读取返回，开启排水时照常读完，但最多再等 STREAMING_TIMEOUT 与
+// STREAM_DRAIN_MAX_SECONDS 中较短的一个（整个回复是一次读取，空闲时长即剩余等待时长）。
 func palmStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) string {
 	responseId := helper.GetResponseID(c)
 	createdTime := common.GetTimestamp()
@@ -61,20 +62,46 @@ func palmStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 	helper.SetEventStreamHeaders(c)
 	defer helper.Done(c)
 
-	clientGoneAt := make(chan time.Time, 1)
+	drainLimit := time.Duration(constant.StreamingTimeout) * time.Second
+	drainCutReason := "drain idle timeout"
+	if maxDrain := time.Duration(constant.StreamDrainMaxSeconds) * time.Second; maxDrain > 0 && (drainLimit <= 0 || maxDrain < drainLimit) {
+		drainLimit = maxDrain
+		drainCutReason = "drain max duration reached"
+	}
+	type clientLeft struct {
+		at time.Time
+		// drainCut closes the upstream once a drain has waited drainLimit.
+		drainCut *time.Timer
+	}
+	left := make(chan clientLeft, 1)
 	stopWatchingClient := context.AfterFunc(c.Request.Context(), func() {
-		clientGoneAt <- time.Now()
 		if !info.DrainUpstreamOnClientDisconnect {
+			left <- clientLeft{at: time.Now()}
 			_ = resp.Body.Close()
+			return
 		}
+		event := clientLeft{at: time.Now()}
+		if drainLimit > 0 {
+			event.drainCut = time.AfterFunc(drainLimit, func() { _ = resp.Body.Close() })
+		}
+		left <- event
 	})
 	responseBody, err := io.ReadAll(resp.Body)
 	clientGone := !stopWatchingClient()
+	var gone clientLeft
+	if clientGone {
+		gone = <-left
+	}
+	// Stop reports false once the timer has fired, i.e. the drain was cut.
+	drainWasCut := gone.drainCut != nil && !gone.drainCut.Stop()
 	service.CloseResponseBodyGracefully(resp)
 	info.StreamStatus.ClientGone = clientGone
 	if err != nil {
-		if clientGone && !info.DrainUpstreamOnClientDisconnect {
+		if clientGone && (!info.DrainUpstreamOnClientDisconnect || drainWasCut) {
 			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+			if drainWasCut {
+				info.StreamStatus.RecordError(drainCutReason)
+			}
 			return ""
 		}
 		common.SysLog("error reading stream response: " + err.Error())
@@ -83,7 +110,7 @@ func palmStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 	}
 	info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
 	if clientGone && info.DrainUpstreamOnClientDisconnect {
-		info.StreamStatus.MarkDrained(time.Since(<-clientGoneAt))
+		info.StreamStatus.MarkDrained(time.Since(gone.at))
 	}
 
 	var palmResponse PaLMChatResponse

@@ -19,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/samber/lo"
 
 	"github.com/gin-gonic/gin"
@@ -132,7 +133,7 @@ func buildXunfeiAuthUrl(hostUrl string, apiKey, apiSecret string) string {
 }
 
 // xunfeiStreamHandler 在当前 goroutine 里逐帧读上游 websocket 并转成 SSE，usage 累加自
-// 每帧的 payload.usage（实际只在 status==2 的最后一帧里）。每次读取受 STREAMING_TIMEOUT
+// 每帧的 payload.usage（实际只在 status==2 的最后一帧里）；没读到这一帧时按已收到的文本估算。每次读取受 STREAMING_TIMEOUT
 // 空闲超时约束。客户端断开：未开启排水时立即关闭 websocket 让阻塞中的读取返回；开启排水时
 // 跳过写客户端，继续读到最后一帧，另以 STREAM_DRAIN_MAX_SECONDS 封顶（从读取返回后发现
 // 断开时算起，断开时正在进行的那次读取仍只受空闲超时约束）。
@@ -151,6 +152,7 @@ func xunfeiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, conn *webs
 
 	var (
 		usage         dto.Usage
+		responseText  strings.Builder
 		draining      bool
 		drainDeadline time.Time
 		drainStart    time.Time
@@ -208,7 +210,9 @@ func xunfeiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, conn *webs
 		usage.CompletionTokens += xunfeiResponse.Payload.Usage.Text.CompletionTokens
 		usage.TotalTokens += xunfeiResponse.Payload.Usage.Text.TotalTokens
 		helper.ExtendWriteDeadline(c)
-		_ = helper.ObjectData(c, streamResponseXunfei2OpenAI(&xunfeiResponse))
+		chunk := streamResponseXunfei2OpenAI(&xunfeiResponse)
+		responseText.WriteString(xunfeiResponse.Payload.Choices.Text[0].Content)
+		_ = helper.ObjectData(c, chunk)
 		if xunfeiResponse.Payload.Choices.Status == 2 {
 			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 			break
@@ -218,6 +222,10 @@ func xunfeiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, conn *webs
 		info.StreamStatus.MarkDrained(time.Since(drainStart))
 	}
 	helper.Done(c)
+	if usage.TotalTokens == 0 {
+		// 没读到最后一帧（未开排水时客户端断开、排水超时、上游中断）
+		return service.ResponseText2Usage(c, responseText.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
+	}
 	return &usage
 }
 

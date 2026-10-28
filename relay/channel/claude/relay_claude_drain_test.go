@@ -114,6 +114,55 @@ func TestClaudeStreamHandlerBillsEstimatedOutputWithoutMessageDelta(t *testing.T
 	}
 }
 
+// message_delta 没到时，结算的输入只在上游连 cache 都没报时才用本地估算补：Anthropic 的
+// input_tokens 不含 cache，上游报了 cache 时再补整段 prompt 估算会把缓存部分按原价重复计费。
+func TestClaudeStreamHandlerEstimatesInputOnlyWithoutAnyUpstreamPrompt(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	const estimatedPrompt = 20010
+	tests := []struct {
+		name          string
+		startUsage    string
+		wantInput     int
+		wantCacheRead int
+	}{
+		{
+			name:       "no prompt usage at all is estimated",
+			startUsage: `{"input_tokens":0,"output_tokens":1}`,
+			wantInput:  estimatedPrompt,
+		},
+		{
+			name:          "a fully cached prompt keeps zero input",
+			startUsage:    `{"input_tokens":0,"cache_read_input_tokens":20000,"output_tokens":1}`,
+			wantCacheRead: 20000,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+			info := newClaudeStreamTestInfo(types.RelayFormatClaude, false)
+			info.SetEstimatePromptTokens(estimatedPrompt)
+			start := `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"` + claudeStreamTestModel + `","content":[],"usage":` + tt.startUsage + `}}`
+			body := claudeSSE(start, claudeTextBlockStart, claudeTextDelta("partial answer"), claudeContentBlockStop)
+
+			usage, apiErr := ClaudeStreamHandler(c, &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, info)
+
+			require.Nil(t, apiErr)
+			require.NotNil(t, usage)
+			require.NotNil(t, usage.BillingUsage)
+			require.NotNil(t, usage.BillingUsage.ClaudeUsage)
+			assert.Equal(t, tt.wantInput, usage.BillingUsage.ClaudeUsage.InputTokens)
+			assert.Equal(t, tt.wantCacheRead, usage.BillingUsage.ClaudeUsage.CacheReadInputTokens)
+			assert.Equal(t, service.EstimateTokenByModel(claudeStreamTestModel, "partial answer"), usage.BillingUsage.ClaudeUsage.OutputTokens)
+			assert.True(t, usage.BillingUsage.Estimated)
+		})
+	}
+}
+
 // 开排水时客户端在流中途断开，断开后才到的 message_delta 用上游给的数结算，不被本地估算覆盖。
 func TestClaudeStreamHandlerDrainBillsMessageDeltaAfterDisconnect(t *testing.T) {
 	gin.SetMode(gin.TestMode)

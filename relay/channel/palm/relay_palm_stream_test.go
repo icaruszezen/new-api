@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 
@@ -150,4 +151,32 @@ func TestPalmStreamHandlerClientDisconnect(t *testing.T) {
 			assert.Empty(t, recorder.Body.String())
 		})
 	}
+}
+
+// A drain must not wait forever on an upstream that stalls after the headers:
+// it is bounded like every other drain, here by STREAM_DRAIN_MAX_SECONDS.
+func TestPalmStreamHandlerDrainStopsAtLimit(t *testing.T) {
+	oldTimeout, oldMax := constant.StreamingTimeout, constant.StreamDrainMaxSeconds
+	constant.StreamingTimeout, constant.StreamDrainMaxSeconds = 30, 1
+	t.Cleanup(func() { constant.StreamingTimeout, constant.StreamDrainMaxSeconds = oldTimeout, oldMax })
+
+	c, recorder, cancel, info := newPalmContext(t, true)
+	resp, upstream := startFakePaLMUpstream(t)
+
+	var responseText string
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		responseText = palmStreamHandler(c, info, resp)
+	}()
+	cancel()
+	waitClosed(t, upstream.upstreamClosed, "drain was not cut at STREAM_DRAIN_MAX_SECONDS")
+	waitClosed(t, done, "handler did not return after the drain was cut")
+
+	assert.Empty(t, responseText)
+	assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+	assert.True(t, info.StreamStatus.ClientGone)
+	require.True(t, info.StreamStatus.HasErrors())
+	assert.Equal(t, "drain max duration reached", info.StreamStatus.Errors[0].Message)
+	assert.Empty(t, recorder.Body.String())
 }

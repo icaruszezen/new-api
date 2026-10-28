@@ -322,6 +322,15 @@ streamLoop:
 					logger.LogError(c, "aws event stream error: "+streamErr.Error())
 					info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonScannerErr, streamErr)
 				}
+				// The client may have left in the same instant; record it as the
+				// scanner does, so the outcome does not depend on which case won.
+				if clientGone != nil && requestContext.Err() != nil {
+					info.StreamStatus.ClientGone = true
+					if info.DrainUpstreamOnClientDisconnect {
+						draining = true
+						drainStart = time.Now()
+					}
+				}
 				break streamLoop
 			}
 			idleTimer.Reset(streamingTimeout)
@@ -354,6 +363,16 @@ streamLoop:
 		case <-clientGone:
 			info.StreamStatus.ClientGone = true
 			if !info.DrainUpstreamOnClientDisconnect {
+				// An event stream that already ended cleanly keeps its eof, like the
+				// scanner's first-wins end reason. An event taken here is dropped:
+				// the client is gone and usage falls back to the local estimate.
+				select {
+				case _, ok := <-events:
+					if !ok && stream.Err() == nil {
+						info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
+					}
+				default:
+				}
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, requestContext.Err())
 				break streamLoop
 			}

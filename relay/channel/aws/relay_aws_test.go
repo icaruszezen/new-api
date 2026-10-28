@@ -58,6 +58,26 @@ type awsNotifyingResponseWriter struct {
 	// is closed, like a client slow to take that chunk.
 	hold chan struct{}
 	once sync.Once
+
+	mu          sync.Mutex
+	pendingHold *awsWriteHold
+}
+
+// awsWriteHold blocks the Flush that first delivers needle: reached closes
+// when that Flush starts waiting, and it returns once release is closed.
+type awsWriteHold struct {
+	needle  []byte
+	reached chan struct{}
+	release chan struct{}
+}
+
+// holdAt arms a hold on a later chunk; it is safe to call while the handler runs.
+func (w *awsNotifyingResponseWriter) holdAt(needle string) *awsWriteHold {
+	hold := &awsWriteHold{needle: []byte(needle), reached: make(chan struct{}), release: make(chan struct{})}
+	w.mu.Lock()
+	w.pendingHold = hold
+	w.mu.Unlock()
+	return hold
 }
 
 func newAwsNotifyingResponseWriter(notifyOn string) *awsNotifyingResponseWriter {
@@ -81,6 +101,18 @@ func (w *awsNotifyingResponseWriter) Flush() {
 				<-w.hold
 			}
 		})
+	}
+	w.mu.Lock()
+	hold := w.pendingHold
+	if hold != nil && bytes.Contains(w.Body.Bytes(), hold.needle) {
+		w.pendingHold = nil
+	} else {
+		hold = nil
+	}
+	w.mu.Unlock()
+	if hold != nil {
+		close(hold.reached)
+		<-hold.release
 	}
 }
 
@@ -770,6 +802,44 @@ func TestAwsStreamHandlerDrainsUpstreamAfterClientLeaves(t *testing.T) {
 	assert.False(t, status.HasErrors())
 	// Nothing more reaches the gone client, the final usage chunk and [DONE] included.
 	assert.Equal(t, run.bodyLenAtPartial, run.client.Body.Len())
+}
+
+// The client leaves while the handler is still writing the last chunk and the
+// event stream has ended behind it. Whichever of the two the handler sees
+// first, it records the disconnect, and with drain on the stream counts as
+// drained from the upstream's eof.
+func TestAwsStreamHandlerClientLeavingAtUpstreamEnd(t *testing.T) {
+	for name, drain := range map[string]bool{"drain": true, "no drain": false} {
+		t.Run(name, func(t *testing.T) {
+			useAwsStreamLimits(t, 30, 1800)
+			run := startAwsStreamRun(t, drain)
+			hold := run.client.holdAt(`"finish_reason":"stop"`)
+
+			require.NoError(t, writeAwsStreamEvent(run.upstream, awsClaudeStreamFinish[0]))
+			select {
+			case <-hold.reached:
+			case <-time.After(5 * time.Second):
+				t.Fatal("final chunk was not written")
+			}
+			require.NoError(t, run.upstream.Close())
+			run.disconnect()
+			close(hold.release)
+			result := waitAwsHandler(t, run.results, 5*time.Second)
+
+			require.Nil(t, result.err)
+			require.NotNil(t, result.usage)
+			require.NotNil(t, result.usage.BillingUsage)
+			assert.Equal(t, 423, result.usage.BillingUsage.ClaudeUsage.OutputTokens)
+			status := run.info.StreamStatus
+			require.NotNil(t, status)
+			assert.True(t, status.ClientGone)
+			if drain {
+				assert.Equal(t, relaycommon.StreamEndReasonDrained, status.EndReason)
+				assert.Equal(t, relaycommon.StreamEndReasonEOF, status.UpstreamEndReason())
+				assert.False(t, status.HasErrors())
+			}
+		})
+	}
 }
 
 func TestAwsStreamHandlerBoundsIdleAndDrainTime(t *testing.T) {

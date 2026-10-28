@@ -82,9 +82,10 @@ controller.Relay
 | `done` | 收到 `data: [DONE]` |
 | `eof` | 对端关闭且没有 `[DONE]` |
 | `timeout` | 流超时 |
-| `client_gone` | 客户端断开 |
+| `client_gone` | 客户端断开（渠道未开排水，或排水空闲超时/超过 `STREAM_DRAIN_MAX_SECONDS`） |
+| `drained` | 客户端断开后，渠道开启了「客户端断开后继续排水」，上游被读到了 `[DONE]` 或 EOF |
 
-准则 4 只用 `eof`。开关打开后准则 4 **不是**命中前提，只影响「没有上游原文时用哪句错误文案」。
+准则 4 只用 `eof`，看的是上游自己怎么结束：`drained` 流按排水读到的终态判断（`StreamStatus.UpstreamEndReason()`），排水读到 EOF 且没有真 completed 时同样命中准则 4，与客户端在线时一致。开关打开后准则 4 **不是**命中前提，只影响「没有上游原文时用哪句错误文案」。
 
 ---
 

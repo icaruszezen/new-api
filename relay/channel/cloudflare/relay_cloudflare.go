@@ -1,12 +1,12 @@
 package cloudflare
 
 import (
-	"bufio"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
-	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -29,31 +29,15 @@ func convertCf2CompletionsRequest(textRequest dto.GeneralOpenAIRequest) *CfReque
 }
 
 func cfStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*types.NewAPIError, *dto.Usage) {
-	scanner := helper.NewStreamScanner(resp.Body)
-	scanner.Split(bufio.ScanLines)
-
-	helper.SetEventStreamHeaders(c)
 	id := helper.GetResponseID(c)
 	var responseText string
-	isFirst := true
 
-	for scanner.Scan() {
-		data := scanner.Text()
-		if len(data) < len("data: ") {
-			continue
-		}
-		data = strings.TrimPrefix(data, "data: ")
-		data = strings.TrimSuffix(data, "\r")
-
-		if data == "[DONE]" {
-			break
-		}
-
+	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		var response dto.ChatCompletionsStreamResponse
-		err := json.Unmarshal([]byte(data), &response)
-		if err != nil {
+		if err := common.Unmarshal([]byte(data), &response); err != nil {
 			logger.LogError(c, "error_unmarshalling_stream_response: "+err.Error())
-			continue
+			sr.Error(err)
+			return
 		}
 		for _, choice := range response.Choices {
 			choice.Delta.Role = "assistant"
@@ -61,30 +45,21 @@ func cfStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Res
 		}
 		response.Id = id
 		response.Model = info.UpstreamModelName
-		err = helper.ObjectData(c, response)
-		if isFirst {
-			isFirst = false
-			info.SetFirstResponseTime()
-		}
-		if err != nil {
+		// 客户端已断开时写入被跳过，文本照常累计，排水读完的内容也计费
+		if err := helper.ObjectData(c, response); err != nil && !errors.Is(err, helper.ErrClientGone) {
 			logger.LogError(c, "error_rendering_stream_response: "+err.Error())
+			sr.Error(err)
 		}
-	}
+	})
 
-	if err := scanner.Err(); err != nil {
-		logger.LogError(c, "error_scanning_stream_response: "+err.Error())
-	}
 	usage := service.ResponseText2Usage(c, responseText, info.UpstreamModelName, info.GetEstimatePromptTokens())
 	if info.ShouldIncludeUsage {
 		response := helper.GenerateFinalUsageResponse(id, info.StartTime.Unix(), info.UpstreamModelName, *usage)
-		err := helper.ObjectData(c, response)
-		if err != nil {
+		if err := helper.ObjectData(c, response); err != nil && !errors.Is(err, helper.ErrClientGone) {
 			logger.LogError(c, "error_rendering_final_usage_response: "+err.Error())
 		}
 	}
 	helper.Done(c)
-
-	service.CloseResponseBodyGracefully(resp)
 
 	return nil, usage
 }

@@ -99,30 +99,31 @@ func ollamaStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	if resp == nil || resp.Body == nil {
 		return nil, types.NewOpenAIError(fmt.Errorf("empty response"), types.ErrorCodeBadResponse, http.StatusBadRequest)
 	}
-	defer service.CloseResponseBodyGracefully(resp)
 
 	helper.SetEventStreamHeaders(c)
-	scanner := helper.NewStreamScanner(resp.Body)
 	usage := &dto.Usage{}
 	var model = info.UpstreamModelName
 	var responseId = common.GetUUID()
 	var created = time.Now().Unix()
 	var toolCallIndex int
+	var doneFrameSeen bool
+	var decodeErr error
+	// 没收到 done 帧（客户端断开且未排水或排水超时、上游中途截断）时按已解析的内容估算用量
+	var streamedText strings.Builder
 	start := helper.GenerateStartEmptyResponse(responseId, created, model, nil)
 	if data, err := common.Marshal(start); err == nil {
 		_ = helper.StringData(c, string(data))
 	}
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+	// NDJSON：每行一帧，done 帧是最后一帧。写入失败（包括客户端已断开）一律忽略，
+	// 排水时照常解析到 done 帧拿上游用量。
+	helper.StreamLineScannerHandler(c, resp, info, func(line string, sr *helper.StreamResult) {
 		var chunk ollamaChatStreamChunk
 		if err := common.Unmarshal([]byte(line), &chunk); err != nil {
 			logger.LogError(c, "ollama stream json decode error: "+err.Error()+" line="+line)
-			return usage, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+			decodeErr = err
+			sr.Stop(err)
+			return
 		}
 		if chunk.Model != "" {
 			model = chunk.Model
@@ -137,6 +138,7 @@ func ollamaStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			} else {
 				content = chunk.Response
 			}
+			streamedText.WriteString(content)
 			delta := dto.ChatCompletionsStreamResponse{
 				Id:      responseId,
 				Object:  "chat.completion.chunk",
@@ -157,23 +159,30 @@ func ollamaStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 					var thinkingContent string
 					if err := common.Unmarshal(chunk.Message.Thinking, &thinkingContent); err == nil {
 						delta.Choices[0].Delta.SetReasoningContent(thinkingContent)
+						streamedText.WriteString(thinkingContent)
 					} else {
 						// Fallback to raw string if it's not a JSON string
 						delta.Choices[0].Delta.SetReasoningContent(raw)
+						streamedText.WriteString(raw)
 					}
 				}
 			}
 			// tool calls
 			if chunk.Message != nil && len(chunk.Message.ToolCalls) > 0 {
 				delta.Choices[0].Delta.ToolCalls, toolCallIndex = ollamaToolCallsToOpenAI(chunk.Message.ToolCalls, toolCallIndex, true)
+				for _, toolCall := range delta.Choices[0].Delta.ToolCalls {
+					streamedText.WriteString(toolCall.Function.Name)
+					streamedText.WriteString(toolCall.Function.Arguments)
+				}
 			}
 			if data, err := common.Marshal(delta); err == nil {
 				_ = helper.StringData(c, string(data))
 			}
-			continue
+			return
 		}
 		// done frame
-		// finalize once and break loop
+		// finalize once and stop the stream
+		doneFrameSeen = true
 		usage.PromptTokens = chunk.PromptEvalCount
 		usage.CompletionTokens = chunk.EvalCount
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
@@ -198,10 +207,14 @@ func ollamaStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		}
 		// send [DONE]
 		helper.Done(c)
-		break
+		sr.Done()
+	})
+
+	if decodeErr != nil {
+		return usage, types.NewOpenAIError(decodeErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
-	if err := scanner.Err(); err != nil && err != io.EOF {
-		logger.LogError(c, "ollama stream scan error: "+err.Error())
+	if !doneFrameSeen {
+		usage = service.ResponseText2Usage(c, streamedText.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
 	}
 	return usage, nil
 }

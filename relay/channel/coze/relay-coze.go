@@ -1,7 +1,6 @@
 package coze
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -98,47 +97,37 @@ func cozeChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Res
 }
 
 func cozeChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
-	scanner := helper.NewStreamScanner(resp.Body)
-	scanner.Split(bufio.ScanLines)
-	helper.SetEventStreamHeaders(c)
 	id := helper.GetResponseID(c)
 	var responseText string
 
 	var currentEvent string
-	var currentData string
 	var usage = &dto.Usage{}
 
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if line == "" {
-			if currentEvent != "" && currentData != "" {
-				// handle last event
-				handleCozeEvent(c, currentEvent, currentData, &responseText, usage, id, info)
-				currentEvent = ""
-				currentData = ""
-			}
-			continue
-		}
-
+	// Coze 每个事件是一行 event: 加一行 data:，空行由 scanner 跳过，所以在 data: 行按前面的 event: 处理；
+	// done 事件是流的终点。写入失败（包括客户端已断开）被忽略，排水时照常读到
+	// conversation.chat.completed 的用量。
+	helper.StreamLineScannerHandler(c, resp, info, func(line string, sr *helper.StreamResult) {
 		if strings.HasPrefix(line, "event:") {
-			currentEvent = strings.TrimSpace(line[6:])
-			continue
+			currentEvent = strings.TrimSpace(line[len("event:"):])
+			return
 		}
-
-		if strings.HasPrefix(line, "data:") {
-			currentData = strings.TrimSpace(line[5:])
-			continue
+		if currentEvent == "" || !strings.HasPrefix(line, "data:") {
+			return
 		}
-	}
+		data := strings.TrimSpace(line[len("data:"):])
+		if data == "" {
+			return
+		}
+		event := currentEvent
+		currentEvent = ""
+		handleCozeEvent(c, event, data, &responseText, usage, id, info)
+		if event == "done" {
+			sr.Done()
+		}
+	})
 
-	// Last event
-	if currentEvent != "" && currentData != "" {
-		handleCozeEvent(c, currentEvent, currentData, &responseText, usage, id, info)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+	if info.StreamStatus.EndReason == relaycommon.StreamEndReasonScannerErr {
+		return nil, types.NewError(info.StreamStatus.EndError, types.ErrorCodeBadResponseBody)
 	}
 	helper.Done(c)
 

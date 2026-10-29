@@ -73,7 +73,22 @@ export function getStreamEndReasonLabel(
   t: (key: string) => string
 ): string {
   if (reason === 'client_gone') return t('Cancelled by client')
+  if (reason === 'drained') return t('Drained after client disconnect')
   return reason
+}
+
+/**
+ * Whether a stream status is worth surfacing: the stream ended abnormally, or
+ * the client disconnected (whether or not the upstream was drained afterwards)
+ */
+export function isNotableStreamStatus(
+  streamStatus: NonNullable<LogOtherData['stream_status']>
+): boolean {
+  return (
+    streamStatus.status !== 'ok' ||
+    streamStatus.client_disconnected === true ||
+    streamStatus.end_reason === 'drained'
+  )
 }
 
 /**

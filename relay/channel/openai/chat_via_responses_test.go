@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -139,6 +141,79 @@ func TestOaiResponsesToChatStreamHandlerConvertsClaudeSSETerminalsAndUsage(t *te
 		"event: message_delta\n",
 		"event: message_stop\n",
 	)
+}
+
+// A client disconnect must never turn into a handler error: that would refund
+// the pre-consumed quota (a free request). With drain on, the usage of the
+// response.completed sent after the disconnect is billed; with drain off the
+// text received so far is estimated and the upstream is closed.
+func TestOaiResponsesToChatStreamHandlerClientDisconnect(t *testing.T) {
+	const estimatedPrompt = 9
+	estimatedCompletion := service.EstimateTokenByModel("gpt-test", "hello")
+	require.Positive(t, estimatedCompletion)
+
+	tests := []struct {
+		name            string
+		drain           bool
+		afterDisconnect []string
+		wantPrompt      int
+		wantCompletion  int
+		wantEndReason   relaycommon.StreamEndReason
+	}{
+		{
+			name:  "drain bills response.completed sent after the disconnect",
+			drain: true,
+			afterDisconnect: []string{
+				`{"type":"response.output_text.delta","delta":" world"}`,
+				`{"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":2,"output_tokens":30,"total_tokens":32}}}`,
+				`[DONE]`,
+			},
+			wantPrompt:     2,
+			wantCompletion: 30,
+			wantEndReason:  relaycommon.StreamEndReasonDrained,
+		},
+		{
+			name:           "without drain the text received is estimated",
+			wantPrompt:     estimatedPrompt,
+			wantCompletion: estimatedCompletion,
+			wantEndReason:  relaycommon.StreamEndReasonClientGone,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{
+				ChannelMeta:                     &relaycommon.ChannelMeta{UpstreamModelName: "gpt-test"},
+				IsStream:                        true,
+				RelayFormat:                     types.RelayFormatOpenAI,
+				ShouldIncludeUsage:              true,
+				DisablePing:                     true,
+				DrainUpstreamOnClientDisconnect: tt.drain,
+			}
+			info.SetEstimatePromptTokens(estimatedPrompt)
+
+			s := startDisconnectingStream(t, "/v1/chat/completions", "hello", info, OaiResponsesToChatStreamHandler)
+			s.send(t,
+				`{"type":"response.created","response":{"id":"resp_1","model":"gpt-test","created_at":1710000000}}`,
+				`{"type":"response.output_text.delta","delta":"hello"}`,
+			)
+			s.waitClientGone(t)
+			s.send(t, tt.afterDisconnect...)
+			usage, apiErr := s.wait(t)
+
+			require.Nil(t, apiErr)
+			require.NotNil(t, usage)
+			assert.Equal(t, tt.wantPrompt, usage.PromptTokens)
+			assert.Equal(t, tt.wantCompletion, usage.CompletionTokens)
+			assert.Equal(t, tt.wantPrompt+tt.wantCompletion, usage.TotalTokens)
+			require.NotNil(t, info.StreamStatus)
+			assert.Equal(t, tt.wantEndReason, info.StreamStatus.EndReason)
+			assert.False(t, info.StreamStatus.HasErrors())
+
+			_, err := fmt.Fprint(s.upstream, "data: late\n")
+			assert.ErrorIs(t, err, io.ErrClosedPipe, "the upstream body must be closed")
+		})
+	}
 }
 
 func TestOaiResponsesToChatBufferedStreamHandlerReturnsJSONFromSSE(t *testing.T) {

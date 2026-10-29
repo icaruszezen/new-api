@@ -235,6 +235,10 @@ export interface LogOtherData {
     error_count?: number
     end_error?: string
     errors?: string[]
+    client_disconnected?: boolean
+    // done or eof that a drained stream reached upstream
+    upstream_end_reason?: string
+    drain_ms?: number
   }
   // Violation fee fields
   violation_fee?: boolean

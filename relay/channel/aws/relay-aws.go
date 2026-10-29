@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -29,7 +31,14 @@ import (
 	"github.com/aws/smithy-go/auth/bearer"
 )
 
-func newAwsInvokeContext(parent context.Context) (context.Context, context.CancelFunc) {
+// newAwsInvokeContext bounds an SDK call by RELAY_TIMEOUT. The call follows
+// the client's request context, so a disconnect cancels it, unless the channel
+// drains the upstream after a client disconnect: then only the timeout ends it.
+func newAwsInvokeContext(requestContext context.Context, drainOnClientDisconnect bool) (context.Context, context.CancelFunc) {
+	parent := requestContext
+	if drainOnClientDisconnect {
+		parent = context.WithoutCancel(requestContext)
+	}
 	if common.RelayTimeout <= 0 {
 		return context.WithCancel(parent)
 	}
@@ -38,6 +47,9 @@ func newAwsInvokeContext(parent context.Context) (context.Context, context.Cance
 
 func newAwsInvokeError(requestContext context.Context, err error, operation string) *types.NewAPIError {
 	options := make([]types.NewAPIErrorOptions, 0, 2)
+	// Checked on the client's request context, not the invoke context: once the
+	// client has left nobody waits for a retry, even when a drain kept the call
+	// itself alive.
 	if requestContext.Err() != nil {
 		options = append(options, types.ErrOptionWithSkipRetry())
 	}
@@ -227,7 +239,7 @@ func getAwsModelID(requestModel string) string {
 func awsHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types.NewAPIError, *dto.Usage) {
 
 	requestContext := c.Request.Context()
-	ctx, cancel := newAwsInvokeContext(requestContext)
+	ctx, cancel := newAwsInvokeContext(requestContext, info.DrainUpstreamOnClientDisconnect)
 	defer cancel()
 
 	awsResp, err := a.AwsClient.InvokeModel(ctx, a.AwsReq.(*bedrockruntime.InvokeModelInput))
@@ -257,7 +269,7 @@ func awsHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types
 
 func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types.NewAPIError, *dto.Usage) {
 	requestContext := c.Request.Context()
-	ctx, cancel := newAwsInvokeContext(requestContext)
+	ctx, cancel := newAwsInvokeContext(requestContext, info.DrainUpstreamOnClientDisconnect)
 	defer cancel()
 
 	awsResp, err := a.AwsClient.InvokeModelWithResponseStream(ctx, a.AwsReq.(*bedrockruntime.InvokeModelWithResponseStreamInput))
@@ -275,38 +287,123 @@ func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (
 		Usage:        &dto.Usage{},
 	}
 
-	events := stream.Events()
+	info.StreamStatus = relaycommon.NewStreamStatus()
+	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
+	maxDrain := time.Duration(constant.StreamDrainMaxSeconds) * time.Second
+	idleTimer := time.NewTimer(streamingTimeout)
+	defer idleTimer.Stop()
+
+	// 与 StreamScannerHandler 一致：上游每个事件都重置空闲看门狗。客户端断开：默认立即
+	// 结束并关闭事件流（invoke ctx 随请求取消）。DrainUpstreamOnClientDisconnect 时 invoke
+	// ctx 已脱离客户端，事件继续交给 HandleStreamResponseData（写客户端变成空操作）直到
+	// 上游自己结束以拿到最终 usage；排水同样受空闲看门狗约束，并以 STREAM_DRAIN_MAX_SECONDS 封顶。
+	var (
+		events       = stream.Events()
+		clientGone   = requestContext.Done()
+		draining     bool
+		drainStart   time.Time
+		drainExpired <-chan time.Time
+		handlerErr   *types.NewAPIError
+	)
 streamLoop:
 	for {
 		select {
-		case <-ctx.Done():
-			break streamLoop
 		case event, ok := <-events:
 			if !ok {
+				streamErr := stream.Err()
+				switch {
+				case streamErr == nil:
+					info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
+				case !info.DrainUpstreamOnClientDisconnect && requestContext.Err() != nil:
+					// invoke ctx 随客户端一起取消，读流报错只是断开的结果
+					info.StreamStatus.ClientGone = true
+					info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, requestContext.Err())
+				default:
+					logger.LogError(c, "aws event stream error: "+streamErr.Error())
+					info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonScannerErr, streamErr)
+				}
+				// The client may have left in the same instant; record it as the
+				// scanner does, so the outcome does not depend on which case won.
+				if clientGone != nil && requestContext.Err() != nil {
+					info.StreamStatus.ClientGone = true
+					if info.DrainUpstreamOnClientDisconnect {
+						draining = true
+						drainStart = time.Now()
+					}
+				}
 				break streamLoop
 			}
-			if ctx.Err() != nil {
-				break streamLoop
-			}
+			idleTimer.Reset(streamingTimeout)
 
 			switch v := event.(type) {
 			case *bedrockruntimeTypes.ResponseStreamMemberChunk:
 				info.SetFirstResponseTime()
-				respErr := claude.HandleStreamResponseData(c, info, claudeInfo, string(v.Value.Bytes))
-				if respErr != nil {
-					return respErr, nil
-				}
+				info.ReceivedResponseCount++
+				helper.ExtendWriteDeadline(c)
+				handlerErr = claude.HandleStreamResponseData(c, info, claudeInfo, string(v.Value.Bytes))
 			case *bedrockruntimeTypes.UnknownUnionMember:
 				fmt.Println("unknown tag:", v.Tag)
-				return types.NewError(errors.New("unknown response type"), types.ErrorCodeInvalidRequest), nil
+				handlerErr = types.NewError(errors.New("unknown response type"), types.ErrorCodeInvalidRequest)
 			default:
 				fmt.Println("union is nil or unknown type")
-				return types.NewError(errors.New("nil or unknown response type"), types.ErrorCodeInvalidRequest), nil
+				handlerErr = types.NewError(errors.New("nil or unknown response type"), types.ErrorCodeInvalidRequest)
 			}
+			if handlerErr != nil {
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonHandlerStop, handlerErr)
+				break streamLoop
+			}
+		case <-idleTimer.C:
+			if draining {
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, requestContext.Err())
+				info.StreamStatus.RecordError("drain idle timeout")
+			} else {
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
+			}
+			break streamLoop
+		case <-clientGone:
+			info.StreamStatus.ClientGone = true
+			if !info.DrainUpstreamOnClientDisconnect {
+				// An event stream that already ended cleanly keeps its eof, like the
+				// scanner's first-wins end reason. An event taken here is dropped:
+				// the client is gone and usage falls back to the local estimate.
+				select {
+				case _, ok := <-events:
+					if !ok && stream.Err() == nil {
+						info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
+					}
+				default:
+				}
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, requestContext.Err())
+				break streamLoop
+			}
+			draining = true
+			drainStart = time.Now()
+			clientGone = nil
+			if maxDrain > 0 {
+				drainTimer := time.NewTimer(maxDrain)
+				defer drainTimer.Stop()
+				drainExpired = drainTimer.C
+			}
+			logger.LogInfo(c, fmt.Sprintf("stream drain: client disconnected, reading aws event stream to its end for billing (format=%s, path=%s)", info.RelayFormat, info.RequestURLPath))
+		case <-drainExpired:
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, requestContext.Err())
+			info.StreamStatus.RecordError("drain max duration reached")
+			break streamLoop
 		}
 	}
 
 	_ = stream.Close()
+	if draining && info.StreamStatus.MarkDrained(time.Since(drainStart)) {
+		logger.LogInfo(c, fmt.Sprintf("stream drain: upstream reached %s after client disconnect", info.StreamStatus.DrainedFrom))
+	}
+	if info.StreamStatus.IsNormalEnd() && !info.StreamStatus.HasErrors() {
+		logger.LogInfo(c, fmt.Sprintf("stream ended: %s", info.StreamStatus.Summary()))
+	} else {
+		logger.LogError(c, fmt.Sprintf("stream ended: %s, received=%d", info.StreamStatus.Summary(), info.ReceivedResponseCount))
+	}
+	if handlerErr != nil {
+		return handlerErr, nil
+	}
 	claude.HandleStreamFinalResponse(c, info, claudeInfo)
 	return nil, claudeInfo.Usage
 }
@@ -315,7 +412,7 @@ streamLoop:
 func handleNovaRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types.NewAPIError, *dto.Usage) {
 
 	requestContext := c.Request.Context()
-	ctx, cancel := newAwsInvokeContext(requestContext)
+	ctx, cancel := newAwsInvokeContext(requestContext, info.DrainUpstreamOnClientDisconnect)
 	defer cancel()
 
 	awsResp, err := a.AwsClient.InvokeModel(ctx, a.AwsReq.(*bedrockruntime.InvokeModelInput))

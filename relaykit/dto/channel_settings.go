@@ -29,9 +29,14 @@ type ChannelSettings struct {
 	StreamPreludeEnabled         bool `json:"stream_prelude_enabled,omitempty"`
 	StreamPreludeDelayMinSeconds int  `json:"stream_prelude_delay_min_seconds,omitempty"`
 	StreamPreludeDelayMaxSeconds int  `json:"stream_prelude_delay_max_seconds,omitempty"`
-	// ResponsesClientDisconnectDrainEnabled 仅 /v1/responses HTTP SSE：
-	// 客户端断开后继续读上游直到 usage/错误/超时，再关 Body。
+	// ClientDisconnectDrainEnabled 客户端断开后继续排水：流式请求在客户端断开后
+	// 继续读上游直到终态/错误/空闲超时（或排水上限），再关 Body，按上游真实 usage 计费。
+	// 对所有中继路径生效（chat、messages、gemini、responses、图片、音频等），含透传渠道；
+	// 解析哪种上游协议由渠道的上游 API 类型对应的适配器决定。
 	// false（默认 / 缺省）= 立刻关 Body，停上游生成。
+	ClientDisconnectDrainEnabled bool `json:"client_disconnect_drain_enabled,omitempty"`
+	// Deprecated: 旧键（原先只作用于 /v1/responses），仅为兼容已保存的渠道而读取，
+	// 与 ClientDisconnectDrainEnabled 含义相同；前端保存时改写为新键。
 	ResponsesClientDisconnectDrainEnabled bool `json:"responses_client_disconnect_drain_enabled,omitempty"`
 	// HTTPProtocol controls outbound HTTP version negotiation for this channel.
 	// Accepted values: "", "auto" (default), "http1".
@@ -63,6 +68,12 @@ const (
 	DefaultChannelRetryStatusCodes = "429,503"
 	DefaultChannelRetryIntervalMs  = 200
 )
+
+// DrainOnClientDisconnect reports whether this channel keeps reading the
+// upstream after the client disconnects, honoring the legacy Responses-only key.
+func (s *ChannelSettings) DrainOnClientDisconnect() bool {
+	return s != nil && (s.ClientDisconnectDrainEnabled || s.ResponsesClientDisconnectDrainEnabled)
+}
 
 // ValidateHTTPTransport validates save-time HTTP transport channel settings.
 func (s *ChannelSettings) ValidateHTTPTransport() error {

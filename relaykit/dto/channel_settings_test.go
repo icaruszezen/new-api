@@ -642,3 +642,27 @@ func TestChannelSettingsValidateHTTPTransport(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "http2_connection_shards")
 }
+
+func TestChannelSettingsDrainOnClientDisconnectHonorsLegacyKey(t *testing.T) {
+	cases := []struct {
+		name string
+		json string
+		want bool
+	}{
+		{name: "unset", json: `{}`, want: false},
+		{name: "new key", json: `{"client_disconnect_drain_enabled":true}`, want: true},
+		{name: "legacy responses-only key", json: `{"responses_client_disconnect_drain_enabled":true}`, want: true},
+		{name: "both keys", json: `{"client_disconnect_drain_enabled":true,"responses_client_disconnect_drain_enabled":true}`, want: true},
+		{name: "explicit false", json: `{"client_disconnect_drain_enabled":false,"responses_client_disconnect_drain_enabled":false}`, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var settings ChannelSettings
+			require.NoError(t, json.Unmarshal([]byte(tc.json), &settings))
+			assert.Equal(t, tc.want, settings.DrainOnClientDisconnect())
+		})
+	}
+
+	var nilSettings *ChannelSettings
+	assert.False(t, nilSettings.DrainOnClientDisconnect())
+}

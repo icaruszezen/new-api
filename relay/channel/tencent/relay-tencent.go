@@ -1,7 +1,6 @@
 package tencent
 
 import (
-	"bufio"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -92,23 +91,13 @@ func streamResponseTencent2OpenAI(TencentResponse *TencentChatResponse) *dto.Cha
 
 func tencentStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
 	var responseText string
-	scanner := helper.NewStreamScanner(resp.Body)
-	scanner.Split(bufio.ScanLines)
 
-	helper.SetEventStreamHeaders(c)
-
-	for scanner.Scan() {
-		data := scanner.Text()
-		if len(data) < 5 || !strings.HasPrefix(data, "data:") {
-			continue
-		}
-		data = strings.TrimPrefix(data, "data:")
-
+	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		var tencentResponse TencentChatResponse
-		err := common.Unmarshal([]byte(data), &tencentResponse)
-		if err != nil {
+		if err := common.Unmarshal([]byte(data), &tencentResponse); err != nil {
 			common.SysLog("error unmarshalling stream response: " + err.Error())
-			continue
+			sr.Error(err)
+			return
 		}
 
 		response := streamResponseTencent2OpenAI(&tencentResponse)
@@ -116,19 +105,14 @@ func tencentStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *htt
 			responseText += response.Choices[0].Delta.GetContentString()
 		}
 
-		err = helper.ObjectData(c, response)
-		if err != nil {
+		// 客户端已断开时写入被跳过，文本照常累计，排水读完的内容也计费
+		if err := helper.ObjectData(c, response); err != nil && !errors.Is(err, helper.ErrClientGone) {
 			common.SysLog(err.Error())
+			sr.Error(err)
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		common.SysLog("error reading stream: " + err.Error())
-	}
+	})
 
 	helper.Done(c)
-
-	service.CloseResponseBodyGracefully(resp)
 
 	return service.ResponseText2Usage(c, responseText, info.UpstreamModelName, info.GetEstimatePromptTokens()), nil
 }

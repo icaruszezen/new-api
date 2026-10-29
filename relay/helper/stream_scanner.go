@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -75,7 +74,26 @@ func ExtendWriteDeadline(c *gin.Context) {
 	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Now().Add(streamWriteTimeout))
 }
 
+// StreamScannerHandler reads an SSE upstream and hands every `data:` payload
+// to dataHandler; `data: [DONE]` ends the stream. When the client disconnects
+// it closes the upstream at once, unless info.DrainUpstreamOnClientDisconnect
+// is set: then it keeps reading until the upstream ends on its own, so the
+// handler still sees the final usage event, bounded by the STREAMING_TIMEOUT
+// idle watchdog and STREAM_DRAIN_MAX_SECONDS.
 func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(data string, sr *StreamResult)) {
+	scanUpstreamStream(c, resp, info, false, dataHandler)
+}
+
+// StreamLineScannerHandler is StreamScannerHandler for upstreams that do not
+// frame events as SSE `data:` lines (NDJSON, `event:`/`meta:` lines). Every
+// non-blank line reaches dataHandler untouched, and no line ends the stream
+// by itself: dataHandler calls sr.Done() on the protocol's final event, or
+// the stream ends at EOF.
+func StreamLineScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(line string, sr *StreamResult)) {
+	scanUpstreamStream(c, resp, info, true, dataHandler)
+}
+
+func scanUpstreamStream(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, rawLines bool, dataHandler func(data string, sr *StreamResult)) {
 
 	if resp == nil || dataHandler == nil {
 		return
@@ -87,6 +105,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	ctx, cancel := context.WithCancel(context.Background())
 
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
+	maxDrain := time.Duration(constant.StreamDrainMaxSeconds) * time.Second
 
 	var (
 		stopChan   = make(chan bool, 3) // 增加缓冲区避免阻塞
@@ -178,6 +197,12 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 						err = PingData(c)
 					}()
 					if err != nil {
+						// A ping that fails because the client left must not claim
+						// the first-wins end reason: the main loop records the
+						// disconnect, and a drain still has to reach its own end.
+						if requestContextDone(c) {
+							return
+						}
 						logger.LogError(c, "ping data error: "+err.Error())
 						info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonPingFail, err)
 						return
@@ -199,7 +224,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	}
 
 	dataChan := make(chan string, 10)
-	var lastDataUnix atomic.Int64
 
 	wg.Add(1)
 	gopool.Go(func() {
@@ -250,36 +274,40 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			default:
 			}
 
+			// Any upstream line, comments and event: lines included, proves the
+			// upstream is alive; the same watchdog bounds a drain's idle time.
 			ticker.Reset(streamingTimeout)
-			data := scanner.Text()
-			logger.LogDebug(c, "stream scanner data: %s", data)
+			line := scanner.Text()
+			logger.LogDebug(c, "stream scanner data: %s", line)
 
-			if len(data) < 6 {
-				continue
+			var data string
+			switch {
+			case rawLines:
+				if strings.TrimSpace(line) != "" {
+					data = line
+				}
+			case strings.HasPrefix(line, "data:"):
+				data = strings.TrimSpace(line[len("data:"):])
+			case strings.HasPrefix(line, "[DONE]"):
+				data = "[DONE]"
 			}
-			if data[:5] != "data:" && data[:6] != "[DONE]" {
-				continue
-			}
-			data = data[5:]
-			data = strings.TrimSpace(data)
 			if data == "" {
 				continue
 			}
-			if !strings.HasPrefix(data, "[DONE]") {
-				info.SetFirstResponseTime()
-				info.ReceivedResponseCount++
-				lastDataUnix.Store(time.Now().UnixNano())
-
-				select {
-				case dataChan <- data:
-				case <-ctx.Done():
-					return
-				case <-stopChan:
-					return
-				}
-			} else {
+			if !rawLines && strings.HasPrefix(data, "[DONE]") {
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 				logger.LogDebug(c, "received [DONE], stopping scanner")
+				return
+			}
+
+			info.SetFirstResponseTime()
+			info.ReceivedResponseCount++
+
+			select {
+			case dataChan <- data:
+			case <-ctx.Done():
+				return
+			case <-stopChan:
 				return
 			}
 		}
@@ -293,81 +321,79 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
 	})
 
-	// 主循环等待完成或超时
-	select {
-	case <-ticker.C:
-		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
-	case <-stopChan:
-		// EndReason already set by the goroutine that triggered stopChan
-	case <-c.Request.Context().Done():
-		// 客户端断开：默认立即 cleanup 关闭上游 resp.Body，解除 scanner 阻塞并让上游停止生成。
-		// DrainUpstreamOnClientDisconnect 时不立刻关 Body，继续读上游直到终态或空闲超时。
-		// 先不写 client_gone，让 scanner 的 [DONE]/EOF/错误先落到 EndReason；
-		// 成功终态再改成 drained，避免被记成 stream error，也不触发首字后错误准则 4（只认 EOF）。
-		if !info.DrainUpstreamOnClientDisconnect {
-			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
-			break
-		}
-		logger.LogInfo(c, "responses stream: client disconnected, draining upstream for billing")
-		remaining := streamingTimeout
-		if ts := lastDataUnix.Load(); ts > 0 {
-			if left := streamingTimeout - time.Since(time.Unix(0, ts)); left > 0 {
-				remaining = left
+	// 主循环等待完成或超时。客户端断开：默认立即 cleanup 关闭上游 resp.Body，
+	// 解除 scanner 阻塞并让上游停止生成。DrainUpstreamOnClientDisconnect 时不关，
+	// 继续读到上游自己结束（[DONE]/EOF/错误），期间仍受同一个空闲看门狗约束，
+	// 并以 STREAM_DRAIN_MAX_SECONDS 封顶；成功的终态在所有 goroutine 退出后改记为 drained。
+	var (
+		clientGone   = c.Request.Context().Done()
+		draining     bool
+		drainStart   time.Time
+		drainTimer   *time.Timer
+		drainExpired <-chan time.Time
+		// Why a drain was cut short. Recorded only after cleanup, and only if the
+		// upstream did not reach its own end in the same instant (not drained).
+		drainCutReason string
+	)
+waitLoop:
+	for {
+		select {
+		case <-ticker.C:
+			if draining {
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+				drainCutReason = "drain idle timeout"
 			} else {
-				remaining = 0
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
 			}
-		}
-		if remaining == 0 {
-			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
-			info.StreamStatus.RecordError("drain idle timeout")
-			logger.LogInfo(c, "responses stream: drain ended by idle timeout")
-			break
-		}
-		drainTimer := time.NewTimer(remaining)
-		for {
-			select {
-			case <-drainTimer.C:
-				select {
-				case <-stopChan:
-					markResponsesDrainTerminal(c, info)
-				default:
-					if ts := lastDataUnix.Load(); ts > 0 {
-						if left := streamingTimeout - time.Since(time.Unix(0, ts)); left > 0 {
-							drainTimer.Reset(left)
-							continue
-						}
-					}
-					info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
-					info.StreamStatus.RecordError("drain idle timeout")
-					logger.LogInfo(c, "responses stream: drain ended by idle timeout")
+			break waitLoop
+		case <-stopChan:
+			// EndReason already set by the goroutine that triggered stopChan.
+			// If the client left in the same instant, select may still pick
+			// this case; record the disconnect so the outcome does not depend
+			// on which ready case won.
+			if clientGone != nil && c.Request.Context().Err() != nil {
+				info.StreamStatus.ClientGone = true
+				if info.DrainUpstreamOnClientDisconnect {
+					draining = true
+					drainStart = time.Now()
 				}
-			case <-stopChan:
-				markResponsesDrainTerminal(c, info)
 			}
-			break
+			break waitLoop
+		case <-clientGone:
+			info.StreamStatus.ClientGone = true
+			if !info.DrainUpstreamOnClientDisconnect {
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+				break waitLoop
+			}
+			draining = true
+			drainStart = time.Now()
+			clientGone = nil
+			if maxDrain > 0 {
+				drainTimer = time.NewTimer(maxDrain)
+				drainExpired = drainTimer.C
+			}
+			logger.LogInfo(c, fmt.Sprintf("stream drain: client disconnected, reading upstream to its end for billing (format=%s, path=%s)", info.RelayFormat, info.RequestURLPath))
+		case <-drainExpired:
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+			drainCutReason = "drain max duration reached"
+			break waitLoop
 		}
+	}
+	if drainTimer != nil {
 		drainTimer.Stop()
 	}
 
 	cleanup()
+	drained := draining && info.StreamStatus.MarkDrained(time.Since(drainStart))
+	if drained {
+		logger.LogInfo(c, fmt.Sprintf("stream drain: upstream reached %s after client disconnect", info.StreamStatus.DrainedFrom))
+	}
+	if drainCutReason != "" && !drained {
+		info.StreamStatus.RecordError(drainCutReason)
+	}
 	if info.StreamStatus.IsNormalEnd() && !info.StreamStatus.HasErrors() {
 		logger.LogInfo(c, fmt.Sprintf("stream ended: %s", info.StreamStatus.Summary()))
 	} else {
 		logger.LogError(c, fmt.Sprintf("stream ended: %s, received=%d", info.StreamStatus.Summary(), info.ReceivedResponseCount))
 	}
-}
-
-// markResponsesDrainTerminal remaps a normal upstream terminal ([DONE]/EOF)
-// after client-disconnect drain to drained. Error terminals stay as-is.
-// drained is IsNormalEnd so we do not LogError; first-token criterion 4
-// still only matches EOF.
-func markResponsesDrainTerminal(c *gin.Context, info *relaycommon.RelayInfo) {
-	if info == nil || info.StreamStatus == nil {
-		return
-	}
-	switch info.StreamStatus.EndReason {
-	case relaycommon.StreamEndReasonNone, relaycommon.StreamEndReasonDone, relaycommon.StreamEndReasonEOF:
-		info.StreamStatus.OverrideEndReason(relaycommon.StreamEndReasonDrained, nil)
-	}
-	logger.LogInfo(c, "responses stream: drain ended after upstream terminal/EOF")
 }

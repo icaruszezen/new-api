@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -190,22 +192,33 @@ func TestInitChannelMetaClearsResolvedCacheReadBillingRatio(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestApplyResponsesClientDisconnectDrain(t *testing.T) {
-	info := &RelayInfo{}
-	info.ApplyResponsesClientDisconnectDrain()
-	assert.False(t, info.DrainUpstreamOnClientDisconnect)
+func TestInitChannelMetaSetsDrainFromChannelSetting(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cases := []struct {
+		name    string
+		setting dto.ChannelSettings
+		want    bool
+	}{
+		{name: "off", setting: dto.ChannelSettings{}, want: false},
+		{name: "new key", setting: dto.ChannelSettings{ClientDisconnectDrainEnabled: true}, want: true},
+		{name: "legacy responses-only key", setting: dto.ChannelSettings{ResponsesClientDisconnectDrainEnabled: true}, want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// The flag must not depend on the endpoint: chat, messages and
+			// responses all drain when the channel enables it.
+			for _, path := range []string{"/v1/chat/completions", "/v1/messages", "/v1/responses"} {
+				ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+				ctx.Request = httptest.NewRequest("POST", path, nil)
+				common.SetContextKey(ctx, constant.ContextKeyChannelSetting, tc.setting)
+				info := &RelayInfo{DrainUpstreamOnClientDisconnect: !tc.want}
 
-	info.ChannelMeta = &ChannelMeta{}
-	info.ApplyResponsesClientDisconnectDrain()
-	assert.False(t, info.DrainUpstreamOnClientDisconnect)
+				info.InitChannelMeta(ctx)
 
-	info.ChannelSetting.ResponsesClientDisconnectDrainEnabled = true
-	info.ApplyResponsesClientDisconnectDrain()
-	assert.True(t, info.DrainUpstreamOnClientDisconnect)
-
-	info.ChannelSetting.ResponsesClientDisconnectDrainEnabled = false
-	info.ApplyResponsesClientDisconnectDrain()
-	assert.False(t, info.DrainUpstreamOnClientDisconnect)
+				assert.Equal(t, tc.want, info.DrainUpstreamOnClientDisconnect, "path=%s", path)
+			}
+		})
+	}
 }
 
 func TestInitChannelMetaClearsDrainUpstreamOnClientDisconnect(t *testing.T) {

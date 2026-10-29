@@ -169,6 +169,43 @@ func TestOaiResponsesStreamEofWithoutCompleted(t *testing.T) {
 	assert.Equal(t, firstTokenErrorEOFMessage, logs[0].ErrorMessage)
 }
 
+// The same truncation as TestOaiResponsesStreamEofWithoutCompleted, but reached
+// by a drain after the client left: the stream ends as drained, and criterion 4
+// must still see the upstream's own EOF.
+func TestOaiResponsesStreamDrainedEofWithoutCompletedStillHits(t *testing.T) {
+	setupFirstTokenErrorTestDB(t)
+	info := &relaycommon.RelayInfo{
+		OriginModelName:                 "gpt-5.1",
+		UserId:                          7,
+		TokenId:                         9,
+		UsingGroup:                      "default",
+		IsStream:                        true,
+		DisablePing:                     true,
+		DrainUpstreamOnClientDisconnect: true,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelId:         3,
+			UpstreamModelName: "custom-test-model",
+		},
+	}
+
+	s := startDisconnectingStream(t, "/v1/responses", "response.created", info, OaiResponsesStreamHandler)
+	s.send(t, `{"type":"response.created","response":{"id":"resp_1"}}`)
+	s.waitClientGone(t)
+	s.send(t, `{"type":"response.output_text.delta","delta":"."}`)
+	require.NoError(t, s.upstream.Close())
+	usage, apiErr := s.wait(t)
+
+	require.NotNil(t, usage)
+	requireFirstTokenStreamHit(t, info, &dtoUsageResult{Prompt: usage.PromptTokens, Completion: usage.CompletionTokens, Total: usage.TotalTokens}, apiErr)
+	assert.Equal(t, firstTokenErrorEOFMessage, apiErr.Error())
+	assert.Equal(t, relaycommon.StreamEndReasonEOF, info.StreamStatus.DrainedFrom)
+	var logs []*model.FirstTokenErrorLog
+	require.NoError(t, model.DB.Find(&logs).Error)
+	require.Len(t, logs, 1)
+	assert.Equal(t, 1, logs[0].CompletionTokens)
+	assert.Contains(t, logs[0].StreamStatusJson, `"original_end_reason":"drained"`)
+}
+
 func TestOaiResponsesStreamNormalCompletedNotFirstTokenError(t *testing.T) {
 	setupFirstTokenErrorTestDB(t)
 	info, usage, apiErr := runResponsesFirstTokenStream(t, true,

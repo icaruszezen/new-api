@@ -1,21 +1,25 @@
 package xunfei
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
+	"net"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/logger"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/samber/lo"
 
 	"github.com/gin-gonic/gin"
@@ -128,57 +132,139 @@ func buildXunfeiAuthUrl(hostUrl string, apiKey, apiSecret string) string {
 	return callUrl
 }
 
-func xunfeiStreamHandler(c *gin.Context, textRequest dto.GeneralOpenAIRequest, appId string, apiSecret string, apiKey string) (*dto.Usage, *types.NewAPIError) {
-	domain, authUrl := getXunfeiAuthUrl(c, apiKey, apiSecret, textRequest.Model)
-	dataChan, stopChan, err := xunfeiMakeRequest(textRequest, domain, authUrl, appId)
-	if err != nil {
-		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed)
-	}
+// xunfeiStreamHandler 在当前 goroutine 里逐帧读上游 websocket 并转成 SSE，usage 累加自
+// 每帧的 payload.usage（实际只在 status==2 的最后一帧里）；没读到这一帧时按已收到的文本估算，
+// 上游用 header.code 报错的请求除外。每次读取受 STREAMING_TIMEOUT
+// 空闲超时约束。客户端断开：未开启排水时立即关闭 websocket 让阻塞中的读取返回；开启排水时
+// 跳过写客户端，继续读到最后一帧，另以 STREAM_DRAIN_MAX_SECONDS 封顶（从读取返回后发现
+// 断开时算起，断开时正在进行的那次读取仍只受空闲超时约束）。
+func xunfeiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, conn *websocket.Conn) *dto.Usage {
+	defer conn.Close()
+	info.StreamStatus = relaycommon.NewStreamStatus()
 	helper.SetEventStreamHeaders(c)
-	var usage dto.Usage
-	c.Stream(func(w io.Writer) bool {
-		select {
-		case xunfeiResponse := <-dataChan:
-			usage.PromptTokens += xunfeiResponse.Payload.Usage.Text.PromptTokens
-			usage.CompletionTokens += xunfeiResponse.Payload.Usage.Text.CompletionTokens
-			usage.TotalTokens += xunfeiResponse.Payload.Usage.Text.TotalTokens
-			response := streamResponseXunfei2OpenAI(&xunfeiResponse)
-			jsonResponse, err := json.Marshal(response)
-			if err != nil {
-				common.SysLog("error marshalling stream response: " + err.Error())
-				return true
-			}
-			c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonResponse)})
-			return true
-		case <-stopChan:
-			c.Render(-1, common.CustomEvent{Data: "data: [DONE]"})
-			return false
+
+	clientCtx := c.Request.Context()
+	if !info.DrainUpstreamOnClientDisconnect {
+		stopClosingOnDisconnect := context.AfterFunc(clientCtx, func() { _ = conn.Close() })
+		defer stopClosingOnDisconnect()
+	}
+	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
+	maxDrain := time.Duration(constant.StreamDrainMaxSeconds) * time.Second
+
+	var (
+		usage         dto.Usage
+		responseText  strings.Builder
+		upstreamError bool
+		draining      bool
+		drainDeadline time.Time
+		drainStart    time.Time
+	)
+	for {
+		readDeadline := time.Now().Add(streamingTimeout)
+		if draining && maxDrain > 0 && drainDeadline.Before(readDeadline) {
+			readDeadline = drainDeadline
 		}
-	})
-	return &usage, nil
+		_ = conn.SetReadDeadline(readDeadline)
+		_, msg, err := conn.ReadMessage()
+
+		if clientCtx.Err() != nil && !draining {
+			info.StreamStatus.ClientGone = true
+			if !info.DrainUpstreamOnClientDisconnect {
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, clientCtx.Err())
+				break
+			}
+			draining = true
+			drainStart = time.Now()
+			drainDeadline = drainStart.Add(maxDrain)
+			logger.LogInfo(c, "stream drain: client disconnected, reading xunfei websocket to its final frame for billing")
+		}
+		if err != nil {
+			var netErr net.Error
+			switch {
+			case draining && errors.As(err, &netErr) && netErr.Timeout():
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, clientCtx.Err())
+				if maxDrain > 0 && !time.Now().Before(drainDeadline) {
+					info.StreamStatus.RecordError("drain max duration reached")
+				} else {
+					info.StreamStatus.RecordError("drain idle timeout")
+				}
+			case errors.As(err, &netErr) && netErr.Timeout():
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
+			case websocket.IsCloseError(err, websocket.CloseNormalClosure):
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
+			default:
+				common.SysLog("error reading stream response: " + err.Error())
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonScannerErr, err)
+			}
+			break
+		}
+
+		var xunfeiResponse XunfeiChatResponse
+		if err := common.Unmarshal(msg, &xunfeiResponse); err != nil {
+			common.SysLog("error unmarshalling stream response: " + err.Error())
+			info.StreamStatus.RecordError(err.Error())
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonHandlerStop, err)
+			break
+		}
+		info.SetFirstResponseTime()
+		info.ReceivedResponseCount++
+		if xunfeiResponse.Header.Code != 0 {
+			// Spark 在握手成功后用 header.code 拒绝或中止请求（鉴权、限流、审核等），随后关闭连接；
+			// 这不是被截断的回复，不按文本估算计费
+			upstreamError = true
+			err := fmt.Errorf("xunfei error %d: %s", xunfeiResponse.Header.Code, xunfeiResponse.Header.Message)
+			info.StreamStatus.RecordError(err.Error())
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonHandlerStop, err)
+			break
+		}
+		usage.PromptTokens += xunfeiResponse.Payload.Usage.Text.PromptTokens
+		usage.CompletionTokens += xunfeiResponse.Payload.Usage.Text.CompletionTokens
+		usage.TotalTokens += xunfeiResponse.Payload.Usage.Text.TotalTokens
+		helper.ExtendWriteDeadline(c)
+		chunk := streamResponseXunfei2OpenAI(&xunfeiResponse)
+		responseText.WriteString(xunfeiResponse.Payload.Choices.Text[0].Content)
+		_ = helper.ObjectData(c, chunk)
+		if xunfeiResponse.Payload.Choices.Status == 2 {
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
+			break
+		}
+	}
+	if draining {
+		info.StreamStatus.MarkDrained(time.Since(drainStart))
+	}
+	helper.Done(c)
+	if usage.TotalTokens == 0 && !upstreamError {
+		// 没读到最后一帧（未开排水时客户端断开、排水超时、上游中断）
+		return service.ResponseText2Usage(c, responseText.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
+	}
+	return &usage
 }
 
-func xunfeiHandler(c *gin.Context, textRequest dto.GeneralOpenAIRequest, appId string, apiSecret string, apiKey string) (*dto.Usage, *types.NewAPIError) {
-	domain, authUrl := getXunfeiAuthUrl(c, apiKey, apiSecret, textRequest.Model)
-	dataChan, stopChan, err := xunfeiMakeRequest(textRequest, domain, authUrl, appId)
-	if err != nil {
-		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed)
-	}
+func xunfeiHandler(c *gin.Context, conn *websocket.Conn) (*dto.Usage, *types.NewAPIError) {
+	defer conn.Close()
 	var usage dto.Usage
 	var content string
 	var xunfeiResponse XunfeiChatResponse
-	stop := false
-	for !stop {
-		select {
-		case xunfeiResponse = <-dataChan:
-			if len(xunfeiResponse.Payload.Choices.Text) == 0 {
-				continue
-			}
-			content += xunfeiResponse.Payload.Choices.Text[0].Content
-			usage.PromptTokens += xunfeiResponse.Payload.Usage.Text.PromptTokens
-			usage.CompletionTokens += xunfeiResponse.Payload.Usage.Text.CompletionTokens
-			usage.TotalTokens += xunfeiResponse.Payload.Usage.Text.TotalTokens
-		case stop = <-stopChan:
+	for {
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			common.SysLog("error reading stream response: " + err.Error())
+			break
+		}
+		var response XunfeiChatResponse
+		if err := common.Unmarshal(msg, &response); err != nil {
+			common.SysLog("error unmarshalling stream response: " + err.Error())
+			break
+		}
+		xunfeiResponse = response
+		if len(response.Payload.Choices.Text) > 0 {
+			content += response.Payload.Choices.Text[0].Content
+			usage.PromptTokens += response.Payload.Usage.Text.PromptTokens
+			usage.CompletionTokens += response.Payload.Usage.Text.CompletionTokens
+			usage.TotalTokens += response.Payload.Usage.Text.TotalTokens
+		}
+		if response.Payload.Choices.Status == 2 {
+			break
 		}
 	}
 	if len(xunfeiResponse.Payload.Choices.Text) == 0 {
@@ -191,7 +277,7 @@ func xunfeiHandler(c *gin.Context, textRequest dto.GeneralOpenAIRequest, appId s
 	xunfeiResponse.Payload.Choices.Text[0].Content = content
 
 	response := responseXunfei2OpenAI(&xunfeiResponse)
-	jsonResponse, err := json.Marshal(response)
+	jsonResponse, err := common.Marshal(response)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
@@ -200,51 +286,23 @@ func xunfeiHandler(c *gin.Context, textRequest dto.GeneralOpenAIRequest, appId s
 	return &usage, nil
 }
 
-func xunfeiMakeRequest(textRequest dto.GeneralOpenAIRequest, domain, authUrl, appId string) (chan XunfeiChatResponse, chan bool, error) {
+// xunfeiMakeRequest 建立到星火的 websocket 并发出请求，调用方负责关闭返回的连接。
+// 连接不绑定客户端请求的 context，客户端断开后是否继续读由调用方决定。
+func xunfeiMakeRequest(textRequest dto.GeneralOpenAIRequest, domain, authUrl, appId string) (*websocket.Conn, error) {
 	d := websocket.Dialer{
 		HandshakeTimeout: 5 * time.Second,
 	}
-	conn, resp, err := d.Dial(authUrl, nil)
-	if err != nil || resp.StatusCode != 101 {
-		return nil, nil, err
+	conn, _, err := d.Dial(authUrl, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	data := requestOpenAI2Xunfei(textRequest, appId, domain)
-	err = conn.WriteJSON(data)
-	if err != nil {
-		return nil, nil, err
+	if err := conn.WriteJSON(data); err != nil {
+		_ = conn.Close()
+		return nil, err
 	}
-
-	dataChan := make(chan XunfeiChatResponse)
-	stopChan := make(chan bool)
-	go func() {
-		defer func() {
-			conn.Close()
-		}()
-		for {
-			_, msg, err := conn.ReadMessage()
-			if err != nil {
-				common.SysLog("error reading stream response: " + err.Error())
-				break
-			}
-			var response XunfeiChatResponse
-			err = json.Unmarshal(msg, &response)
-			if err != nil {
-				common.SysLog("error unmarshalling stream response: " + err.Error())
-				break
-			}
-			dataChan <- response
-			if response.Payload.Choices.Status == 2 {
-				if err != nil {
-					common.SysLog("error closing websocket connection: " + err.Error())
-				}
-				break
-			}
-		}
-		stopChan <- true
-	}()
-
-	return dataChan, stopChan, nil
+	return conn, nil
 }
 
 func apiVersion2domain(apiVersion string) string {

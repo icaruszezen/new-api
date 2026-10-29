@@ -141,6 +141,15 @@ func appendStreamStatus(relayInfo *relaycommon.RelayInfo, other map[string]inter
 	if ss.EndError != nil {
 		streamInfo["end_error"] = ss.EndError.Error()
 	}
+	if ss.ClientGone {
+		streamInfo["client_disconnected"] = true
+	}
+	if ss.DrainedFrom != relaycommon.StreamEndReasonNone {
+		streamInfo["upstream_end_reason"] = string(ss.DrainedFrom)
+	}
+	if ss.DrainDuration > 0 {
+		streamInfo["drain_ms"] = ss.DrainDuration.Milliseconds()
+	}
 	if ss.ErrorCount > 0 {
 		streamInfo["error_count"] = ss.ErrorCount
 		messages := make([]string, 0, len(ss.Errors))

@@ -92,11 +92,7 @@ func AlphaSearchHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError
 		return newAPIError
 	}
 
-	if contentType := httpResp.Header.Get("Content-Type"); contentType != "" {
-		c.Writer.Header().Set("Content-Type", contentType)
-	}
-	c.Writer.WriteHeader(httpResp.StatusCode)
-	if _, err := io.Copy(c.Writer, httpResp.Body); err != nil {
+	if err := relayAlphaSearchResponse(c, info, httpResp); err != nil {
 		return types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry())
 	}
 
@@ -117,6 +113,25 @@ func AlphaSearchHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError
 	usage := &dto.Usage{}
 	service.PostTextConsumeQuota(c, info, usage, nil)
 	return nil
+}
+
+// relayAlphaSearchResponse copies the upstream response to the client; nil
+// means the search is billed. When the client disconnects mid-copy, a channel
+// with the client-disconnect drain reads the rest of the upstream response and
+// bills the search the upstream already ran; otherwise the copy error is
+// returned and the request is refunded, as before.
+func relayAlphaSearchResponse(c *gin.Context, info *relaycommon.RelayInfo, httpResp *http.Response) error {
+	if contentType := httpResp.Header.Get("Content-Type"); contentType != "" {
+		c.Writer.Header().Set("Content-Type", contentType)
+	}
+	c.Writer.WriteHeader(httpResp.StatusCode)
+	_, err := io.Copy(c.Writer, httpResp.Body)
+	if err == nil || !info.DrainUpstreamOnClientDisconnect || c.Request.Context().Err() == nil {
+		return err
+	}
+	logger.LogInfo(c, fmt.Sprintf("alpha search: client disconnected (%v), reading the rest of the upstream response for billing", err))
+	_, err = io.Copy(io.Discard, httpResp.Body)
+	return err
 }
 
 // buildAlphaSearchRequestBody returns RawBody unchanged unless the model was

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -190,4 +191,34 @@ func TestStreamStatus_Summary_NilSafe(t *testing.T) {
 	t.Parallel()
 	var s *StreamStatus
 	assert.Equal(t, "StreamStatus<nil>", s.Summary())
+}
+
+func TestStreamStatus_MarkDrainedKeepsUpstreamEnd(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		reason       StreamEndReason
+		drained      bool
+		wantEnd      StreamEndReason
+		wantUpstream StreamEndReason
+	}{
+		{StreamEndReasonDone, true, StreamEndReasonDrained, StreamEndReasonDone},
+		{StreamEndReasonEOF, true, StreamEndReasonDrained, StreamEndReasonEOF},
+		{StreamEndReasonHandlerStop, false, StreamEndReasonHandlerStop, StreamEndReasonHandlerStop},
+		{StreamEndReasonScannerErr, false, StreamEndReasonScannerErr, StreamEndReasonScannerErr},
+		{StreamEndReasonClientGone, false, StreamEndReasonClientGone, StreamEndReasonClientGone},
+		{StreamEndReasonPanic, false, StreamEndReasonPanic, StreamEndReasonPanic},
+	}
+	for _, tt := range tests {
+		s := NewStreamStatus()
+		s.SetEndReason(tt.reason, nil)
+		assert.Equal(t, tt.drained, s.MarkDrained(2*time.Second), "reason=%s", tt.reason)
+		assert.Equal(t, tt.wantEnd, s.EndReason, "reason=%s", tt.reason)
+		assert.Equal(t, tt.wantUpstream, s.UpstreamEndReason(), "reason=%s", tt.reason)
+		assert.True(t, s.ClientGone, "reason=%s", tt.reason)
+		assert.Equal(t, 2*time.Second, s.DrainDuration, "reason=%s", tt.reason)
+	}
+
+	var nilStatus *StreamStatus
+	assert.False(t, nilStatus.MarkDrained(time.Second))
+	assert.Equal(t, StreamEndReasonNone, nilStatus.UpstreamEndReason())
 }

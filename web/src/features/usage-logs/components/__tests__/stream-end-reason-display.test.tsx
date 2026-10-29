@@ -24,10 +24,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import zh from '@/i18n/locales/zh.json'
 
 import type { UsageLog } from '../../data/schema'
+import type { LogOtherData } from '../../types'
 import { DetailsDialog } from '../dialogs/details-dialog'
 import { StreamTpsCell } from '../timing-metrics-cell'
 
-function streamLog(endReason: string): UsageLog {
+function streamLog(streamStatus: LogOtherData['stream_status']): UsageLog {
   return {
     id: 1,
     user_id: 1,
@@ -47,19 +48,13 @@ function streamLog(endReason: string): UsageLog {
     token_id: 0,
     group: '',
     ip: '',
-    other: JSON.stringify({
-      stream_status: {
-        status: 'error',
-        end_reason: endReason,
-        end_error: 'context canceled',
-      },
-    }),
+    other: JSON.stringify({ stream_status: streamStatus }),
     request_id: '',
     upstream_request_id: '',
   }
 }
 
-async function hoverStreamErrorIcon(container: HTMLElement): Promise<void> {
+async function hoverStreamStatusIcon(container: HTMLElement): Promise<void> {
   const trigger = container.querySelector<HTMLElement>(
     '[data-slot="tooltip-trigger"]'
   )
@@ -89,7 +84,7 @@ describe('stream end reason display', () => {
       />
     )
 
-    await hoverStreamErrorIcon(rendered.container)
+    await hoverStreamStatusIcon(rendered.container)
 
     expect(await screen.findByText('客户端主动取消')).toBeInTheDocument()
     expect(screen.queryByText('client_gone')).not.toBeInTheDocument()
@@ -103,7 +98,7 @@ describe('stream end reason display', () => {
       />
     )
 
-    await hoverStreamErrorIcon(rendered.container)
+    await hoverStreamStatusIcon(rendered.container)
 
     expect(await screen.findByText('scanner_error')).toBeInTheDocument()
   })
@@ -111,7 +106,11 @@ describe('stream end reason display', () => {
   test('shows a client_gone stream as 客户端主动取消 in the details end reason row', () => {
     render(
       <DetailsDialog
-        log={streamLog('client_gone')}
+        log={streamLog({
+          status: 'error',
+          end_reason: 'client_gone',
+          end_error: 'context canceled',
+        })}
         isAdmin={false}
         open
         onOpenChange={() => {}}
@@ -121,5 +120,83 @@ describe('stream end reason display', () => {
     expect(screen.getByText('结束原因')).toBeInTheDocument()
     expect(screen.getByText('客户端主动取消')).toBeInTheDocument()
     expect(screen.queryByText('client_gone')).not.toBeInTheDocument()
+  })
+
+  test('shows a drained stream with ok status as 客户端断开后排水完成 in the stream tooltip', async () => {
+    const rendered = render(
+      <StreamTpsCell
+        isStream
+        streamStatus={{
+          status: 'ok',
+          end_reason: 'drained',
+          client_disconnected: true,
+          upstream_end_reason: 'done',
+          drain_ms: 2500,
+        }}
+      />
+    )
+
+    await hoverStreamStatusIcon(rendered.container)
+
+    expect(await screen.findByText('客户端断开后排水完成')).toBeInTheDocument()
+    expect(screen.getByText(/上游结束原因/)).toHaveTextContent('done')
+    expect(screen.getByText(/排水时长/)).toHaveTextContent('2.5s')
+  })
+
+  test('shows no stream status icon for an ok stream the client stayed connected to', () => {
+    const rendered = render(
+      <StreamTpsCell
+        isStream
+        streamStatus={{ status: 'ok', end_reason: 'done' }}
+      />
+    )
+
+    expect(
+      rendered.container.querySelector('[data-slot="tooltip-trigger"]')
+    ).toBeNull()
+  })
+
+  test('shows the drained end reason, upstream end and drain duration in the details stream status', () => {
+    render(
+      <DetailsDialog
+        log={streamLog({
+          status: 'ok',
+          end_reason: 'drained',
+          client_disconnected: true,
+          upstream_end_reason: 'eof',
+          drain_ms: 1500,
+        })}
+        isAdmin={false}
+        open
+        onOpenChange={() => {}}
+      />
+    )
+
+    expect(screen.getByText('流状态')).toBeInTheDocument()
+    expect(screen.getByText('客户端断开后排水完成')).toBeInTheDocument()
+    expect(screen.getByText('上游结束原因')).toBeInTheDocument()
+    expect(screen.getByText('eof')).toBeInTheDocument()
+    expect(screen.getByText('排水时长')).toBeInTheDocument()
+    expect(screen.getByText('1.5s')).toBeInTheDocument()
+  })
+
+  test('shows the stream status for an ok stream whose client disconnected before a handler stop', () => {
+    render(
+      <DetailsDialog
+        log={streamLog({
+          status: 'ok',
+          end_reason: 'handler_stop',
+          client_disconnected: true,
+          drain_ms: 800,
+        })}
+        isAdmin={false}
+        open
+        onOpenChange={() => {}}
+      />
+    )
+
+    expect(screen.getByText('流状态')).toBeInTheDocument()
+    expect(screen.getByText('handler_stop')).toBeInTheDocument()
+    expect(screen.queryByText('上游结束原因')).not.toBeInTheDocument()
   })
 })

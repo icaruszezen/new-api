@@ -73,6 +73,7 @@ import {
   getTieredBillingSummary,
   hasAnyCacheTokens,
   isViolationFeeLog,
+  isNotableStreamStatus,
   getFirstResponseTimeColor,
   getResponseTimeColor,
   getReasoningEffortVariant,
@@ -1156,14 +1157,16 @@ export function DetailsDialog(props: DetailsDialogProps) {
           )}
 
         {/* Stream status details */}
-        {other?.stream_status && other.stream_status.status !== 'ok' && (
+        {other?.stream_status && isNotableStreamStatus(other.stream_status) && (
           <DetailSection label={t('Stream Status')}>
             <DetailRow
               label={t('Status')}
               value={
                 <StatusBadge
                   label={other.stream_status.status || t('Error')}
-                  variant='red'
+                  variant={
+                    other.stream_status.status === 'ok' ? 'green' : 'red'
+                  }
                   size='sm'
                   copyable={false}
                 />
@@ -1176,6 +1179,21 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   other.stream_status.end_reason,
                   t
                 )}
+              />
+            )}
+            {other.stream_status.upstream_end_reason && (
+              <DetailRow
+                label={t('Upstream End Reason')}
+                value={getStreamEndReasonLabel(
+                  other.stream_status.upstream_end_reason,
+                  t
+                )}
+              />
+            )}
+            {other.stream_status.drain_ms != null && (
+              <DetailRow
+                label={t('Drain Duration')}
+                value={formatUseTime(other.stream_status.drain_ms / 1000)}
               />
             )}
             {(other.stream_status.error_count ?? 0) > 0 && (

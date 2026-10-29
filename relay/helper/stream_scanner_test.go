@@ -424,84 +424,328 @@ func TestStreamScannerHandler_ClientCancelDrainIdleTimeoutClosesBody(t *testing.
 	assert.True(t, info.StreamStatus.HasErrors())
 }
 
-func TestStreamScannerHandler_ClientCancelDrainCommentsDoNotExtendIdle(t *testing.T) {
+// drainTestSetup wires a gin context whose request context the test cancels to
+// simulate a client disconnect, and an upstream body the test writes to.
+func drainTestSetup(t *testing.T, drain bool) (*gin.Context, *httptest.ResponseRecorder, context.CancelFunc, *io.PipeWriter, *http.Response, *relaycommon.RelayInfo) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		cancel()
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(ctx)
+	info := &relaycommon.RelayInfo{
+		DisablePing:                     true,
+		DrainUpstreamOnClientDisconnect: drain,
+		ChannelMeta:                     &relaycommon.ChannelMeta{},
+	}
+	return c, recorder, cancel, pw, &http.Response{Body: pr}, info
+}
+
+func waitHandlerDone(t *testing.T, done <-chan struct{}, within time.Duration, msg string) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(within):
+		t.Fatal(msg)
+	}
+}
+
+func TestStreamScannerHandler_ClientCancelDrainKeepsReadingThroughComments(t *testing.T) {
 	// Not parallel: modifies global constant.StreamingTimeout
 	oldTimeout := constant.StreamingTimeout
 	constant.StreamingTimeout = 1
 	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	pr, pw := io.Pipe()
-	t.Cleanup(func() {
-		_ = pr.Close()
-		_ = pw.Close()
-	})
-
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(ctx)
-
-	resp := &http.Response{Body: pr}
-	info := &relaycommon.RelayInfo{
-		DisablePing:                     true,
-		DrainUpstreamOnClientDisconnect: true,
-		ChannelMeta:                     &relaycommon.ChannelMeta{},
-	}
-
+	c, _, cancel, pw, resp, info := drainTestSetup(t, true)
+	var last atomic.Value
 	firstHandled := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
 		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
-			_ = StringData(c, data)
-			close(firstHandled)
+			last.Store(data)
+			sr.Error(StringData(c, data))
+			if data == "first" {
+				close(firstHandled)
+			}
 		})
 		close(done)
 	}()
 
-	_, err := fmt.Fprint(pw, "data: {\"type\":\"response.created\"}\n")
+	_, err := fmt.Fprint(pw, "data: first\n")
 	require.NoError(t, err)
-
-	select {
-	case <-firstHandled:
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for first chunk")
-	}
-
+	<-firstHandled
 	cancel()
 
-	commentWrites := 0
-	timeout := time.After(3 * time.Second)
+	// An upstream that only sends SSE comments for longer than STREAMING_TIMEOUT
+	// (long reasoning) is alive, exactly as the connected path treats it.
+	for i := 0; i < 8; i++ {
+		time.Sleep(200 * time.Millisecond)
+		_, err = fmt.Fprint(pw, ": keepalive\n")
+		require.NoError(t, err, "drain must not close an upstream that keeps sending lines")
+	}
+	_, err = fmt.Fprint(pw, "data: usage\ndata: [DONE]\n")
+	require.NoError(t, err)
+	waitHandlerDone(t, done, 2*time.Second, "handler did not return after upstream terminal")
+
+	assert.Equal(t, "usage", last.Load())
+	assert.Equal(t, relaycommon.StreamEndReasonDrained, info.StreamStatus.EndReason)
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.UpstreamEndReason())
+	assert.True(t, info.StreamStatus.ClientGone)
+	assert.Positive(t, info.StreamStatus.DrainDuration)
+	// Writes skipped because the client left are not stream errors.
+	assert.False(t, info.StreamStatus.HasErrors())
+}
+
+func TestStreamScannerHandler_ClientCancelDrainStopsAtMaxDuration(t *testing.T) {
+	// Not parallel: modifies global constants
+	oldTimeout, oldMax := constant.StreamingTimeout, constant.StreamDrainMaxSeconds
+	constant.StreamingTimeout = 30
+	constant.StreamDrainMaxSeconds = 1
+	t.Cleanup(func() { constant.StreamingTimeout, constant.StreamDrainMaxSeconds = oldTimeout, oldMax })
+
+	c, _, cancel, pw, resp, info := drainTestSetup(t, true)
+	done := make(chan struct{})
+	go func() {
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})
+		close(done)
+	}()
+	cancel()
+
+	// Keepalives alone must not hold a drain open forever.
+	deadline := time.After(3 * time.Second)
+	keepalive := time.NewTicker(100 * time.Millisecond)
+	defer keepalive.Stop()
 	for {
 		select {
 		case <-done:
-			require.Greater(t, commentWrites, 0, "should have written keepalive comments before idle timeout")
-			_, err = fmt.Fprint(pw, "data: late\n")
-			require.ErrorIs(t, err, io.ErrClosedPipe, "upstream body should be closed after drain idle timeout")
-			require.NotNil(t, info.StreamStatus)
+			_, err := fmt.Fprint(pw, "data: late\n")
+			require.ErrorIs(t, err, io.ErrClosedPipe, "upstream body should be closed after the drain cap")
 			assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
-			assert.True(t, info.StreamStatus.HasErrors())
+			require.True(t, info.StreamStatus.HasErrors())
+			assert.Equal(t, "drain max duration reached", info.StreamStatus.Errors[0].Message)
 			return
-		case <-timeout:
-			t.Fatal("keepalive comments extended drain past idle timeout")
-		case <-time.After(200 * time.Millisecond):
-			_, writeErr := fmt.Fprint(pw, ": keepalive\n")
-			if writeErr != nil {
-				require.ErrorIs(t, writeErr, io.ErrClosedPipe)
-				select {
-				case <-done:
-				case <-time.After(2 * time.Second):
-					t.Fatal("handler did not return after drain closed the body")
-				}
-				require.NotNil(t, info.StreamStatus)
-				assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
-				assert.True(t, info.StreamStatus.HasErrors())
-				return
-			}
-			commentWrites++
+		case <-deadline:
+			t.Fatal("drain was not capped by STREAM_DRAIN_MAX_SECONDS")
+		case <-keepalive.C:
+			_, _ = fmt.Fprint(pw, ": keepalive\n")
 		}
 	}
+}
+
+func TestStreamScannerHandler_ClientCancelBeforeDataKeepsOriginalIdleWindow(t *testing.T) {
+	// Not parallel: modifies global constant.StreamingTimeout
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 1
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	c, _, cancel, _, resp, info := drainTestSetup(t, true)
+	start := time.Now()
+	done := make(chan struct{})
+	go func() {
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})
+		close(done)
+	}()
+	time.Sleep(800 * time.Millisecond)
+	cancel()
+	waitHandlerDone(t, done, 3*time.Second, "handler did not return after drain idle timeout")
+
+	// The silent upstream is cut when the idle window that started with the
+	// stream runs out, not a fresh STREAMING_TIMEOUT after the disconnect.
+	assert.Less(t, time.Since(start), 1500*time.Millisecond)
+	assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+	require.True(t, info.StreamStatus.HasErrors())
+	assert.Equal(t, "drain idle timeout", info.StreamStatus.Errors[0].Message)
+}
+
+func TestStreamScannerHandler_ClientCancelDrainEOFKeepsUpstreamEnd(t *testing.T) {
+	c, _, cancel, pw, resp, info := drainTestSetup(t, true)
+	firstHandled := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+			if data == "first" {
+				close(firstHandled)
+			}
+		})
+		close(done)
+	}()
+	_, err := fmt.Fprint(pw, "data: first\n")
+	require.NoError(t, err)
+	<-firstHandled
+	cancel()
+	_, err = fmt.Fprint(pw, "data: last\n")
+	require.NoError(t, err)
+	require.NoError(t, pw.Close())
+	waitHandlerDone(t, done, 2*time.Second, "handler did not return after upstream EOF")
+
+	assert.Equal(t, relaycommon.StreamEndReasonDrained, info.StreamStatus.EndReason)
+	// Callers that must tell a truncated upstream from a completed one still can.
+	assert.Equal(t, relaycommon.StreamEndReasonEOF, info.StreamStatus.UpstreamEndReason())
+}
+
+func TestStreamScannerHandler_ClientCancelDrainKeepsHandlerStop(t *testing.T) {
+	c, _, cancel, pw, resp, info := drainTestSetup(t, true)
+	firstHandled := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+			switch data {
+			case "first":
+				close(firstHandled)
+			case "upstream-error":
+				sr.Stop(fmt.Errorf("upstream error event"))
+			}
+		})
+		close(done)
+	}()
+	_, err := fmt.Fprint(pw, "data: first\n")
+	require.NoError(t, err)
+	<-firstHandled
+	cancel()
+	_, err = fmt.Fprint(pw, "data: upstream-error\n")
+	require.NoError(t, err)
+	waitHandlerDone(t, done, 2*time.Second, "handler did not return after handler stop")
+
+	// A drain that ends on an upstream error is not relabelled as drained.
+	assert.Equal(t, relaycommon.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
+	assert.True(t, info.StreamStatus.ClientGone)
+}
+
+func TestStreamScannerHandler_DrainNotMaskedByPingFailingAfterDisconnect(t *testing.T) {
+	setting := operation_setting.GetGeneralSetting()
+	oldEnabled, oldSec := setting.PingIntervalEnabled, setting.PingIntervalSeconds
+	setting.PingIntervalEnabled = true
+	setting.PingIntervalSeconds = 1
+	t.Cleanup(func() { setting.PingIntervalEnabled, setting.PingIntervalSeconds = oldEnabled, oldSec })
+
+	c, _, cancel, pw, resp, info := drainTestSetup(t, true)
+	info.DisablePing = false
+
+	firstDone := make(chan struct{})
+	var calls atomic.Int32
+	done := make(chan struct{})
+	go func() {
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+			if calls.Add(1) == 1 {
+				// A write to a dead client blocks while holding the write lock
+				// until net/http fails it and cancels the request context. The
+				// ping tick at 1s waits on the same lock meanwhile.
+				time.Sleep(1300 * time.Millisecond)
+				cancel()
+				close(firstDone)
+			}
+			sr.Error(StringData(c, data))
+		})
+		close(done)
+	}()
+
+	_, err := fmt.Fprint(pw, "data: first\n")
+	require.NoError(t, err)
+	<-firstDone
+	_, err = fmt.Fprint(pw, "data: usage\ndata: [DONE]\n")
+	require.NoError(t, err)
+	waitHandlerDone(t, done, 3*time.Second, "handler did not return")
+
+	assert.Equal(t, relaycommon.StreamEndReasonDrained, info.StreamStatus.EndReason)
+	assert.False(t, info.StreamStatus.HasErrors())
+}
+
+func TestStreamScannerHandler_ClientCancelWithoutDrainNotMaskedByPing(t *testing.T) {
+	setting := operation_setting.GetGeneralSetting()
+	oldEnabled, oldSec := setting.PingIntervalEnabled, setting.PingIntervalSeconds
+	setting.PingIntervalEnabled = true
+	setting.PingIntervalSeconds = 1
+	t.Cleanup(func() { setting.PingIntervalEnabled, setting.PingIntervalSeconds = oldEnabled, oldSec })
+
+	c, _, cancel, pw, resp, info := drainTestSetup(t, false)
+	info.DisablePing = false
+
+	var calls atomic.Int32
+	done := make(chan struct{})
+	go func() {
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+			if calls.Add(1) == 1 {
+				time.Sleep(1300 * time.Millisecond)
+				cancel()
+			}
+		})
+		close(done)
+	}()
+
+	_, err := fmt.Fprint(pw, "data: first\n")
+	require.NoError(t, err)
+	waitHandlerDone(t, done, 3*time.Second, "handler did not return after client disconnect")
+
+	assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+	assert.True(t, info.StreamStatus.ClientGone)
+}
+
+func TestStreamScannerHandler_BareDoneLineEndsStream(t *testing.T) {
+	t.Parallel()
+	body := "data: {\"id\":1}\n[DONE]\ndata: {\"id\":2}\n"
+	c, resp, info := setupStreamTest(t, strings.NewReader(body))
+	info.DisablePing = true
+
+	var got []string
+	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+		got = append(got, data)
+	})
+
+	assert.Equal(t, []string{`{"id":1}`}, got)
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+}
+
+func TestStreamLineScannerHandler_PassesRawLinesUntilDone(t *testing.T) {
+	t.Parallel()
+	body := "{\"done\":false}\n\n  event: message  \ndata: [DONE]\n{\"done\":true}\n{\"after\":1}\n"
+	c, resp, info := setupStreamTest(t, strings.NewReader(body))
+	info.DisablePing = true
+
+	var got []string
+	StreamLineScannerHandler(c, resp, info, func(line string, sr *StreamResult) {
+		got = append(got, line)
+		if line == `{"done":true}` {
+			sr.Done()
+		}
+	})
+
+	// Blank lines are skipped; other lines arrive untouched (raw-text
+	// protocols keep their whitespace), and "[DONE]" is only a terminator for
+	// SSE upstreams. Nothing after sr.Done() reaches the handler.
+	assert.Equal(t, []string{`{"done":false}`, `  event: message  `, `data: [DONE]`, `{"done":true}`}, got)
+	assert.True(t, info.StreamStatus.IsNormalEnd())
+}
+
+func TestStreamLineScannerHandler_ClientCancelDrainsToEOF(t *testing.T) {
+	c, _, cancel, pw, resp, info := drainTestSetup(t, true)
+	var last atomic.Value
+	firstHandled := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		StreamLineScannerHandler(c, resp, info, func(line string, sr *StreamResult) {
+			last.Store(line)
+			if line == `{"n":1}` {
+				close(firstHandled)
+			}
+		})
+		close(done)
+	}()
+	_, err := fmt.Fprint(pw, "{\"n\":1}\n")
+	require.NoError(t, err)
+	<-firstHandled
+	cancel()
+	_, err = fmt.Fprint(pw, "{\"n\":2,\"usage\":true}\n")
+	require.NoError(t, err)
+	require.NoError(t, pw.Close())
+	waitHandlerDone(t, done, 2*time.Second, "handler did not return after upstream EOF")
+
+	assert.Equal(t, `{"n":2,"usage":true}`, last.Load())
+	assert.Equal(t, relaycommon.StreamEndReasonDrained, info.StreamStatus.EndReason)
 }
 
 // ---------- Ping tests ----------

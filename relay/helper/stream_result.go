@@ -1,6 +1,8 @@
 package helper
 
 import (
+	"errors"
+
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 )
 
@@ -17,9 +19,11 @@ func newStreamResult(status *relaycommon.StreamStatus) *StreamResult {
 }
 
 // Error records a soft error. The stream continues processing.
-// Can be called multiple times per chunk.
+// Can be called multiple times per chunk. A write skipped because the client
+// disconnected (ErrClientGone) is not a stream error and is not recorded: the
+// end reason already says the client left.
 func (r *StreamResult) Error(err error) {
-	if err == nil {
+	if err == nil || errors.Is(err, ErrClientGone) {
 		return
 	}
 	r.status.RecordError(err.Error())

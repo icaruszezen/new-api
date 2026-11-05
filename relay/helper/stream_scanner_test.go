@@ -141,15 +141,36 @@ func TestStreamScannerHandler_OrderPreserved(t *testing.T) {
 func TestStreamScannerHandler_DoneStopsScanner(t *testing.T) {
 	t.Parallel()
 
-	body := buildSSEBody(50) + "data: should_not_appear\n"
-	c, resp, info := setupStreamTest(t, strings.NewReader(body))
+	for _, test := range []struct {
+		name string
+		line string
+		want []string
+	}{
+		{name: "bare", line: "[DONE]", want: []string{"before"}},
+		{name: "bare with whitespace", line: " \t[DONE] \t\r", want: []string{"before"}},
+		{name: "data prefixed", line: "data: [DONE]", want: []string{"before"}},
+		{name: "data without space", line: "data:[DONE]", want: []string{"before"}},
+		{name: "data with whitespace", line: "data: \t[DONE] \t\r", want: []string{"before"}},
+		{name: "bare prefix is not done", line: "[DONE]extra", want: []string{"before", "after"}},
+		{name: "data prefix is not done", line: "data: [DONE]extra", want: []string{"before", "[DONE]extra", "after"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			body := "data: before\n" + test.line + "\ndata: after\ndata: [DONE]\n"
+			c, resp, info := setupStreamTest(t, strings.NewReader(body))
+			info.DisablePing = true
 
-	var count atomic.Int64
-	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
-		count.Add(1)
-	})
+			var received []string
+			StreamScannerHandler(c, resp, info, func(data string, _ *StreamResult) {
+				received = append(received, data)
+			})
 
-	assert.Equal(t, int64(50), count.Load(), "data after [DONE] must not be processed")
+			assert.Equal(t, test.want, received)
+			require.NotNil(t, info.StreamStatus)
+			assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+			assert.NoError(t, info.StreamStatus.EndError)
+			assert.Equal(t, len(test.want), info.ReceivedResponseCount)
+		})
+	}
 }
 
 func TestStreamScannerHandler_StopStopsStream(t *testing.T) {
@@ -685,21 +706,6 @@ func TestStreamScannerHandler_ClientCancelWithoutDrainNotMaskedByPing(t *testing
 	assert.True(t, info.StreamStatus.ClientGone)
 }
 
-func TestStreamScannerHandler_BareDoneLineEndsStream(t *testing.T) {
-	t.Parallel()
-	body := "data: {\"id\":1}\n[DONE]\ndata: {\"id\":2}\n"
-	c, resp, info := setupStreamTest(t, strings.NewReader(body))
-	info.DisablePing = true
-
-	var got []string
-	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
-		got = append(got, data)
-	})
-
-	assert.Equal(t, []string{`{"id":1}`}, got)
-	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
-}
-
 func TestStreamLineScannerHandler_PassesRawLinesUntilDone(t *testing.T) {
 	t.Parallel()
 	body := "{\"done\":false}\n\n  event: message  \ndata: [DONE]\n{\"done\":true}\n{\"after\":1}\n"
@@ -1035,4 +1041,87 @@ func TestStreamScannerHandler_StreamStatus_ReplacesPreInitialized(t *testing.T) 
 
 	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
 	assert.Equal(t, 0, info.StreamStatus.TotalErrorCount())
+}
+
+// ---------- Write deadlines ----------
+
+type deadlineRecorder struct {
+	*httptest.ResponseRecorder
+	deadlines []time.Time
+}
+
+func (r *deadlineRecorder) SetWriteDeadline(deadline time.Time) error {
+	r.deadlines = append(r.deadlines, deadline)
+	return nil
+}
+
+func TestStreamWriteBudget(t *testing.T) {
+	// Not parallel: modifies global constant.StreamingTimeout
+	oldTimeout := constant.StreamingTimeout
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	const (
+		smallEvent = 8 << 10    // 1s at streamMinClientRate
+		imageEvent = 3600 << 10 // 450s at streamMinClientRate
+	)
+	start := time.Unix(1_800_000_000, 0)
+	type step struct {
+		name  string
+		at    time.Duration
+		bytes int
+		want  time.Duration
+	}
+	cases := []struct {
+		name             string
+		streamingTimeout int
+		steps            []step
+	}{
+		{"default timeout carries at most 60s", 300, []step{
+			{"small event", 0, smallEvent, 31 * time.Second},
+			{"image event gets the time a slow client needs", 0, imageEvent, 481 * time.Second},
+			{"small write after the image lead carries only 60s", 60 * time.Second, smallEvent, 151 * time.Second},
+			{"large write after a lead still gets its own allowance", 61 * time.Second, imageEvent, 601 * time.Second},
+			{"budget starts over once it ran out", 700 * time.Second, smallEvent, 731 * time.Second},
+		}},
+		{"90s timeout carries at most 30s", 90, []step{
+			{"image event", 0, imageEvent, 480 * time.Second},
+			{"small write after the image lead", 60 * time.Second, smallEvent, 121 * time.Second},
+		}},
+		{"45s timeout carries nothing", 45, []step{
+			{"image event", 0, imageEvent, 480 * time.Second},
+			{"small write after the image lead", 60 * time.Second, smallEvent, 91 * time.Second},
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			constant.StreamingTimeout = tc.streamingTimeout
+			streamingTimeout := time.Duration(tc.streamingTimeout) * time.Second
+			var budget streamWriteBudget
+			for _, s := range tc.steps {
+				now := start.Add(s.at)
+				deadline := budget.Deadline(now, s.bytes)
+				assert.Equal(t, start.Add(s.want), deadline, s.name)
+				if s.bytes == smallEvent {
+					// A client that stops reading must fail this write, which
+					// starts the client-disconnect drain, before the idle
+					// watchdog ends the stream as a timeout.
+					assert.Less(t, deadline.Sub(now), streamingTimeout, s.name)
+				}
+			}
+		})
+	}
+}
+
+func TestSetEventStreamHeadersBoundsStreamWritesByBudget(t *testing.T) {
+	recorder := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+	SetEventStreamHeaders(c)
+
+	before := time.Now()
+	require.NoError(t, StringData(c, strings.Repeat("A", 3600<<10)))
+
+	require.NotEmpty(t, recorder.deadlines)
+	assert.False(t, recorder.deadlines[0].Before(before.Add(streamWriteTimeout+450*time.Second)))
+	assert.Contains(t, recorder.Body.String(), "data: AAAA")
 }

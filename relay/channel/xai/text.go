@@ -54,9 +54,14 @@ func xAIStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		// 把 xAI 的usage转换为 OpenAI 的usage
 		if xAIResp.Usage != nil {
 			containStreamUsage = true
+			// Each chunk decodes a fresh usage, so the ratio scales it once
+			// for both billing and the forwarded chunk.
+			service.ApplyChannelCacheReadBillingRatio(info, xAIResp.Usage, nil)
 			usage.PromptTokens = xAIResp.Usage.PromptTokens
 			usage.TotalTokens = xAIResp.Usage.TotalTokens
 			usage.CompletionTokens = usage.TotalTokens - usage.PromptTokens
+			usage.PromptTokensDetails = xAIResp.Usage.PromptTokensDetails
+			usage.CompletionTokenDetails = xAIResp.Usage.CompletionTokenDetails
 		}
 
 		openaiResponse := streamResponseXAI2OpenAI(xAIResp, usage)
@@ -92,6 +97,7 @@ func xAIHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response
 	if xaiResponse.Usage != nil {
 		xaiResponse.Usage.CompletionTokens = xaiResponse.Usage.TotalTokens - xaiResponse.Usage.PromptTokens
 		xaiResponse.Usage.CompletionTokenDetails.TextTokens = xaiResponse.Usage.CompletionTokens - xaiResponse.Usage.CompletionTokenDetails.ReasoningTokens
+		service.ApplyChannelCacheReadBillingRatio(info, xaiResponse.Usage, nil)
 	}
 
 	// new body

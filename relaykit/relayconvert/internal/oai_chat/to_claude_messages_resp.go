@@ -1,6 +1,7 @@
 package oaichat
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -59,11 +60,12 @@ func buildClaudeUsageFromOpenAIUsage(oaiUsage *dto.Usage) *dto.ClaudeUsage {
 	)
 	cacheCreationTokens := oaiUsage.PromptTokensDetails.CacheCreationTokensTotal()
 	inputTokens := oaiUsage.PromptTokens
-	if oaiUsage.PromptTokensDetails.CacheWriteTokens > 0 {
-		// OpenAI native cache-write usage counts cached and cache-write tokens
-		// inside prompt_tokens, while Claude semantics reports input_tokens
-		// excluding both. Both counts are unadjusted prefixes and may overlap,
-		// so clamp a negative remainder at zero.
+	if oaiUsage.PromptTokensDetails.CacheWriteTokens > 0 || oaiUsage.PromptTokensDetails.CacheCreationInputTokens > 0 {
+		// OpenAI native cache-write usage (and OpenAI-compatible explicit cache
+		// reporting cache_creation_input_tokens) counts cached and cache-write
+		// tokens inside prompt_tokens, while Claude semantics reports
+		// input_tokens excluding both. Both counts are unadjusted prefixes and
+		// may overlap, so clamp a negative remainder at zero.
 		inputTokens = oaiUsage.PromptTokens - oaiUsage.PromptTokensDetails.CachedTokens - cacheCreationTokens
 		if inputTokens < 0 {
 			inputTokens = 0
@@ -218,7 +220,8 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 					},
 				})
 				state.LastMessagesType = convmeta.LastMessageTypeThinking
-			} else if content != "" {
+			}
+			if content != "" {
 				if state.LastMessagesType != convmeta.LastMessageTypeText {
 					stopOpenBlocksAndAdvance()
 				}
@@ -309,9 +312,6 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 			}
 		}
 
-		var claudeResponse dto.ClaudeResponse
-		var isEmpty bool
-		claudeResponse.Type = "content_block_delta"
 		if len(chosenChoice.Delta.ToolCalls) > 0 {
 			toolCalls := chosenChoice.Delta.ToolCalls
 			if state.LastMessagesType != convmeta.LastMessageTypeTools {
@@ -363,54 +363,56 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 			state.ToolCallMaxIndexOffset = maxOffset
 			state.Index = base + maxOffset
 		} else {
+			// Some upstreams put the last reasoning token and the first answer
+			// text in one chunk: the thinking block closes before the text block opens.
 			reasoning := chosenChoice.Delta.GetReasoningContent()
 			textContent := chosenChoice.Delta.GetContentString()
-			if reasoning != "" || textContent != "" {
-				if reasoning != "" {
-					if state.LastMessagesType != convmeta.LastMessageTypeThinking {
-						stopOpenBlocksAndAdvance()
-						idx := state.Index
-						claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
-							Index: &idx,
-							Type:  "content_block_start",
-							ContentBlock: &dto.ClaudeMediaMessage{
-								Type:     "thinking",
-								Thinking: kitutil.GetPointer[string](""),
-							},
-						})
-					}
-					state.LastMessagesType = convmeta.LastMessageTypeThinking
-					claudeResponse.Delta = &dto.ClaudeMediaMessage{
+			if reasoning != "" {
+				if state.LastMessagesType != convmeta.LastMessageTypeThinking {
+					stopOpenBlocksAndAdvance()
+					idx := state.Index
+					claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
+						Index: &idx,
+						Type:  "content_block_start",
+						ContentBlock: &dto.ClaudeMediaMessage{
+							Type:     "thinking",
+							Thinking: kitutil.GetPointer[string](""),
+						},
+					})
+				}
+				state.LastMessagesType = convmeta.LastMessageTypeThinking
+				claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
+					Index: kitutil.GetPointer[int](state.Index),
+					Type:  "content_block_delta",
+					Delta: &dto.ClaudeMediaMessage{
 						Type:     "thinking_delta",
 						Thinking: &reasoning,
-					}
-				} else {
-					if state.LastMessagesType != convmeta.LastMessageTypeText {
-						stopOpenBlocksAndAdvance()
-						idx := state.Index
-						claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
-							Index: &idx,
-							Type:  "content_block_start",
-							ContentBlock: &dto.ClaudeMediaMessage{
-								Type: "text",
-								Text: kitutil.GetPointer[string](""),
-							},
-						})
-					}
-					state.LastMessagesType = convmeta.LastMessageTypeText
-					claudeResponse.Delta = &dto.ClaudeMediaMessage{
+					},
+				})
+			}
+			if textContent != "" {
+				if state.LastMessagesType != convmeta.LastMessageTypeText {
+					stopOpenBlocksAndAdvance()
+					idx := state.Index
+					claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
+						Index: &idx,
+						Type:  "content_block_start",
+						ContentBlock: &dto.ClaudeMediaMessage{
+							Type: "text",
+							Text: kitutil.GetPointer[string](""),
+						},
+					})
+				}
+				state.LastMessagesType = convmeta.LastMessageTypeText
+				claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
+					Index: kitutil.GetPointer[int](state.Index),
+					Type:  "content_block_delta",
+					Delta: &dto.ClaudeMediaMessage{
 						Type: "text_delta",
 						Text: kitutil.GetPointer[string](textContent),
-					}
-				}
-			} else {
-				isEmpty = true
+					},
+				})
 			}
-		}
-
-		claudeResponse.Index = kitutil.GetPointer[int](state.Index)
-		if !isEmpty && claudeResponse.Delta != nil {
-			claudeResponses = append(claudeResponses, &claudeResponse)
 		}
 
 		if doneChunk || state.Done {
@@ -491,9 +493,9 @@ func ResponseOpenAI2Claude(openAIResponse *dto.OpenAITextResponse, info convmeta
 			claudeContent.Type = "tool_use"
 			claudeContent.Id = toolUse.ID
 			claudeContent.Name = toolUse.Function.Name
-			mapParams := map[string]interface{}{}
+			mapParams := map[string]json.RawMessage{}
 			if strings.TrimSpace(toolUse.Function.Arguments) != "" {
-				var parsed map[string]interface{}
+				var parsed map[string]json.RawMessage
 				if err := kitutil.Unmarshal([]byte(toolUse.Function.Arguments), &parsed); err == nil && parsed != nil {
 					mapParams = parsed
 				}

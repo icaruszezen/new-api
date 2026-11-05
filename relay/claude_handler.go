@@ -107,6 +107,14 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 		info.UpstreamModelName = request.Model
 	}
+	// The effort suffix above replaces the client's thinking config, but
+	// block_binding is a conversation control, not a reasoning setting. Keep
+	// the client's value when the rendered mode is still adaptive; never add
+	// one the client did not send.
+	if claudeReq.Thinking != nil && request.Thinking != nil &&
+		request.Thinking.Type == "adaptive" && len(request.Thinking.BlockBinding) == 0 {
+		request.Thinking.BlockBinding = claudeReq.Thinking.BlockBinding
+	}
 	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled && !info.ChannelSetting.PassThroughBodyEnabled {
 		if effort := request.GetEfforts(); effort != "" {
 			info.SetReasoningEffort(effort)

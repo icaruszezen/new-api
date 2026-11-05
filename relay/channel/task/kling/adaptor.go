@@ -290,17 +290,32 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	return &r, nil
 }
 
+// klingAspectRatios are the ratios Kling accepts; a tie keeps the earlier one.
+var klingAspectRatios = []struct {
+	name          string
+	width, height float64
+}{{"16:9", 16, 9}, {"9:16", 9, 16}, {"1:1", 1, 1}}
+
+// getAspectRatio maps a WIDTHxHEIGHT size to the nearest ratio Kling accepts,
+// so sizes such as 1792x1024 keep their orientation. A missing or unreadable
+// size keeps the 1:1 default.
 func (a *TaskAdaptor) getAspectRatio(size string) string {
-	switch size {
-	case "1024x1024", "512x512":
-		return "1:1"
-	case "1280x720", "1920x1080":
-		return "16:9"
-	case "720x1280", "1080x1920":
-		return "9:16"
-	default:
+	widthText, heightText, found := strings.Cut(strings.ToLower(strings.TrimSpace(size)), "x")
+	width, widthErr := strconv.ParseFloat(widthText, 64)
+	height, heightErr := strconv.ParseFloat(heightText, 64)
+	if !found || widthErr != nil || heightErr != nil || !(width > 0) || !(height > 0) || math.IsInf(width, 0) || math.IsInf(height, 0) {
 		return "1:1"
 	}
+	nearest := klingAspectRatios[0].name
+	nearestDistance := math.Inf(1)
+	for _, ratio := range klingAspectRatios {
+		distance := math.Abs(math.Log(width/height) - math.Log(ratio.width/ratio.height))
+		if distance < nearestDistance {
+			nearest = ratio.name
+			nearestDistance = distance
+		}
+	}
+	return nearest
 }
 
 // ============================
@@ -312,17 +327,22 @@ func (a *TaskAdaptor) createJWTToken() (string, error) {
 }
 
 func (a *TaskAdaptor) createJWTTokenWithKey(apiKey string) (string, error) {
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey == "" {
+		return "", errors.New("api_key is empty")
+	}
 	if isNewAPIRelay(apiKey) {
 		return apiKey, nil // new api relay
 	}
 	keyParts := strings.Split(apiKey, "|")
+	// A single API key is sent as the bearer token as is.
+	if len(keyParts) == 1 {
+		return apiKey, nil
+	}
 	if len(keyParts) != 2 {
 		return "", errors.New("invalid api_key, required format is accessKey|secretKey")
 	}
 	accessKey := strings.TrimSpace(keyParts[0])
-	if len(keyParts) == 1 {
-		return accessKey, nil
-	}
 	secretKey := strings.TrimSpace(keyParts[1])
 	now := time.Now().Unix()
 	claims := jwt.MapClaims{

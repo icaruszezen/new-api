@@ -229,11 +229,12 @@ type Usage struct {
 	UsageSource          string        `json:"usage_source,omitempty"`
 	BillingUsage         *BillingUsage `json:"billing_usage,omitempty"`
 
-	PromptTokensDetails    InputTokenDetails  `json:"prompt_tokens_details"`
-	CompletionTokenDetails OutputTokenDetails `json:"completion_tokens_details"`
-	InputTokens            int                `json:"input_tokens"`
-	OutputTokens           int                `json:"output_tokens"`
-	InputTokensDetails     *InputTokenDetails `json:"input_tokens_details"`
+	PromptTokensDetails    InputTokenDetails   `json:"prompt_tokens_details"`
+	CompletionTokenDetails OutputTokenDetails  `json:"completion_tokens_details"`
+	InputTokens            int                 `json:"input_tokens"`
+	OutputTokens           int                 `json:"output_tokens"`
+	InputTokensDetails     *InputTokenDetails  `json:"input_tokens_details"`
+	OutputTokensDetails    *OutputTokenDetails `json:"output_tokens_details,omitempty"`
 
 	// claude cache 1h
 	ClaudeCacheCreation5mTokens int `json:"claude_cache_creation_5_m_tokens"`
@@ -264,19 +265,21 @@ type InputTokenDetails struct {
 	TextTokens       int `json:"text_tokens"`
 	AudioTokens      int `json:"audio_tokens"`
 	ImageTokens      int `json:"image_tokens"`
+	// CacheCreationInputTokens is already included in prompt_tokens. Billing
+	// takes the larger of this value, CacheWriteTokens, and CachedCreationTokens,
+	// and does not add them.
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
 }
 
 // CacheCreationTokensTotal returns the cache-write token count regardless of
-// which field the upstream reported it in: Claude-derived conversions populate
-// CachedCreationTokens while OpenAI reports cache_write_tokens natively. Both
-// are billed at the cache-creation price; when both are present the larger
-// value wins so the same tokens are never double-counted. Negative upstream
-// values are clamped to zero so they can never lower a charge.
+// which field the upstream reported it in. Claude-derived conversions populate
+// CachedCreationTokens, OpenAI reports cache_write_tokens, and OpenAI-compatible
+// explicit cache reports cache_creation_input_tokens. All are billed at the
+// cache-creation price. When more than one is present the larger value wins so
+// the same tokens are never double-counted. Negative upstream values are
+// clamped to zero so they can never lower a charge.
 func (d InputTokenDetails) CacheCreationTokensTotal() int {
-	total := d.CachedCreationTokens
-	if d.CacheWriteTokens > total {
-		total = d.CacheWriteTokens
-	}
+	total := max(d.CacheWriteTokens, d.CachedCreationTokens, d.CacheCreationInputTokens)
 	if total < 0 {
 		return 0
 	}
@@ -325,17 +328,33 @@ type IncompleteDetails struct {
 }
 
 type ResponsesOutput struct {
-	Type      string                   `json:"type"`
-	ID        string                   `json:"id"`
-	Status    string                   `json:"status"`
-	Role      string                   `json:"role"`
-	Content   []ResponsesOutputContent `json:"content"`
-	Quality   string                   `json:"quality"`
-	Size      string                   `json:"size"`
-	Result    string                   `json:"result,omitempty"`
-	CallId    string                   `json:"call_id,omitempty"`
-	Name      string                   `json:"name,omitempty"`
-	Arguments json.RawMessage          `json:"arguments,omitempty"`
+	Type      string                          `json:"type"`
+	ID        string                          `json:"id"`
+	Status    string                          `json:"status"`
+	Role      string                          `json:"role"`
+	Content   []ResponsesOutputContent        `json:"content"`
+	Summary   []ResponsesReasoningSummaryPart `json:"summary,omitempty"`
+	Quality   string                          `json:"quality"`
+	Size      string                          `json:"size"`
+	Result    string                          `json:"result,omitempty"`
+	CallId    string                          `json:"call_id,omitempty"`
+	Name      string                          `json:"name,omitempty"`
+	Arguments json.RawMessage                 `json:"arguments,omitempty"`
+}
+
+// MarshalJSON always writes summary on a reasoning item: the Responses
+// schema requires it, even before any summary text exists, and strict
+// clients reject a reasoning item without it. Other items keep omitting an
+// empty summary.
+func (r ResponsesOutput) MarshalJSON() ([]byte, error) {
+	type responsesOutputAlias ResponsesOutput
+	if r.Type != "reasoning" || len(r.Summary) > 0 {
+		return kitutil.Marshal(responsesOutputAlias(r))
+	}
+	return kitutil.Marshal(struct {
+		responsesOutputAlias
+		Summary []ResponsesReasoningSummaryPart `json:"summary"`
+	}{responsesOutputAlias(r), []ResponsesReasoningSummaryPart{}})
 }
 
 // ArgumentsString returns function call arguments in the string form expected by Chat Completions.

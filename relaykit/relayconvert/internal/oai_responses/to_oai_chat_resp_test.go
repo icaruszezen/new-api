@@ -49,32 +49,57 @@ func TestResponsesResponseToChatCompletionsPreservesTextAndToolCalls(t *testing.
 }
 
 func TestResponsesResponseToChatCompletionsPreservesReasoningSummary(t *testing.T) {
-	resp := &dto.OpenAIResponsesResponse{
-		ID:     "resp_1",
-		Model:  "gpt-test",
-		Status: []byte(`"completed"`),
-		Output: []dto.ResponsesOutput{
-			{
+	tests := []struct {
+		name      string
+		reasoning dto.ResponsesOutput
+	}{
+		{
+			name: "text in content",
+			reasoning: dto.ResponsesOutput{
 				Type: responsesOutputTypeReasoning,
 				Content: []dto.ResponsesOutputContent{
 					{Type: "summary_text", Text: "first summary"},
 					{Type: "summary_text", Text: "\n\nsecond summary"},
 				},
 			},
-			{
-				Type: responsesOutputTypeMessage,
-				Role: "assistant",
-				Content: []dto.ResponsesOutputContent{
-					{Type: "output_text", Text: "final"},
+		},
+		{
+			// OpenAI sends the reasoning summary in summary and no content.
+			name: "text in summary",
+			reasoning: dto.ResponsesOutput{
+				Type: responsesOutputTypeReasoning,
+				Summary: []dto.ResponsesReasoningSummaryPart{
+					{Type: "summary_text", Text: "first summary"},
+					{Type: "summary_text", Text: "second summary"},
 				},
 			},
 		},
 	}
 
-	chat, _, err := ResponsesResponseToChatCompletionsResponse(resp, "chatcmpl_1")
-	require.NoError(t, err)
-	assert.Equal(t, "first summary\n\nsecond summary", chat.Choices[0].Message.GetReasoningContent())
-	assert.Equal(t, "final", chat.Choices[0].Message.StringContent())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := &dto.OpenAIResponsesResponse{
+				ID:     "resp_1",
+				Model:  "gpt-test",
+				Status: []byte(`"completed"`),
+				Output: []dto.ResponsesOutput{
+					tt.reasoning,
+					{
+						Type: responsesOutputTypeMessage,
+						Role: "assistant",
+						Content: []dto.ResponsesOutputContent{
+							{Type: "output_text", Text: "final"},
+						},
+					},
+				},
+			}
+
+			chat, _, err := ResponsesResponseToChatCompletionsResponse(resp, "chatcmpl_1")
+			require.NoError(t, err)
+			assert.Equal(t, "first summary\n\nsecond summary", chat.Choices[0].Message.GetReasoningContent())
+			assert.Equal(t, "final", chat.Choices[0].Message.StringContent())
+		})
+	}
 }
 
 func TestResponsesFinishReasonFromIncompleteStatus(t *testing.T) {

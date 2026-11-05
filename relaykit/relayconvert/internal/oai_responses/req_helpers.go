@@ -1,6 +1,7 @@
 package oairesponses
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -58,6 +59,23 @@ func InputItems(raw []byte) ([]map[string]any, error) {
 	return responsesInputItems(raw)
 }
 
+// omitTrailingAssistantText drops the assistant turns without tool calls that
+// end the converted conversation after a user turn or tool result. In
+// Responses they are history and the model answers with a new item; Claude and
+// Gemini would continue them as a prefill, which newer models reject with a
+// 400. Codex leaves them at the end of input when it retries a stream that
+// failed after an assistant message completed.
+func omitTrailingAssistantText[T any](turns []T, isUser, isAssistantText func(T) bool) []T {
+	end := len(turns)
+	for end > 0 && isAssistantText(turns[end-1]) {
+		end--
+	}
+	if end == len(turns) || end == 0 || !isUser(turns[end-1]) {
+		return turns
+	}
+	return turns[:end]
+}
+
 func responsesContentParts(content any) ([]map[string]any, error) {
 	switch typed := content.(type) {
 	case nil:
@@ -101,13 +119,17 @@ func responsesRequestFunctionDeclarations(raw []byte) ([]dto.FunctionRequest, er
 		return nil, nil
 	}
 
-	var tools []map[string]any
+	var tools []json.RawMessage
 	if err := kitutil.Unmarshal(raw, &tools); err != nil {
 		return nil, fmt.Errorf("invalid tools: %w", err)
 	}
 
 	functions := make([]dto.FunctionRequest, 0, len(tools))
-	for _, tool := range tools {
+	for _, rawTool := range tools {
+		var tool map[string]any
+		if err := kitutil.Unmarshal(rawTool, &tool); err != nil {
+			return nil, fmt.Errorf("invalid tools: %w", err)
+		}
 		if strings.TrimSpace(kitutil.Interface2String(tool["type"])) != "function" {
 			continue
 		}
@@ -118,7 +140,7 @@ func responsesRequestFunctionDeclarations(raw []byte) ([]dto.FunctionRequest, er
 		functions = append(functions, dto.FunctionRequest{
 			Name:        name,
 			Description: kitutil.Interface2String(tool["description"]),
-			Parameters:  tool["parameters"],
+			Parameters:  kitutil.ObjectMember(rawTool, "parameters"),
 		})
 	}
 	return functions, nil

@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -228,7 +229,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		}
 		return nil, taskErr
 	}
-	if resp != nil && resp.StatusCode != http.StatusOK {
+	// Any 2xx is a successful submission: task APIs commonly answer 201 Created
+	// or 202 Accepted, and the adaptor's DoResponse validates the task id.
+	if resp != nil && resp.StatusCode/100 != 2 {
 		responseBody, _ := io.ReadAll(resp.Body)
 		service.CloseResponseBodyGracefully(resp)
 		taskErr := service.TaskErrorWrapper(fmt.Errorf("%s", string(responseBody)), "fail_to_fetch_task", resp.StatusCode)
@@ -475,25 +478,34 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	}
 
 	snap := task.Snapshot()
+	status := model.TaskStatus(ti.Status)
+	finished := status == model.TaskStatusSuccess || status == model.TaskStatusFailure
+	if finished && snap.Status != model.TaskStatusSuccess && snap.Status != model.TaskStatusFailure {
+		// Finishing a task settles or refunds it. Let the poller record the
+		// final status, as it does for every other task, so that happens once.
+		upstreamID := task.GetUpstreamTaskID()
+		_ = service.UpdateVideoTasks(context.Background(), task.Platform,
+			map[int][]string{task.ChannelId: {upstreamID}}, map[string]*model.Task{upstreamID: task})
+	} else {
+		// 将上游最新状态更新到 task
+		if ti.Status != "" {
+			task.Status = status
+		}
+		if ti.Progress != "" {
+			task.Progress = ti.Progress
+		}
+		if strings.HasPrefix(ti.Url, "data:") {
+			// data: URI — kept in Data, not ResultURL
+		} else if ti.Url != "" {
+			task.PrivateData.ResultURL = ti.Url
+		} else if task.Status == model.TaskStatusSuccess {
+			// No URL from adaptor — construct proxy URL using public task ID
+			task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
+		}
 
-	// 将上游最新状态更新到 task
-	if ti.Status != "" {
-		task.Status = model.TaskStatus(ti.Status)
-	}
-	if ti.Progress != "" {
-		task.Progress = ti.Progress
-	}
-	if strings.HasPrefix(ti.Url, "data:") {
-		// data: URI — kept in Data, not ResultURL
-	} else if ti.Url != "" {
-		task.PrivateData.ResultURL = ti.Url
-	} else if task.Status == model.TaskStatusSuccess {
-		// No URL from adaptor — construct proxy URL using public task ID
-		task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
-	}
-
-	if !snap.Equal(task.Snapshot()) {
-		_, _ = task.UpdateWithStatus(snap.Status)
+		if !snap.Equal(task.Snapshot()) {
+			_, _ = task.UpdateWithStatus(snap.Status)
+		}
 	}
 
 	// OpenAI Video API 由调用者的 ConvertToOpenAIVideo 分支处理

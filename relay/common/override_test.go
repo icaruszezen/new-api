@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 
 	common2 "github.com/QuantumNous/new-api/common"
@@ -119,6 +121,137 @@ func TestApplyParamOverrideMixedLegacyAndOperationsConflictPrefersOperations(t *
 		t.Fatalf("ApplyParamOverride returned error: %v", err)
 	}
 	assertJSONEqual(t, `{"model":"op-model","temperature":0.2}`, string(out))
+}
+
+func TestApplyParamOverrideLaterOperationsSeeEarlierEdits(t *testing.T) {
+	input := []byte(`{"model":"gpt-4","messages":[{"type":"text","text":"a"},{"type":"thinking","text":"b"}],"tags":["x"]}`)
+	override := map[string]any{
+		"operations": []any{
+			map[string]any{"mode": "prune_objects", "value": "thinking"},
+			map[string]any{"path": "model", "mode": "set", "value": "gpt-5"},
+			map[string]any{
+				"path":       "reasoning_effort",
+				"mode":       "set",
+				"value":      "high",
+				"conditions": []any{map[string]any{"path": "model", "mode": "full", "value": "gpt-5"}},
+			},
+			map[string]any{"path": "tags", "mode": "append", "value": "y"},
+			map[string]any{"path": "tags.-1", "mode": "to_upper"},
+			map[string]any{"mode": "move", "from": "reasoning_effort", "to": "effort"},
+			map[string]any{"path": "effort", "mode": "set", "value": "low", "keep_origin": true},
+		},
+	}
+
+	out, err := ApplyParamOverride(input, override, nil)
+	require.NoError(t, err)
+	assert.Equal(t, `{"model":"gpt-5","messages":[{"type":"text","text":"a"}],"tags":["x","Y"],"effort":"high"}`, string(out))
+}
+
+// Object merges and prune_objects edit the body in place: members they do not
+// touch keep their order, number spelling and characters.
+func TestApplyParamOverrideMergeAndPruneKeepMemberOrder(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		op    map[string]any
+		want  string
+	}{
+		{
+			name:  "append merges into the object in place",
+			input: `{"zeta":1.0,"config":{"y":1e2,"b":"<b>&","keep":1},"model":"m"}`,
+			op:    map[string]any{"path": "config", "mode": "append", "value": map[string]any{"keep": 2, "c": true, "a": "x"}},
+			want:  `{"zeta":1.0,"config":{"y":1e2,"b":"<b>&","keep":2,"a":"x","c":true},"model":"m"}`,
+		},
+		{
+			name:  "keep_origin leaves existing members",
+			input: `{"config":{"y":1e2,"keep":1}}`,
+			op:    map[string]any{"path": "config", "mode": "append", "keep_origin": true, "value": map[string]any{"keep": 2, "a": "x"}},
+			want:  `{"config":{"y":1e2,"keep":1,"a":"x"}}`,
+		},
+		{
+			name:  "merge collapses a repeated key",
+			input: `{"config":{"keep":1,"y":1e2,"keep":3}}`,
+			op:    map[string]any{"path": "config", "mode": "append", "value": map[string]any{"keep": 2}},
+			want:  `{"config":{"y":1e2,"keep":2}}`,
+		},
+		{
+			name:  "prune over the whole body",
+			input: `{"zeta":1.0,"messages":[{"type":"text","n":1e2},{"type":"thinking"},{"role":"u","content":[{"type":"thinking"},{"type":"text","b":"<b>&"}]}],"model":"m"}`,
+			op:    map[string]any{"mode": "prune_objects", "value": "thinking"},
+			want:  `{"zeta":1.0,"messages":[{"type":"text","n":1e2},{"role":"u","content":[{"type":"text","b":"<b>&"}]}],"model":"m"}`,
+		},
+		{
+			name:  "prune drops object members",
+			input: `{"a":{"x":{"type":"thinking"},"y":1.0},"b":2}`,
+			op:    map[string]any{"path": "a", "mode": "prune_objects", "value": "thinking"},
+			want:  `{"a":{"y":1.0},"b":2}`,
+		},
+		{
+			name:  "prune drops adjacent array items",
+			input: `{"m":[{"type":"thinking"},{"type":"thinking"},{"type":"text"},{"type":"thinking"}]}`,
+			op:    map[string]any{"path": "m", "mode": "prune_objects", "value": "thinking"},
+			want:  `{"m":[{"type":"text"}]}`,
+		},
+		{
+			name:  "prune drops members whose keys are path syntax",
+			input: `{":x":{"type":"thinking"},"a.b":{"type":"thinking"},"#":{"type":"thinking"},"key":{"type":"thinking"},"x":{"type":"text"}}`,
+			op:    map[string]any{"mode": "prune_objects", "value": "thinking"},
+			want:  `{"x":{"type":"text"}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := ApplyParamOverride([]byte(tt.input), map[string]any{"operations": []any{tt.op}}, nil)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(out))
+		})
+	}
+}
+
+// A client controls how many objects prune_objects drops, so the edit must
+// stay linear in the body size: deleting each match from the whole body costs
+// one body copy per match. The bound on allocated bytes fails such a
+// quadratic edit without timing it.
+func TestApplyParamOverridePruneManyObjectsIsLinear(t *testing.T) {
+	const parts = 10000
+	var input, want strings.Builder
+	input.WriteString(`{"model":"m","messages":[{"role":"user","content":[`)
+	want.WriteString(`{"model":"m","messages":[{"role":"user","content":[`)
+	for i := 0; i < parts; i++ {
+		if i > 0 {
+			input.WriteByte(',')
+			want.WriteByte(',')
+		}
+		input.WriteString(`{"type":"thinking","thinking":"a"},{"type":"text","n":1.50}`)
+		want.WriteString(`{"type":"text","n":1.50}`)
+	}
+	input.WriteString(`]}],"max_tokens":1e3}`)
+	want.WriteString(`]}],"max_tokens":1e3}`)
+	body := []byte(input.String())
+	override := map[string]any{"operations": []any{
+		map[string]any{"path": "messages", "mode": "prune_objects", "value": "thinking"},
+	}}
+
+	var out []byte
+	var err error
+	allocated := allocatedBytes(func() {
+		out, err = ApplyParamOverride(body, override, nil)
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, want.String(), string(out))
+	assert.Less(t, allocated, uint64(64*len(body)))
+}
+
+// allocatedBytes reports the heap bytes f allocates. JSON edits on a client
+// body must stay linear in its size; a bound on these bytes catches an edit
+// that copies the whole body once per match.
+func allocatedBytes(f func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
 }
 
 func TestApplyParamOverrideTrimRequiresValue(t *testing.T) {
@@ -623,6 +756,50 @@ func TestApplyParamOverridePrependAppendArray(t *testing.T) {
 		t.Fatalf("ApplyParamOverride returned error: %v", err)
 	}
 	assertJSONEqual(t, `{"arr":[0,1,2,3,4]}`, string(out))
+}
+
+// move, copy and array append/prepend write the existing values as the client
+// sent them: a schema keeps its property order, and numbers and characters
+// keep their spelling.
+func TestApplyParamOverrideMoveCopyAndArrayKeepRawBytes(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		op    map[string]interface{}
+		want  string
+	}{
+		{
+			name:  "move",
+			input: `{"src":{"properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}},"type":"object","n":1.0},"model":"m"}`,
+			op:    map[string]interface{}{"mode": "move", "from": "src", "to": "dst"},
+			want:  `{"model":"m","dst":{"properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}},"type":"object","n":1.0}}`,
+		},
+		{
+			name:  "copy",
+			input: `{"schema":{"z":1e2,"a":"<b>&"}}`,
+			op:    map[string]interface{}{"mode": "copy", "from": "schema", "to": "format.schema"},
+			want:  `{"schema":{"z":1e2,"a":"<b>&"},"format":{"schema":{"z":1e2,"a":"<b>&"}}}`,
+		},
+		{
+			name:  "append",
+			input: `{"tools":[{"name":"b","parameters":{"z":1.0,"a":"<b>&"}}]}`,
+			op:    map[string]interface{}{"path": "tools", "mode": "append", "value": map[string]interface{}{"name": "a"}},
+			want:  `{"tools":[{"name":"b","parameters":{"z":1.0,"a":"<b>&"}},{"name":"a"}]}`,
+		},
+		{
+			name:  "prepend",
+			input: `{"tools":[{"name":"b","parameters":{"z":1.0,"a":"<b>&"}}]}`,
+			op:    map[string]interface{}{"path": "tools", "mode": "prepend", "value": []interface{}{"x", 2}},
+			want:  `{"tools":["x",2,{"name":"b","parameters":{"z":1.0,"a":"<b>&"}}]}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := ApplyParamOverride([]byte(tt.input), map[string]interface{}{"operations": []interface{}{tt.op}}, nil)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(out))
+		})
+	}
 }
 
 func TestApplyParamOverrideAppendObjectMergeKeepOrigin(t *testing.T) {
@@ -2163,6 +2340,28 @@ func TestRemoveDisabledFieldsDefaultFiltering(t *testing.T) {
 		t.Fatalf("RemoveDisabledFields returned error: %v", err)
 	}
 	assertJSONEqual(t, `{"cache_control":{"type":"ephemeral"},"store":true}`, string(out))
+}
+
+// Upstreams fill a schema's properties in their order, so removing a field
+// must leave the client's nested key order as it was.
+func TestRemoveDisabledFieldsKeepsNestedKeyOrder(t *testing.T) {
+	input := `{"service_tier":"flex","response_format":{"type":"json_schema","json_schema":{"name":"answer","schema":{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}}},"stream_options":{"include_usage":true,"include_obfuscation":false}}`
+
+	out, err := RemoveDisabledFields([]byte(input), dto.ChannelOtherSettings{}, false)
+
+	require.NoError(t, err)
+	assert.Equal(t, `{"response_format":{"type":"json_schema","json_schema":{"name":"answer","schema":{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}}},"stream_options":{"include_usage":true}}`, string(out))
+}
+
+// Other members keep their bytes and order. A disabled key sent twice is
+// removed in every copy, since upstreams read the last one.
+func TestRemoveDisabledFieldsKeepsUntouchedBytes(t *testing.T) {
+	input := `{"model":"m","service_tier":"flex","temperature":1.0,"max_tokens":1e3,"stop":["<|end|>"],"service_tier":"priority","stream_options":{"include_obfuscation":false}}`
+
+	out, err := RemoveDisabledFields([]byte(input), dto.ChannelOtherSettings{}, false)
+
+	require.NoError(t, err)
+	assert.Equal(t, `{"model":"m","temperature":1.0,"max_tokens":1e3,"stop":["<|end|>"]}`, string(out))
 }
 
 func TestRemoveDisabledFieldsNoControlledFieldsKeepsBody(t *testing.T) {

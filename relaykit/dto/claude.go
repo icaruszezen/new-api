@@ -3,6 +3,7 @@ package dto
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"strings"
 
@@ -121,6 +122,9 @@ type ClaudeMessageSource struct {
 type ClaudeMessage struct {
 	Role    string `json:"role"`
 	Content any    `json:"content"`
+	// OutputConfig carries per-message effort (beta): an effort-only system
+	// message has empty content and the new level in output_config.effort.
+	OutputConfig json.RawMessage `json:"output_config,omitempty"`
 }
 
 func (c *ClaudeMessage) IsStringContent() bool {
@@ -170,9 +174,9 @@ func (c *ClaudeMessage) ParseContent() ([]ClaudeMediaMessage, error) {
 }
 
 type Tool struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description,omitempty"`
-	InputSchema map[string]interface{} `json:"input_schema"`
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	InputSchema json.RawMessage `json:"input_schema"`
 }
 
 type InputSchema struct {
@@ -219,6 +223,7 @@ type ClaudeRequest struct {
 	TopK              *int            `json:"top_k,omitempty"`
 	Stream            *bool           `json:"stream,omitempty"`
 	Tools             any             `json:"tools,omitempty"`
+	Safeguards        json.RawMessage `json:"safeguards,omitempty"`
 	ContextManagement json.RawMessage `json:"context_management,omitempty"`
 	OutputConfig      json.RawMessage `json:"output_config,omitempty"`
 	OutputFormat      json.RawMessage `json:"output_format,omitempty"`
@@ -233,6 +238,25 @@ type ClaudeRequest struct {
 	// ServiceTier specifies upstream service level and may affect billing.
 	// This field is filtered by default and can be enabled via channel setting allow_service_tier.
 	ServiceTier string `json:"service_tier,omitempty"`
+}
+
+// UnmarshalJSON keeps client tools as raw JSON: Claude keeps schema property
+// order in strict tool input, and decoded maps would sort the properties. A
+// null tools value stays absent, as the former decoded value did.
+func (c *ClaudeRequest) UnmarshalJSON(data []byte) error {
+	type requestFields ClaudeRequest
+	var fields struct {
+		requestFields
+		Tools json.RawMessage `json:"tools,omitempty"`
+	}
+	if err := kitutil.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	*c = ClaudeRequest(fields.requestFields)
+	if len(fields.Tools) > 0 && kitutil.GetJsonType(fields.Tools) != "null" {
+		c.Tools = fields.Tools
+	}
+	return nil
 }
 
 // OutputConfigForEffort just for extract effort
@@ -391,6 +415,18 @@ func (c *ClaudeRequest) AddTool(tool any) {
 	switch tools := c.Tools.(type) {
 	case []any:
 		c.Tools = append(tools, tool)
+	case json.RawMessage:
+		// Existing client tools stay raw, keeping their schema property order.
+		var items []json.RawMessage
+		if err := kitutil.Unmarshal(tools, &items); err != nil {
+			c.Tools = []any{tool}
+			return
+		}
+		merged := make([]any, 0, len(items)+1)
+		for _, item := range items {
+			merged = append(merged, item)
+		}
+		c.Tools = append(merged, tool)
 	default:
 		// 如果Tools不是[]any类型，重新初始化为[]any
 		c.Tools = []any{tool}
@@ -406,6 +442,13 @@ func (c *ClaudeRequest) GetTools() []any {
 	switch tools := c.Tools.(type) {
 	case []any:
 		return tools
+	case json.RawMessage:
+		// Client tools stay raw for the upstream; readers get decoded copies.
+		var decoded []any
+		if err := kitutil.Unmarshal(tools, &decoded); err != nil {
+			return nil
+		}
+		return decoded
 	default:
 		return nil
 	}
@@ -452,6 +495,50 @@ type Thinking struct {
 	// the visible summary that was default on Opus 4.6; "omitted" (default on
 	// 4.7) suppresses it. Pass-through field from upstream Anthropic API.
 	Display string `json:"display,omitempty"`
+	// BlockBinding carries the client's preserved-thinking controls, such as
+	// {"prefix_mismatch_behavior":"drop_block"} (beta
+	// thinking-binding-controls-2026-08-01). It is forwarded verbatim and
+	// never added by the gateway.
+	BlockBinding json.RawMessage `json:"block_binding,omitempty"`
+
+	// Extra keeps thinking fields this struct does not model yet, so a native
+	// Claude request forwards them instead of silently dropping them. It is
+	// exported so common.DeepCopy copies it; MarshalJSON writes it back.
+	Extra map[string]json.RawMessage `json:"-"`
+}
+
+func (c *Thinking) UnmarshalJSON(data []byte) error {
+	type thinkingFields Thinking
+	var fields thinkingFields
+	if err := kitutil.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	var all map[string]json.RawMessage
+	if err := kitutil.Unmarshal(data, &all); err != nil {
+		return err
+	}
+	for _, known := range []string{"type", "budget_tokens", "display", "block_binding"} {
+		delete(all, known)
+	}
+	*c = Thinking(fields)
+	if len(all) > 0 {
+		c.Extra = all
+	}
+	return nil
+}
+
+func (c Thinking) MarshalJSON() ([]byte, error) {
+	type thinkingFields Thinking
+	data, err := kitutil.Marshal(thinkingFields(c))
+	if err != nil || len(c.Extra) == 0 {
+		return data, err
+	}
+	merged := make(map[string]json.RawMessage, len(c.Extra)+4)
+	maps.Copy(merged, c.Extra)
+	if err := kitutil.Unmarshal(data, &merged); err != nil {
+		return nil, err
+	}
+	return kitutil.Marshal(merged)
 }
 
 func (c *Thinking) GetBudgetTokens() int {

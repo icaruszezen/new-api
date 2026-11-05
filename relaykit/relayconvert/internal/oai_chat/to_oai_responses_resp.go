@@ -14,21 +14,23 @@ const (
 	chatFinishReasonLength        = "length"
 	chatFinishReasonContentFilter = "content_filter"
 
-	responsesEventCreated                  = "response.created"
-	responsesEventCompleted                = "response.completed"
-	responsesEventIncomplete               = "response.incomplete"
-	responsesEventOutputTextDelta          = "response.output_text.delta"
-	responsesEventOutputItemAdded          = "response.output_item.added"
-	responsesEventOutputItemDone           = "response.output_item.done"
-	responsesEventFunctionArgsDelta        = "response.function_call_arguments.delta"
-	responsesEventFunctionArgsDone         = "response.function_call_arguments.done"
-	responsesEventReasoningSummaryDelta    = "response.reasoning_summary_text.delta"
-	responsesEventReasoningSummaryDone     = "response.reasoning_summary_text.done"
-	responsesOutputTypeFunctionCall        = "function_call"
-	responsesOutputTypeMessage             = "message"
-	responsesOutputTypeReasoning           = "reasoning"
-	responsesIncompleteReasonContentFilter = "content_filter"
-	responsesIncompleteReasonMaxTokens     = "max_output_tokens"
+	responsesEventCreated                   = "response.created"
+	responsesEventCompleted                 = "response.completed"
+	responsesEventIncomplete                = "response.incomplete"
+	responsesEventOutputTextDelta           = "response.output_text.delta"
+	responsesEventOutputItemAdded           = "response.output_item.added"
+	responsesEventOutputItemDone            = "response.output_item.done"
+	responsesEventFunctionArgsDelta         = "response.function_call_arguments.delta"
+	responsesEventFunctionArgsDone          = "response.function_call_arguments.done"
+	responsesEventReasoningSummaryPartAdded = "response.reasoning_summary_part.added"
+	responsesEventReasoningSummaryDelta     = "response.reasoning_summary_text.delta"
+	responsesEventReasoningSummaryDone      = "response.reasoning_summary_text.done"
+	responsesEventReasoningSummaryPartDone  = "response.reasoning_summary_part.done"
+	responsesOutputTypeFunctionCall         = "function_call"
+	responsesOutputTypeMessage              = "message"
+	responsesOutputTypeReasoning            = "reasoning"
+	responsesIncompleteReasonContentFilter  = "content_filter"
+	responsesIncompleteReasonMaxTokens      = "max_output_tokens"
 )
 
 func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id string) (*dto.OpenAIResponsesResponse, *dto.Usage, error) {
@@ -77,7 +79,7 @@ func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id
 			Type:   responsesOutputTypeReasoning,
 			ID:     fmt.Sprintf("%s_reasoning_0", id),
 			Status: responseOutputStatus(out),
-			Content: []dto.ResponsesOutputContent{
+			Summary: []dto.ResponsesReasoningSummaryPart{
 				{
 					Type: "summary_text",
 					Text: reasoning,
@@ -138,6 +140,7 @@ func UsageFromChatUsage(src *dto.Usage) *dto.Usage {
 		src.PromptTokensDetails.AudioTokens != 0 ||
 		src.PromptTokensDetails.CachedCreationTokens != 0 ||
 		src.PromptTokensDetails.CacheWriteTokens != 0 ||
+		src.PromptTokensDetails.CacheCreationInputTokens != 0 ||
 		src.PromptTokensDetails.TextTokens != 0 {
 		details := src.PromptTokensDetails
 		usage.InputTokensDetails = &details

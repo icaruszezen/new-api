@@ -220,7 +220,6 @@ func xunfeiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, conn *webs
 		usage.PromptTokens += xunfeiResponse.Payload.Usage.Text.PromptTokens
 		usage.CompletionTokens += xunfeiResponse.Payload.Usage.Text.CompletionTokens
 		usage.TotalTokens += xunfeiResponse.Payload.Usage.Text.TotalTokens
-		helper.ExtendWriteDeadline(c)
 		chunk := streamResponseXunfei2OpenAI(&xunfeiResponse)
 		responseText.WriteString(xunfeiResponse.Payload.Choices.Text[0].Content)
 		_ = helper.ObjectData(c, chunk)

@@ -2,6 +2,7 @@ package openai
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,8 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -295,4 +298,171 @@ func TestOaiResponsesStreamHandlerDrainUsesCompletedUsage(t *testing.T) {
 	assert.Equal(t, 8, usage.TotalTokens)
 	assert.Equal(t, relaycommon.StreamEndReasonDrained, info.StreamStatus.EndReason)
 	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.DrainedFrom)
+}
+
+// A completed Responses event ends the stream even when the upstream keeps
+// the connection open, so the request neither waits for STREAMING_TIMEOUT
+// nor ends as a timeout, and a drain after a client disconnect ends with it.
+func TestOaiResponsesStreamHandlerEndsOnCompletedResponse(t *testing.T) {
+	const terminal = `{"type":%q,"response":{"status":%q,"usage":{"input_tokens":7,"output_tokens":5,"total_tokens":12},"output":[{"id":"img_1","type":"image_generation_call","status":"completed","result":"image-data"}]}}`
+	tests := []struct {
+		name             string
+		drain            bool
+		disconnectAfter  string
+		beforeClientGone []string
+		terminal         string
+		closeUpstream    bool
+		wantEnd          relaycommon.StreamEndReason
+		wantDrainedFrom  relaycommon.StreamEndReason
+		wantImageCalls   int
+		wantDelivered    bool
+	}{
+		{
+			name:            "completed event while the upstream stays open",
+			disconnectAfter: "client-never-disconnects",
+			terminal:        fmt.Sprintf(terminal, "response.completed", "completed"),
+			wantEnd:         relaycommon.StreamEndReasonDone,
+			wantImageCalls:  1,
+			wantDelivered:   true,
+		},
+		{
+			name:            "done alias with a completed response",
+			disconnectAfter: "client-never-disconnects",
+			terminal:        fmt.Sprintf(terminal, "response.done", "completed"),
+			wantEnd:         relaycommon.StreamEndReasonDone,
+			wantImageCalls:  1,
+			wantDelivered:   true,
+		},
+		{
+			name:            "done with an incomplete response reads on to EOF",
+			disconnectAfter: "client-never-disconnects",
+			terminal:        fmt.Sprintf(terminal, "response.done", "incomplete"),
+			closeUpstream:   true,
+			wantEnd:         relaycommon.StreamEndReasonEOF,
+			wantImageCalls:  0,
+			wantDelivered:   true,
+		},
+		{
+			name:             "completion ends a drain after the client left",
+			drain:            true,
+			disconnectAfter:  "hello",
+			beforeClientGone: []string{`{"type":"response.output_text.delta","delta":"hello"}`},
+			terminal:         fmt.Sprintf(terminal, "response.completed", "completed"),
+			wantEnd:          relaycommon.StreamEndReasonDrained,
+			wantDrainedFrom:  relaycommon.StreamEndReasonDone,
+			wantImageCalls:   1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{
+				OriginModelName:                 "gpt-5.1",
+				IsStream:                        true,
+				DisablePing:                     true,
+				DrainUpstreamOnClientDisconnect: tt.drain,
+				ChannelMeta:                     &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5.1"},
+			}
+			info.SetEstimatePromptTokens(7)
+
+			s := startDisconnectingStream(t, "/v1/responses", tt.disconnectAfter, info, OaiResponsesStreamHandler)
+			if len(tt.beforeClientGone) > 0 {
+				s.send(t, tt.beforeClientGone...)
+				s.waitClientGone(t)
+			}
+			s.send(t, tt.terminal)
+			if tt.closeUpstream {
+				require.NoError(t, s.upstream.Close())
+			}
+			usage, apiErr := s.wait(t)
+
+			require.Nil(t, apiErr)
+			require.NotNil(t, usage)
+			assert.Equal(t, 7, usage.PromptTokens)
+			assert.Equal(t, 5, usage.CompletionTokens)
+			assert.Equal(t, 12, usage.TotalTokens)
+			require.NotNil(t, info.StreamStatus)
+			assert.Equal(t, tt.wantEnd, info.StreamStatus.EndReason)
+			assert.Equal(t, tt.wantDrainedFrom, info.StreamStatus.DrainedFrom)
+			assert.False(t, info.StreamStatus.HasErrors())
+			require.NotNil(t, info.ResponsesUsageInfo)
+			require.Contains(t, info.ResponsesUsageInfo.BuiltInTools, dto.BuildInToolImageGeneration)
+			assert.Equal(t, tt.wantImageCalls, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
+			if tt.wantDelivered {
+				assert.Contains(t, s.recorder.Body.String(), "data: "+tt.terminal+"\n\n")
+			}
+		})
+	}
+}
+
+// A native Responses upstream reports explicit cache writes as
+// input_tokens_details.cache_creation_input_tokens. Every Responses handler
+// must carry them into PromptTokensDetails, which billing reads, so they are
+// charged once at the cache-creation price instead of the plain input price.
+func TestResponsesHandlersCarryCacheCreationInputTokens(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
+	})
+
+	const usageJSON = `{"input_tokens":1510,"output_tokens":20,"total_tokens":1530,"input_tokens_details":{"cached_tokens":1200,"cache_creation_input_tokens":300}}`
+	tests := []struct {
+		name        string
+		contentType string
+		body        string
+		handle      func(*gin.Context, *relaycommon.RelayInfo, *http.Response) (*dto.Usage, *types.NewAPIError)
+	}{
+		{
+			name:        "non-stream response",
+			contentType: "application/json",
+			body:        `{"status":"completed","output":[],"usage":` + usageJSON + `}`,
+			handle:      OaiResponsesHandler,
+		},
+		{
+			name:        "stream completed event",
+			contentType: "text/event-stream",
+			body:        `data: {"type":"response.completed","response":{"status":"completed","output":[],"usage":` + usageJSON + `}}` + "\n\ndata: [DONE]\n\n",
+			handle:      OaiResponsesStreamHandler,
+		},
+		{
+			name:        "compaction response",
+			contentType: "application/json",
+			body:        `{"id":"cmp_1","object":"response.compaction","output":[],"usage":` + usageJSON + `}`,
+			handle: func(c *gin.Context, _ *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+				return OaiResponsesCompactionHandler(c, resp)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			c.Set(common.RequestIdKey, "responses-cache-creation-test")
+			info := &relaycommon.RelayInfo{
+				OriginModelName: "gpt-5.1",
+				DisablePing:     true,
+				ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5.1"},
+			}
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(tt.body)),
+				Header:     http.Header{"Content-Type": []string{tt.contentType}},
+			}
+
+			usage, apiErr := tt.handle(c, info, resp)
+
+			require.Nil(t, apiErr)
+			require.NotNil(t, usage)
+			assert.Equal(t, 1510, usage.PromptTokens)
+			assert.Equal(t, 20, usage.CompletionTokens)
+			assert.Equal(t, 1200, usage.PromptTokensDetails.CachedTokens)
+			assert.Equal(t, 300, usage.PromptTokensDetails.CacheCreationTokensTotal())
+			params := service.BuildTieredTokenParams(usage, false, map[string]bool{"cr": true, "cc": true})
+			assert.Equal(t, 1200.0, params.CR)
+			assert.Equal(t, 300.0, params.CC)
+			assert.Equal(t, 10.0, params.P)
+		})
+	}
 }

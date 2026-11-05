@@ -39,6 +39,63 @@ func TestChatCompletionsRequestToResponsesRequestInstructionsAndTools(t *testing
 	assert.Equal(t, "function_call_output", gjson.GetBytes(got.Input, "3.type").String())
 }
 
+func TestChatCompletionsRequestToResponsesRequestImageDetail(t *testing.T) {
+	tests := []struct {
+		name     string
+		imageURL any
+		want     string
+	}{
+		{name: "object without detail defaults to auto", imageURL: map[string]any{"url": "https://example.test/a.png"}, want: "auto"},
+		{name: "low detail is preserved", imageURL: map[string]any{"url": "https://example.test/a.png", "detail": "low"}, want: "low"},
+		{name: "high detail is preserved", imageURL: map[string]any{"url": "https://example.test/a.png", "detail": "high"}, want: "high"},
+		{name: "auto detail is preserved", imageURL: map[string]any{"url": "https://example.test/a.png", "detail": "auto"}, want: "auto"},
+		{name: "original detail is preserved", imageURL: map[string]any{"url": "https://example.test/a.png", "detail": "original"}, want: "original"},
+		{name: "unknown detail falls back to auto", imageURL: map[string]any{"url": "https://example.test/a.png", "detail": "bogus"}, want: "auto"},
+		{name: "plain string url defaults to auto", imageURL: "https://example.test/a.png", want: "auto"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ChatCompletionsRequestToResponsesRequest(&dto.GeneralOpenAIRequest{
+				Model: "gpt-test",
+				Messages: []dto.Message{{Role: "user", Content: []any{
+					map[string]any{"type": "image_url", "image_url": tt.imageURL},
+				}}},
+			})
+			require.NoError(t, err)
+
+			assert.Equal(t, "input_image", gjson.GetBytes(got.Input, "0.content.0.type").String())
+			assert.Equal(t, tt.want, gjson.GetBytes(got.Input, "0.content.0.detail").String())
+		})
+	}
+}
+
+// Each image keeps its own detail when a message mixes images with and
+// without one, and an image built by an earlier conversion, which carries no
+// client detail, is sent as auto.
+func TestChatCompletionsRequestToResponsesRequestImageDetailPerImage(t *testing.T) {
+	converted := dto.Message{Role: "user"}
+	converted.SetMediaContent([]dto.MediaContent{
+		{Type: dto.ContentTypeImageURL, ImageUrl: &dto.MessageImageUrl{Url: "https://example.test/d.png"}},
+	})
+	got, err := ChatCompletionsRequestToResponsesRequest(&dto.GeneralOpenAIRequest{
+		Model: "gpt-test",
+		Messages: []dto.Message{
+			{Role: "user", Content: []any{
+				map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://example.test/a.png", "detail": "low"}},
+				map[string]any{"type": "text", "text": "and"},
+				map[string]any{"type": "image_url", "image_url": "https://example.test/b.png"},
+				map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://example.test/c.png", "detail": "original"}},
+			}},
+			converted,
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, `["low","auto","original"]`, gjson.GetBytes(got.Input, `0.content.#(type=="input_image")#.detail`).Raw)
+	assert.Equal(t, "auto", gjson.GetBytes(got.Input, "1.content.0.detail").String())
+}
+
 func TestChatCompletionsRequestToResponsesRequestPreservesPromptCacheKey(t *testing.T) {
 	t.Run("present", func(t *testing.T) {
 		key := "session-\"quoted\"\\path\n世界"

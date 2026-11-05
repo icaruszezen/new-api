@@ -166,8 +166,9 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 		geminiRequest.SafetySettings = safetySettings
 	}
 
+	jsonSchema := opts.Gemini.SupportsJSONSchemaModel(upstreamModelName)
 	if textRequest.Tools != nil {
-		functions := make([]dto.FunctionRequest, 0, len(textRequest.Tools))
+		functions := make([]map[string]any, 0, len(textRequest.Tools))
 		googleSearch := false
 		codeExecution := false
 		urlContext := false
@@ -184,15 +185,13 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 				urlContext = true
 				continue
 			}
-			if tool.Function.Parameters != nil {
-				if params, ok := tool.Function.Parameters.(map[string]interface{}); ok {
-					if props, hasProps := params["properties"].(map[string]interface{}); hasProps && len(props) == 0 {
-						tool.Function.Parameters = nil
-					}
-				}
+			// The declaration carries only Gemini fields: strict has no Gemini
+			// counterpart and the API rejects unknown fields.
+			declaration, err := sharedgemini.FunctionDeclaration(tool.Function.Name, tool.Function.Description, tool.Function.Parameters, jsonSchema)
+			if err != nil {
+				return nil, err
 			}
-			tool.Function.Parameters = sharedgemini.CleanFunctionParameters(tool.Function.Parameters)
-			functions = append(functions, tool.Function)
+			functions = append(functions, declaration)
 		}
 		geminiTools := geminiRequest.GetTools()
 		if codeExecution {
@@ -226,11 +225,8 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 		geminiRequest.GenerationConfig.ResponseMimeType = "application/json"
 
 		if len(textRequest.ResponseFormat.JsonSchema) > 0 {
-			var jsonSchema dto.FormatJsonSchema
-			if err := kitutil.Unmarshal(textRequest.ResponseFormat.JsonSchema, &jsonSchema); err == nil {
-				cleanedSchema := sharedgemini.RemoveAdditionalProperties(jsonSchema.Schema, 0)
-				geminiRequest.GenerationConfig.ResponseSchema = cleanedSchema
-			}
+			sharedgemini.ApplyResponseSchema(&geminiRequest.GenerationConfig, textRequest.ResponseFormat.JsonSchema,
+				"response_format.json_schema.schema", jsonSchema)
 		}
 	}
 
@@ -371,7 +367,7 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 					return nil, fmt.Errorf("get file data from '%s' failed: %w", source.GetIdentifier(), err)
 				}
 
-				if _, ok := sharedgemini.SupportedMimeTypes[strings.ToLower(mimeType)]; !ok {
+				if !sharedgemini.IsSupportedMimeType(mimeType) {
 					return nil, fmt.Errorf("mime type is not supported by Gemini: '%s', url: '%s', supported types are: %v", mimeType, source.GetIdentifier(), sharedgemini.SupportedMimeTypesList())
 				}
 

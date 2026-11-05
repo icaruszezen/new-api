@@ -7,9 +7,45 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	relaymedia "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/media"
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/samber/lo"
 )
+
+// clientImageDetails returns, in order, the detail of each image_url part of
+// a Chat message content as the client wrote it, empty where it wrote none.
+// Message.ParseContent fills a missing detail with "high", which must not
+// reach a Responses upstream as if the client had asked for it. The order
+// matches the image_url parts ParseContent returns for the same content: it
+// keeps every image_url map and every image_url MediaContent, in order.
+func clientImageDetails(content any) []string {
+	items, ok := content.([]any)
+	if !ok {
+		return nil
+	}
+	var details []string
+	for _, item := range items {
+		switch typed := item.(type) {
+		case dto.MediaContent:
+			if typed.Type != dto.ContentTypeImageURL {
+				continue
+			}
+			detail := ""
+			if image := typed.GetImageMedia(); image != nil {
+				detail = image.Detail
+			}
+			details = append(details, detail)
+		case map[string]any:
+			if partType, _ := typed["type"].(string); partType != dto.ContentTypeImageURL {
+				continue
+			}
+			imageURL, _ := typed["image_url"].(map[string]any)
+			detail, _ := imageURL["detail"].(string)
+			details = append(details, detail)
+		}
+	}
+	return details
+}
 
 func normalizeChatImageURLToString(v any) any {
 	switch vv := v.(type) {
@@ -45,7 +81,9 @@ func convertChatResponseFormatToResponsesText(reqFormat *dto.ResponseFormat) jso
 	}
 
 	if reqFormat.Type == "json_schema" && len(reqFormat.JsonSchema) > 0 {
-		var chatSchema map[string]any
+		// Members stay raw JSON: the model fills the schema properties in
+		// their order, and a decoded map would sort them.
+		var chatSchema map[string]json.RawMessage
 		if err := kitutil.Unmarshal(reqFormat.JsonSchema, &chatSchema); err == nil {
 			for key, value := range chatSchema {
 				if key == "type" {
@@ -54,7 +92,8 @@ func convertChatResponseFormatToResponsesText(reqFormat *dto.ResponseFormat) jso
 				format[key] = value
 			}
 
-			if nested, ok := format["json_schema"].(map[string]any); ok {
+			var nested map[string]json.RawMessage
+			if err := kitutil.Unmarshal(chatSchema["json_schema"], &nested); err == nil && nested != nil {
 				for key, value := range nested {
 					if _, exists := format[key]; !exists {
 						format[key] = value
@@ -211,6 +250,8 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 		}
 
 		parts := msg.ParseContent()
+		imageDetails := clientImageDetails(msg.Content)
+		imageIndex := 0
 		contentParts := make([]map[string]any, 0, len(parts))
 		for _, part := range parts {
 			switch part.Type {
@@ -224,9 +265,19 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 					"text": part.Text,
 				})
 			case dto.ContentTypeImageURL:
+				// Content set by an earlier conversion is []MediaContent, which
+				// holds no ParseContent default, so its own detail is used.
+				var detail string
+				if imageIndex < len(imageDetails) {
+					detail = imageDetails[imageIndex]
+				} else if image := part.GetImageMedia(); image != nil {
+					detail = image.Detail
+				}
+				imageIndex++
 				contentParts = append(contentParts, map[string]any{
 					"type":      "input_image",
 					"image_url": normalizeChatImageURLToString(part.ImageUrl),
+					"detail":    relaymedia.ResponsesImageDetail(detail),
 				})
 			case dto.ContentTypeInputAudio:
 				contentParts = append(contentParts, map[string]any{
@@ -291,12 +342,16 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 		for _, tool := range req.Tools {
 			switch tool.Type {
 			case "function":
-				tools = append(tools, map[string]any{
+				function := map[string]any{
 					"type":        "function",
 					"name":        tool.Function.Name,
 					"description": tool.Function.Description,
 					"parameters":  tool.Function.Parameters,
-				})
+				}
+				if tool.Function.Strict != nil {
+					function["strict"] = *tool.Function.Strict
+				}
+				tools = append(tools, function)
 			default:
 				// Best-effort: keep original tool shape for unknown types.
 				var m map[string]any

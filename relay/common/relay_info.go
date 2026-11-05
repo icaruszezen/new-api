@@ -25,6 +25,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 type ThinkingContentInfo struct {
@@ -600,8 +601,11 @@ func cloneRequestHeaders(c *gin.Context) map[string]string {
 		return nil
 	}
 	headers := make(map[string]string, len(c.Request.Header))
-	for key := range c.Request.Header {
-		value := strings.TrimSpace(c.Request.Header.Get(key))
+	for key, values := range c.Request.Header {
+		// Join repeated header lines the way they are forwarded upstream (for
+		// example every anthropic-beta line), so header() in billing
+		// expressions sees the same value the provider receives.
+		value := strings.TrimSpace(strings.Join(values, ","))
 		if value == "" {
 			continue
 		}
@@ -854,6 +858,7 @@ func (info *RelayInfo) ConvOptions() *convmeta.Options {
 
 	claudeSettings := model_setting.GetClaudeSettings()
 	geminiSettings := model_setting.GetGeminiSettings()
+	channelType := info.GetChannelType()
 	options := &convmeta.Options{
 		Claude: convmeta.ClaudeOptions{
 			ThinkingAdapterEnabled:                claudeSettings.ThinkingAdapterEnabled,
@@ -866,6 +871,19 @@ func (info *RelayInfo) ConvOptions() *convmeta.Options {
 			FunctionCallThoughtSignatureEnabled:   geminiSettings.FunctionCallThoughtSignatureEnabled,
 			SupportsImagine:                       model_setting.IsGeminiModelSupportImagine,
 			SafetySetting:                         model_setting.GetGeminiSafetySetting,
+			// Gemini API v1 has no parametersJsonSchema; v1beta and Vertex AI
+			// accept it.
+			SupportsJSONSchema: func(modelName string) bool {
+				if channelType == constant.ChannelTypeVertexAi {
+					return true
+				}
+				originModelName := ""
+				if info != nil {
+					originModelName = info.OriginModelName
+				}
+				// The URL drops the thinking suffix before it picks the version.
+				return model_setting.GetGeminiVersionSetting(GeminiUpstreamModelName(originModelName, modelName)) != "v1"
+			},
 		},
 		OpenRouterDialect:      info != nil && info.GetChannelType() == constant.ChannelTypeOpenRouter,
 		PreserveThinkingSuffix: model_setting.ShouldPreserveThinkingSuffix,
@@ -1096,6 +1114,117 @@ func FailTaskInfo(reason string) *TaskInfo {
 	}
 }
 
+// DeleteJSONMember removes every copy of member key from the object at parent
+// ("" for the root). A client body may repeat a key, and most upstream parsers
+// read the last copy, so a surviving copy could reach the upstream after the
+// gateway removed or replaced the first one. A single copy is cut out with
+// sjson; repeated copies are all cut out in one pass over the parent object,
+// since removing them one at a time copies the whole body per copy and a
+// client decides how many there are. Other members keep their bytes, order
+// and separators. data must be valid JSON: sjson does not report an error on
+// invalid input. data itself is never changed.
+func DeleteJSONMember(data []byte, parent, key string) ([]byte, error) {
+	path := jsonPathKey(key)
+	var object gjson.Result
+	if parent == "" {
+		object = gjson.ParseBytes(data)
+	} else {
+		path = parent + "." + path
+		object = gjson.GetBytes(data, parent)
+	}
+	if !object.IsObject() {
+		return data, nil
+	}
+	copies := 0
+	object.ForEach(func(member, _ gjson.Result) bool {
+		if member.Str == key {
+			copies++
+		}
+		return true
+	})
+	switch copies {
+	case 0:
+		return data, nil
+	case 1:
+		next, err := sjson.DeleteBytes(data, path)
+		if err != nil {
+			return nil, err
+		}
+		if len(next) >= len(data) {
+			return nil, fmt.Errorf("delete %s: member was not removed", path)
+		}
+		return next, nil
+	}
+
+	// Member offsets are offsets into data only when the object is a plain
+	// slice of it, which a path with modifiers or queries does not give.
+	start := object.Index
+	if start < 0 || start+len(object.Raw) > len(data) || string(data[start:start+len(object.Raw)]) != object.Raw {
+		return nil, fmt.Errorf("delete %s: object is not part of the body", path)
+	}
+	// A kept member is written with the separator that came before it, unless
+	// it is the first one kept, so no comma is left dangling.
+	out := make([]byte, 0, len(data))
+	prevEnd := -1
+	kept := false
+	object.ForEach(func(member, value gjson.Result) bool {
+		if prevEnd < 0 {
+			out = append(out, data[:member.Index]...)
+		}
+		end := value.Index + len(value.Raw)
+		if member.Str != key {
+			if kept {
+				out = append(out, data[prevEnd:member.Index]...)
+			}
+			out = append(out, data[member.Index:end]...)
+			kept = true
+		}
+		prevEnd = end
+		return true
+	})
+	return append(out, data[prevEnd:]...), nil
+}
+
+// SetJSONMember sets member key of the object at parent ("" for the root) to
+// value and leaves one copy. A key that appears once is replaced where it
+// stands, so the object keeps its member order; a repeated key is removed
+// everywhere, for the reason given on DeleteJSONMember, and written once at
+// the end. data must be valid JSON and is never changed.
+func SetJSONMember(data []byte, parent, key string, value any) ([]byte, error) {
+	path := jsonPathKey(key)
+	var object gjson.Result
+	if parent == "" {
+		object = gjson.ParseBytes(data)
+	} else {
+		path = parent + "." + path
+		object = gjson.GetBytes(data, parent)
+	}
+	copies := 0
+	object.ForEach(func(member, _ gjson.Result) bool {
+		if member.Str == key {
+			copies++
+		}
+		return copies < 2
+	})
+	if copies > 1 {
+		var err error
+		if data, err = DeleteJSONMember(data, parent, key); err != nil {
+			return nil, err
+		}
+	}
+	return sjson.SetBytes(data, path, value)
+}
+
+// jsonPathKey escapes a literal object key for a gjson/sjson path. sjson also
+// reads a leading ':' as its force-object-key marker, which gjson.Escape keeps.
+func jsonPathKey(key string) string {
+	escaped := gjson.Escape(key)
+	if strings.HasPrefix(escaped, ":") {
+		return `\` + escaped
+	}
+	return escaped
+}
+
 // RemoveDisabledFields 从请求 JSON 数据中移除渠道设置中禁用的字段
 // service_tier: 服务层级字段，可能导致额外计费（OpenAI、Claude、Responses API 支持）
 // inference_geo: Claude 数据驻留推理区域字段（仅 Claude 支持，默认过滤）
@@ -1111,69 +1240,61 @@ func RemoveDisabledFields(jsonData []byte, channelOtherSettings dto.ChannelOther
 		return jsonData, nil
 	}
 
-	var data map[string]interface{}
-	if err := common.Unmarshal(jsonData, &data); err != nil {
-		common.SysError("RemoveDisabledFields Unmarshal error :" + err.Error())
+	// Only the removed members change: everything else keeps the client's
+	// bytes and key order, which upstreams follow when they fill a schema.
+	if !gjson.ValidBytes(jsonData) {
+		common.SysError("RemoveDisabledFields Unmarshal error :invalid JSON")
 		return jsonData, nil
 	}
 
+	var disabled []string
 	// 默认移除 service_tier，除非明确允许（避免额外计费风险）
 	if !channelOtherSettings.AllowServiceTier {
-		if _, exists := data["service_tier"]; exists {
-			delete(data, "service_tier")
-		}
+		disabled = append(disabled, "service_tier")
 	}
 
 	// 默认移除 inference_geo，除非明确允许（避免在未授权情况下透传数据驻留区域）
 	if !channelOtherSettings.AllowInferenceGeo {
-		if _, exists := data["inference_geo"]; exists {
-			delete(data, "inference_geo")
-		}
+		disabled = append(disabled, "inference_geo")
 	}
 
 	// 默认移除 speed，除非明确允许（避免意外切换 Claude 推理速度模式）
 	if !channelOtherSettings.AllowSpeed {
-		if _, exists := data["speed"]; exists {
-			delete(data, "speed")
-		}
+		disabled = append(disabled, "speed")
 	}
 
 	// 默认允许 store 透传，除非明确禁用（禁用可能影响 Codex 使用）
 	if channelOtherSettings.DisableStore {
-		if _, exists := data["store"]; exists {
-			delete(data, "store")
-		}
+		disabled = append(disabled, "store")
 	}
 
 	// 默认移除 safety_identifier，除非明确允许（保护用户隐私，避免向 OpenAI 报告用户信息）
 	if !channelOtherSettings.AllowSafetyIdentifier {
-		if _, exists := data["safety_identifier"]; exists {
-			delete(data, "safety_identifier")
+		disabled = append(disabled, "safety_identifier")
+	}
+
+	// A failed removal fails the request: a disabled field must never reach
+	// the upstream.
+	out := jsonData
+	var err error
+	for _, key := range disabled {
+		if out, err = DeleteJSONMember(out, "", key); err != nil {
+			return nil, err
 		}
 	}
 
 	// 默认移除 stream_options.include_obfuscation，除非明确允许（避免关闭响应流混淆保护）
-	if !channelOtherSettings.AllowIncludeObfuscation {
-		if streamOptionsAny, exists := data["stream_options"]; exists {
-			if streamOptions, ok := streamOptionsAny.(map[string]interface{}); ok {
-				if _, includeExists := streamOptions["include_obfuscation"]; includeExists {
-					delete(streamOptions, "include_obfuscation")
-				}
-				if len(streamOptions) == 0 {
-					delete(data, "stream_options")
-				} else {
-					data["stream_options"] = streamOptions
-				}
+	if !channelOtherSettings.AllowIncludeObfuscation && gjson.GetBytes(out, "stream_options").IsObject() {
+		if out, err = DeleteJSONMember(out, "stream_options", "include_obfuscation"); err != nil {
+			return nil, err
+		}
+		if len(gjson.GetBytes(out, "stream_options").Map()) == 0 {
+			if out, err = DeleteJSONMember(out, "", "stream_options"); err != nil {
+				return nil, err
 			}
 		}
 	}
-
-	jsonDataAfter, err := common.Marshal(data)
-	if err != nil {
-		common.SysError("RemoveDisabledFields Marshal error :" + err.Error())
-		return jsonData, nil
-	}
-	return jsonDataAfter, nil
+	return out, nil
 }
 
 func hasRemovableDisabledField(jsonData []byte, channelOtherSettings dto.ChannelOtherSettings) bool {

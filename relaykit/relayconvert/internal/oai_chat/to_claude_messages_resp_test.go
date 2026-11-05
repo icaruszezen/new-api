@@ -5,6 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,14 +14,17 @@ func TestResponseOpenAI2ClaudeToolUseInputIsObject(t *testing.T) {
 	tests := []struct {
 		name string
 		args string
-		want map[string]interface{}
+		want string
 	}{
-		{name: "object", args: `{"q":"x"}`, want: map[string]interface{}{"q": "x"}},
-		{name: "empty", args: "", want: map[string]interface{}{}},
-		{name: "invalid", args: "{", want: map[string]interface{}{}},
-		{name: "null", args: "null", want: map[string]interface{}{}},
-		{name: "array", args: `["x"]`, want: map[string]interface{}{}},
-		{name: "string", args: `"x"`, want: map[string]interface{}{}},
+		{name: "large integer", args: `{"id":9007199254740993}`, want: `{"id":9007199254740993}`},
+		{name: "nested integer", args: `{"ids":[18446744073709551615]}`, want: `{"ids":[18446744073709551615]}`},
+		{name: "precise decimal", args: `{"value":0.123456789012345678901}`, want: `{"value":0.123456789012345678901}`},
+		{name: "object", args: `{"q":"x"}`, want: `{"q":"x"}`},
+		{name: "empty", args: "", want: `{}`},
+		{name: "invalid", args: "{", want: `{}`},
+		{name: "null", args: "null", want: `{}`},
+		{name: "array", args: `["x"]`, want: `{}`},
+		{name: "string", args: `"x"`, want: `{}`},
 	}
 
 	for _, tt := range tests {
@@ -47,7 +51,9 @@ func TestResponseOpenAI2ClaudeToolUseInputIsObject(t *testing.T) {
 
 			require.Len(t, resp.Content, 1)
 			assert.Equal(t, "tool_use", resp.Content[0].Type)
-			assert.Equal(t, tt.want, resp.Content[0].Input)
+			encoded, err := kitutil.Marshal(resp.Content[0].Input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(encoded))
 		})
 	}
 }
@@ -101,6 +107,26 @@ func TestBuildClaudeUsageFromOpenAICacheWriteUsage(t *testing.T) {
 	require.NotNil(t, usage.BillingUsage.OpenAIUsage)
 	assert.Equal(t, dto.BillingUsageSemanticOpenAI, usage.BillingUsage.Semantic)
 	assert.Equal(t, 3616, usage.BillingUsage.OpenAIUsage.PromptTokensDetails.CacheWriteTokens)
+}
+
+func TestBuildClaudeUsageFromOpenAICacheCreationInputTokens(t *testing.T) {
+	usage := buildClaudeUsageFromOpenAIUsage(&dto.Usage{
+		PromptTokens:     1510,
+		CompletionTokens: 20,
+		TotalTokens:      1530,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedTokens:             1200,
+			CacheCreationInputTokens: 300,
+		},
+	})
+
+	require.NotNil(t, usage)
+	// cache_creation_input_tokens is part of prompt_tokens, so Claude
+	// input_tokens excludes it along with the cache read.
+	assert.Equal(t, 10, usage.InputTokens)
+	assert.Equal(t, 1200, usage.CacheReadInputTokens)
+	assert.Equal(t, 300, usage.CacheCreationInputTokens)
+	assert.Equal(t, 20, usage.OutputTokens)
 }
 
 func TestStreamResponseOpenAI2ClaudeClosesTextThinkingAndToolBlocks(t *testing.T) {
@@ -202,6 +228,103 @@ func TestStreamResponseOpenAI2ClaudeClosesTextThinkingAndToolBlocks(t *testing.T
 	assert.Equal(t, 7, finishResponses[1].Usage.BillingUsage.OpenAIUsage.PromptTokens)
 	assert.Equal(t, 3, finishResponses[1].Usage.BillingUsage.OpenAIUsage.CompletionTokens)
 	assert.Equal(t, "message_stop", finishResponses[2].Type)
+}
+
+func TestStreamResponseOpenAI2ClaudeKeepsTextSharingChunkWithReasoning(t *testing.T) {
+	type claudeStreamEvent struct {
+		Type  string
+		Block string
+		Index int
+		Text  string
+	}
+
+	tests := []struct {
+		name   string
+		chunks []dto.ChatCompletionsStreamResponseChoiceDelta
+		want   []claudeStreamEvent
+	}{
+		{
+			name: "first chunk carries reasoning and text",
+			chunks: []dto.ChatCompletionsStreamResponseChoiceDelta{
+				{ReasoningContent: ptr("think"), Content: ptr("Hello")},
+			},
+			want: []claudeStreamEvent{
+				{Type: "message_start"},
+				{Type: "content_block_start", Block: "thinking", Index: 0},
+				{Type: "content_block_delta", Block: "thinking_delta", Index: 0, Text: "think"},
+				{Type: "content_block_stop", Index: 0},
+				{Type: "content_block_start", Block: "text", Index: 1},
+				{Type: "content_block_delta", Block: "text_delta", Index: 1, Text: "Hello"},
+			},
+		},
+		{
+			name: "later chunk carries reasoning and text after a reasoning chunk",
+			chunks: []dto.ChatCompletionsStreamResponseChoiceDelta{
+				{ReasoningContent: ptr("think")},
+				{ReasoningContent: ptr(" more"), Content: ptr("Hello")},
+			},
+			want: []claudeStreamEvent{
+				{Type: "message_start"},
+				{Type: "content_block_start", Block: "thinking", Index: 0},
+				{Type: "content_block_delta", Block: "thinking_delta", Index: 0, Text: "think"},
+				{Type: "content_block_delta", Block: "thinking_delta", Index: 0, Text: " more"},
+				{Type: "content_block_stop", Index: 0},
+				{Type: "content_block_start", Block: "text", Index: 1},
+				{Type: "content_block_delta", Block: "text_delta", Index: 1, Text: "Hello"},
+			},
+		},
+		{
+			name: "later chunk carries reasoning and text after a role-only chunk",
+			chunks: []dto.ChatCompletionsStreamResponseChoiceDelta{
+				{Role: "assistant"},
+				{ReasoningContent: ptr("think"), Content: ptr("Hello")},
+			},
+			want: []claudeStreamEvent{
+				{Type: "message_start"},
+				{Type: "content_block_start", Block: "thinking", Index: 0},
+				{Type: "content_block_delta", Block: "thinking_delta", Index: 0, Text: "think"},
+				{Type: "content_block_stop", Index: 0},
+				{Type: "content_block_start", Block: "text", Index: 1},
+				{Type: "content_block_delta", Block: "text_delta", Index: 1, Text: "Hello"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &convmeta.Values{
+				ClaudeConvertInfo: &convmeta.ClaudeConvertInfo{
+					LastMessagesType: convmeta.LastMessageTypeNone,
+				},
+			}
+			var got []claudeStreamEvent
+			for i, delta := range tt.chunks {
+				info.SendResponseCount = i + 1
+				responses := StreamResponseOpenAI2Claude(&dto.ChatCompletionsStreamResponse{
+					Id:      "chatcmpl_1",
+					Model:   "gpt-test",
+					Choices: []dto.ChatCompletionsStreamResponseChoice{{Delta: delta}},
+				}, info)
+				for _, response := range responses {
+					event := claudeStreamEvent{Type: response.Type, Index: response.GetIndex()}
+					if response.ContentBlock != nil {
+						event.Block = response.ContentBlock.Type
+					}
+					if response.Delta != nil {
+						event.Block = response.Delta.Type
+						if response.Delta.Thinking != nil {
+							event.Text = *response.Delta.Thinking
+						}
+						if response.Delta.Text != nil {
+							event.Text = *response.Delta.Text
+						}
+					}
+					got = append(got, event)
+				}
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestNormalizeCacheCreationSplit(t *testing.T) {

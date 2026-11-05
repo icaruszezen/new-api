@@ -1,6 +1,8 @@
 package relayconvert
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -10,7 +12,87 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
+
+func TestClaudeMessagesToOpenAIChatPreservesAssistantTextWithToolCalls(t *testing.T) {
+	text := "I will look that up."
+	request := dto.ClaudeRequest{
+		Model: "claude-test",
+		Messages: []dto.ClaudeMessage{
+			{
+				Role: "assistant",
+				Content: []dto.ClaudeMediaMessage{
+					{Type: "text", Text: &text},
+					{
+						Type:  "tool_use",
+						Id:    "call_1",
+						Name:  "lookup",
+						Input: map[string]any{"query": "weather"},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := ConvertRequest(
+		context.Background(),
+		&convmeta.Values{},
+		types.RelayFormatOpenAI,
+		&request,
+	)
+	require.NoError(t, err)
+
+	converted, ok := result.Value.(*dto.GeneralOpenAIRequest)
+	require.True(t, ok)
+	require.Len(t, converted.Messages, 1)
+
+	assistant := converted.Messages[0]
+	assert.Equal(t, "assistant", assistant.Role)
+	toolCalls := assistant.ParseToolCalls()
+	require.Len(t, toolCalls, 1)
+	assert.Equal(t, "call_1", toolCalls[0].ID)
+	require.Len(t, assistant.ParseContent(), 1)
+	assert.Equal(t, "text", assistant.ParseContent()[0].Type)
+	assert.Equal(t, text, assistant.ParseContent()[0].Text)
+}
+
+func TestClaudeMessagesToOpenAIChatKeepsToolOnlyContentEmpty(t *testing.T) {
+	request := dto.ClaudeRequest{
+		Model: "claude-test",
+		Messages: []dto.ClaudeMessage{
+			{
+				Role: "assistant",
+				Content: []dto.ClaudeMediaMessage{
+					{
+						Type:  "tool_use",
+						Id:    "call_1",
+						Name:  "lookup",
+						Input: map[string]any{"query": "weather"},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := ConvertRequest(
+		context.Background(),
+		&convmeta.Values{},
+		types.RelayFormatOpenAI,
+		&request,
+	)
+	require.NoError(t, err)
+
+	converted, ok := result.Value.(*dto.GeneralOpenAIRequest)
+	require.True(t, ok)
+	require.Len(t, converted.Messages, 1)
+
+	assistant := converted.Messages[0]
+	assert.Empty(t, assistant.ParseContent())
+	toolCalls := assistant.ParseToolCalls()
+	require.Len(t, toolCalls, 1)
+	assert.Equal(t, "call_1", toolCalls[0].ID)
+}
 
 func TestRequestConverterRegistryListsSupportedTextConverters(t *testing.T) {
 	tests := []struct {
@@ -344,8 +426,8 @@ func TestConvertRequestResponsesToGeminiUsesDirectConverter(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, functions, 1)
 	assert.Equal(t, "lookup", functions[0].Name)
-	params, ok := functions[0].Parameters.(map[string]any)
-	require.True(t, ok)
+	var params map[string]any
+	require.NoError(t, kitutil.Unmarshal(functions[0].Parameters, &params))
 	assert.Equal(t, "OBJECT", params["type"])
 	assert.NotContains(t, params, "additionalProperties")
 	assert.NotContains(t, params, "propertyNames")
@@ -446,7 +528,7 @@ func TestConvertRequestOpenAIChatToGeminiAddsThoughtSignatureForAdvancedCustom(t
 				Type: "function",
 				Function: dto.FunctionRequest{
 					Name:       "lookup",
-					Parameters: map[string]any{"type": "object"},
+					Parameters: json.RawMessage(`{"type":"object"}`),
 				},
 			},
 		},
@@ -661,6 +743,40 @@ func TestConvertRequestByIDExecutesMultiHopConverter(t *testing.T) {
 	assert.Equal(t, []types.RelayFormat{types.RelayFormatClaude, types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses}, info.ConversionChain)
 }
 
+// Claude images carry no detail, so the Claude -> Chat -> Responses steps send
+// the Responses default for user images and for tool_result images, which the
+// Chat step hoists into a user message after the tool output.
+func TestConvertRequestClaudeToResponsesDefaultsImageDetail(t *testing.T) {
+	const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+Xoy8AAAAASUVORK5CYII="
+	req := &dto.ClaudeRequest{
+		Model: "gpt-test",
+		Messages: []dto.ClaudeMessage{
+			{Role: "user", Content: []dto.ClaudeMediaMessage{{
+				Type:   "image",
+				Source: &dto.ClaudeMessageSource{Type: "base64", MediaType: "image/png", Data: imageData},
+			}}},
+			{Role: "assistant", Content: []dto.ClaudeMediaMessage{{
+				Type: "tool_use", Id: "call_1", Name: "screenshot", Input: map[string]any{},
+			}}},
+			{Role: "user", Content: []dto.ClaudeMediaMessage{{
+				Type: "tool_result", ToolUseId: "call_1",
+				Content: []dto.ClaudeMediaMessage{{
+					Type:   "image",
+					Source: &dto.ClaudeMessageSource{Type: "base64", MediaType: "image/png", Data: imageData},
+				}},
+			}}},
+		},
+	}
+
+	result, err := ConvertRequestByID(nil, &convmeta.Values{}, requestConverterClaudeToResponses, req)
+	require.NoError(t, err)
+	responsesReq, ok := result.Value.(*dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	userMessages := gjson.GetBytes(responsesReq.Input, `#(role=="user")#`)
+	assert.Equal(t, `["input_image","input_image"]`, userMessages.Get("#.content.0.type").Raw)
+	assert.Equal(t, `["auto","auto"]`, userMessages.Get("#.content.0.detail").Raw)
+}
+
 func TestConvertRequestRejectsUnsupportedConverterAndNilRequest(t *testing.T) {
 	_, err := ConvertRequestByID(nil, &convmeta.Values{}, "missing_converter", &dto.GeneralOpenAIRequest{Model: "gpt-test"})
 	require.Error(t, err)
@@ -700,4 +816,54 @@ func mustRawMessage(t *testing.T, value any) []byte {
 	raw, err := kitutil.Marshal(value)
 	require.NoError(t, err)
 	return raw
+}
+
+func TestGeminiToOpenAIChatPreservesTextAlongsideToolCalls(t *testing.T) {
+	const text = "I will check the weather."
+	call := dto.GeminiPart{FunctionCall: &dto.FunctionCall{
+		FunctionName: "get_weather", Arguments: map[string]any{"city": "Paris"},
+	}}
+	for _, tt := range []struct {
+		name      string
+		parts     []dto.GeminiPart
+		wantText  []string
+		wantCalls int
+	}{
+		{name: "text and call", parts: []dto.GeminiPart{{Text: text}, call}, wantText: []string{text}, wantCalls: 1},
+		{name: "text around call", parts: []dto.GeminiPart{{Text: text}, call, {Text: "Please wait."}}, wantText: []string{text, "Please wait."}, wantCalls: 1},
+		{name: "call only", parts: []dto.GeminiPart{call}, wantCalls: 1},
+		{name: "text only", parts: []dto.GeminiPart{{Text: text}}, wantText: []string{text}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			request := &dto.GeminiChatRequest{Contents: []dto.GeminiChatContent{{Role: "model", Parts: tt.parts}}}
+			result, err := ConvertRequest(nil, &convmeta.Values{
+				UpstreamModelName: "gpt-4o", ChannelMetaAttached: true,
+			}, types.RelayFormatOpenAI, request)
+			require.NoError(t, err)
+			converted, ok := result.Value.(*dto.GeneralOpenAIRequest)
+			require.True(t, ok)
+			// Verify the JSON sent upstream, including custom DTO serialization.
+			body, err := kitutil.Marshal(converted)
+			require.NoError(t, err)
+			var wire dto.GeneralOpenAIRequest
+			require.NoError(t, kitutil.Unmarshal(body, &wire))
+			require.Len(t, wire.Messages, 1)
+			assistant := wire.Messages[0]
+			assert.Equal(t, "assistant", assistant.Role)
+			content := assistant.ParseContent()
+			require.Len(t, content, len(tt.wantText))
+			for i, want := range tt.wantText {
+				assert.Equal(t, "text", content[i].Type)
+				assert.Equal(t, want, content[i].Text)
+			}
+			calls := assistant.ParseToolCalls()
+			require.Len(t, calls, tt.wantCalls)
+			if tt.wantCalls > 0 {
+				// The fork numbers Gemini function calls call_1, call_2, ...
+				assert.Equal(t, "call_1", calls[0].ID)
+				assert.Equal(t, "get_weather", calls[0].Function.Name)
+				assert.JSONEq(t, `{"city":"Paris"}`, calls[0].Function.Arguments)
+			}
+		})
+	}
 }

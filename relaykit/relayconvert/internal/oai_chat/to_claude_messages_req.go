@@ -32,13 +32,14 @@ func OpenAIChatRequestToClaudeMessages(c context.Context, info convmeta.Meta, te
 	claudeTools := make([]any, 0, len(textRequest.Tools))
 
 	for _, tool := range textRequest.Tools {
-		if _, ok := tool.Function.Parameters.(map[string]any); !ok && tool.Type != "function" {
+		if kitutil.GetJsonType(tool.Function.Parameters) != "object" && tool.Type != "function" {
 			continue
 		}
+		inputSchema, _ := sharedclaude.FunctionParametersToInputSchema(tool.Function.Parameters)
 		claudeTools = append(claudeTools, &dto.Tool{
 			Name:        tool.Function.Name,
 			Description: tool.Function.Description,
-			InputSchema: sharedclaude.FunctionParametersToInputSchema(tool.Function.Parameters),
+			InputSchema: inputSchema,
 		})
 	}
 
@@ -207,10 +208,14 @@ func OpenAIChatRequestToClaudeMessages(c context.Context, info convmeta.Meta, te
 		switch stop := textRequest.Stop.(type) {
 		case string:
 			claudeRequest.StopSequences = []string{stop}
+		case []string:
+			claudeRequest.StopSequences = stop
 		case []interface{}:
-			stopSequences := make([]string, 0)
+			stopSequences := make([]string, 0, len(stop))
 			for _, item := range stop {
-				stopSequences = append(stopSequences, item.(string))
+				if sequence, ok := item.(string); ok {
+					stopSequences = append(stopSequences, sequence)
+				}
 			}
 			claudeRequest.StopSequences = stopSequences
 		}
@@ -220,6 +225,7 @@ func OpenAIChatRequestToClaudeMessages(c context.Context, info convmeta.Meta, te
 	lastMessage := dto.Message{
 		Role: "tool",
 	}
+	lastMessageHasPlaceholder := false
 	for i, message := range textRequest.Messages {
 		if message.Role == "" {
 			textRequest.Messages[i].Role = "user"
@@ -236,15 +242,35 @@ func OpenAIChatRequestToClaudeMessages(c context.Context, info convmeta.Meta, te
 		}
 		if lastMessage.Role == message.Role && lastMessage.Role != "tool" {
 			if lastMessage.IsStringContent() && message.IsStringContent() {
-				fmtMessage.SetStringContent(strings.Trim(fmt.Sprintf("%s %s", lastMessage.StringContent(), message.StringContent()), "\""))
+				previousToolCalls := lastMessage.ParseToolCalls()
+				currentToolCalls := fmtMessage.ParseToolCalls()
+				if len(previousToolCalls) > 0 || len(currentToolCalls) > 0 {
+					// Keep both messages' tool calls so later tool results still
+					// match a tool_use block.
+					texts := make([]string, 0, 2)
+					// Omit only text injected for an empty tool-call message.
+					isToolPlaceholder := lastMessageHasPlaceholder && len(previousToolCalls) > 0
+					if previousText := lastMessage.StringContent(); previousText != "" && !isToolPlaceholder {
+						texts = append(texts, previousText)
+					}
+					if currentText := message.StringContent(); currentText != "" {
+						texts = append(texts, currentText)
+					}
+					fmtMessage.SetStringContent(strings.Trim(strings.Join(texts, " "), "\""))
+					fmtMessage.SetToolCalls(append(previousToolCalls, currentToolCalls...))
+				} else {
+					fmtMessage.SetStringContent(strings.Trim(fmt.Sprintf("%s %s", lastMessage.StringContent(), message.StringContent()), "\""))
+				}
 				formatMessages = formatMessages[:len(formatMessages)-1]
 			}
 		}
-		if fmtMessage.Content == nil || (fmtMessage.IsStringContent() && fmtMessage.StringContent() == "") {
+		hasPlaceholder := fmtMessage.Content == nil || (fmtMessage.IsStringContent() && fmtMessage.StringContent() == "")
+		if hasPlaceholder {
 			fmtMessage.SetStringContent("...")
 		}
 		formatMessages = append(formatMessages, fmtMessage)
 		lastMessage = fmtMessage
+		lastMessageHasPlaceholder = hasPlaceholder
 	}
 
 	claudeMessages := make([]dto.ClaudeMessage, 0)

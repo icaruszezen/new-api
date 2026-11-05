@@ -30,6 +30,7 @@ import (
 // send the terminal as soon as the context is done.
 type disconnectingStream struct {
 	c              *gin.Context
+	recorder       *httptest.ResponseRecorder
 	upstream       *io.PipeWriter
 	disconnectSeen <-chan struct{}
 	done           chan struct{}
@@ -47,12 +48,13 @@ func startDisconnectingStream(t *testing.T, path, disconnectAfter string, info *
 
 	ctx, cancel := context.WithCancel(context.Background())
 	pr, pw := io.Pipe()
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, path, nil).WithContext(ctx)
 	c.Set(common.RequestIdKey, "drain-test")
 	c.Writer = &cancelAfterWriter{ResponseWriter: c.Writer, needle: disconnectAfter, cancel: cancel}
 
-	s := &disconnectingStream{c: c, upstream: pw, disconnectSeen: ctx.Done(), done: make(chan struct{})}
+	s := &disconnectingStream{c: c, recorder: recorder, upstream: pw, disconnectSeen: ctx.Done(), done: make(chan struct{})}
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       pr,

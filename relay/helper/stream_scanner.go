@@ -312,6 +312,11 @@ func scanUpstreamStream(c *gin.Context, resp *http.Response, info *relaycommon.R
 			}
 		}
 
+		// Closing the upstream body is part of stopping the scanner. Its EOF or
+		// read error must not replace the actual stop reason or add a false error.
+		if ctx.Err() != nil {
+			return
+		}
 		if err := scanner.Err(); err != nil {
 			if err != io.EOF {
 				logger.LogError(c, "scanner error: "+err.Error())

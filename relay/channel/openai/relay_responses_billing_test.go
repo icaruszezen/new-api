@@ -2,6 +2,7 @@ package openai
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -295,4 +296,98 @@ func TestOaiResponsesStreamHandlerDrainUsesCompletedUsage(t *testing.T) {
 	assert.Equal(t, 8, usage.TotalTokens)
 	assert.Equal(t, relaycommon.StreamEndReasonDrained, info.StreamStatus.EndReason)
 	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.DrainedFrom)
+}
+
+// A completed Responses event ends the stream even when the upstream keeps
+// the connection open, so the request neither waits for STREAMING_TIMEOUT
+// nor ends as a timeout, and a drain after a client disconnect ends with it.
+func TestOaiResponsesStreamHandlerEndsOnCompletedResponse(t *testing.T) {
+	const terminal = `{"type":%q,"response":{"status":%q,"usage":{"input_tokens":7,"output_tokens":5,"total_tokens":12},"output":[{"id":"img_1","type":"image_generation_call","status":"completed","result":"image-data"}]}}`
+	tests := []struct {
+		name             string
+		drain            bool
+		disconnectAfter  string
+		beforeClientGone []string
+		terminal         string
+		closeUpstream    bool
+		wantEnd          relaycommon.StreamEndReason
+		wantDrainedFrom  relaycommon.StreamEndReason
+		wantImageCalls   int
+		wantDelivered    bool
+	}{
+		{
+			name:            "completed event while the upstream stays open",
+			disconnectAfter: "client-never-disconnects",
+			terminal:        fmt.Sprintf(terminal, "response.completed", "completed"),
+			wantEnd:         relaycommon.StreamEndReasonDone,
+			wantImageCalls:  1,
+			wantDelivered:   true,
+		},
+		{
+			name:            "done alias with a completed response",
+			disconnectAfter: "client-never-disconnects",
+			terminal:        fmt.Sprintf(terminal, "response.done", "completed"),
+			wantEnd:         relaycommon.StreamEndReasonDone,
+			wantImageCalls:  1,
+			wantDelivered:   true,
+		},
+		{
+			name:            "done with an incomplete response reads on to EOF",
+			disconnectAfter: "client-never-disconnects",
+			terminal:        fmt.Sprintf(terminal, "response.done", "incomplete"),
+			closeUpstream:   true,
+			wantEnd:         relaycommon.StreamEndReasonEOF,
+			wantImageCalls:  0,
+			wantDelivered:   true,
+		},
+		{
+			name:             "completion ends a drain after the client left",
+			drain:            true,
+			disconnectAfter:  "hello",
+			beforeClientGone: []string{`{"type":"response.output_text.delta","delta":"hello"}`},
+			terminal:         fmt.Sprintf(terminal, "response.completed", "completed"),
+			wantEnd:          relaycommon.StreamEndReasonDrained,
+			wantDrainedFrom:  relaycommon.StreamEndReasonDone,
+			wantImageCalls:   1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{
+				OriginModelName:                 "gpt-5.1",
+				IsStream:                        true,
+				DisablePing:                     true,
+				DrainUpstreamOnClientDisconnect: tt.drain,
+				ChannelMeta:                     &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5.1"},
+			}
+			info.SetEstimatePromptTokens(7)
+
+			s := startDisconnectingStream(t, "/v1/responses", tt.disconnectAfter, info, OaiResponsesStreamHandler)
+			if len(tt.beforeClientGone) > 0 {
+				s.send(t, tt.beforeClientGone...)
+				s.waitClientGone(t)
+			}
+			s.send(t, tt.terminal)
+			if tt.closeUpstream {
+				require.NoError(t, s.upstream.Close())
+			}
+			usage, apiErr := s.wait(t)
+
+			require.Nil(t, apiErr)
+			require.NotNil(t, usage)
+			assert.Equal(t, 7, usage.PromptTokens)
+			assert.Equal(t, 5, usage.CompletionTokens)
+			assert.Equal(t, 12, usage.TotalTokens)
+			require.NotNil(t, info.StreamStatus)
+			assert.Equal(t, tt.wantEnd, info.StreamStatus.EndReason)
+			assert.Equal(t, tt.wantDrainedFrom, info.StreamStatus.DrainedFrom)
+			assert.False(t, info.StreamStatus.HasErrors())
+			require.NotNil(t, info.ResponsesUsageInfo)
+			require.Contains(t, info.ResponsesUsageInfo.BuiltInTools, dto.BuildInToolImageGeneration)
+			assert.Equal(t, tt.wantImageCalls, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
+			if tt.wantDelivered {
+				assert.Contains(t, s.recorder.Body.String(), "data: "+tt.terminal+"\n\n")
+			}
+		})
+	}
 }

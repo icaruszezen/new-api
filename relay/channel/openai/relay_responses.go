@@ -155,7 +155,26 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 				}
 			}
 		}
-		sendResponsesStreamData(c, streamResponse, outboundData)
+		writeErr := helper.ResponseChunkData(c, streamResponse, outboundData)
+
+		// A completed response is the last event of a Responses stream: stop
+		// once it has been written instead of waiting for the upstream to close
+		// the connection, which it may hold open until STREAMING_TIMEOUT.
+		completed := (streamResponse.Type == "response.completed" || streamResponse.Type == "response.done") &&
+			streamResponse.Response != nil && relaycommon.IsCompletedResponsesStatus(streamResponse.Response.Status)
+		// Some upstreams send a fake one-token completion and then
+		// response.failed; first-token error correction must still see it.
+		mayBeFakeCompletion := common.FirstTokenErrorCorrectionEnabled && usage.CompletionTokens <= 1
+		if !completed || mayBeFakeCompletion {
+			return
+		}
+		// A write skipped because the client left leaves the end to the
+		// disconnect handling, except while draining: there the completion is
+		// the upstream's own end and must finish the drain.
+		if writeErr != nil && !info.DrainUpstreamOnClientDisconnect {
+			return
+		}
+		sr.Done()
 	})
 
 	upstreamCompletion := usage.CompletionTokens

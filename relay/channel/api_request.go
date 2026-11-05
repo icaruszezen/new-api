@@ -603,6 +603,13 @@ func DoTaskApiRequest(a TaskAdaptor, c *gin.Context, info *common.RelayInfo, req
 	if err != nil {
 		return nil, fmt.Errorf("setup request header failed: %w", err)
 	}
+	// Apply the channel Header Override after the adaptor's headers, as
+	// DoApiRequest does, so the admin's values win.
+	headerOverride, err := processHeaderOverride(info, c)
+	if err != nil {
+		return nil, err
+	}
+	applyHeaderOverrideToRequest(req, headerOverride)
 	resp, err := doRequest(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)

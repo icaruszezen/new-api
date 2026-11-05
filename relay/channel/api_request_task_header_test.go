@@ -13,7 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// authTaskAdaptor sets its own credentials, as every built-in task adaptor does.
+// authTaskAdaptor sets its own credentials and body type, as every built-in
+// task adaptor does.
 type authTaskAdaptor struct {
 	stubTaskAdaptor
 }
@@ -24,9 +25,13 @@ func (a *authTaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, 
 	return nil
 }
 
-// Task submission honours the channel Header Override like chat requests do:
-// overrides are applied after the adaptor's headers, with placeholders resolved.
-func TestDoTaskApiRequestAppliesChannelHeaderOverride(t *testing.T) {
+// Task submission sends the headers the adaptor builds and nothing from the
+// channel Header Override. The poller's FetchTask and the content proxy build
+// their headers from the channel key alone, so a submission that used the
+// override could create an upstream job its own poll cannot read. A
+// passthrough rule must also not relabel the adaptor's JSON body with the
+// client's multipart Content-Type.
+func TestDoTaskApiRequestSendsOnlyAdaptorHeaders(t *testing.T) {
 	service.InitHttpClient()
 	received := make(chan http.Header, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -37,14 +42,15 @@ func TestDoTaskApiRequestAppliesChannelHeaderOverride(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/video/generations", nil)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
+	ctx.Request.Header.Set("Content-Type", "multipart/form-data; boundary=abc")
 	ctx.Request.Header.Set("X-Trace-Id", "trace-123")
 	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
 		ApiKey: "channel-key",
 		HeadersOverride: map[string]any{
-			"Authorization":    "Bearer override",
-			"X-Upstream-Key":   "{api_key}",
-			"X-Upstream-Trace": "{client_header:X-Trace-Id}",
+			"*":              "",
+			"Authorization":  "Bearer override",
+			"X-Upstream-Key": "{api_key}",
 		},
 	}}
 
@@ -54,8 +60,8 @@ func TestDoTaskApiRequestAppliesChannelHeaderOverride(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 
 	headers := <-received
-	assert.Equal(t, "Bearer override", headers.Get("Authorization"))
-	assert.Equal(t, "channel-key", headers.Get("X-Upstream-Key"))
-	assert.Equal(t, "trace-123", headers.Get("X-Upstream-Trace"))
-	assert.Equal(t, "application/json", headers.Get("Content-Type"), "headers the override does not name stay as the adaptor set them")
+	assert.Equal(t, "Bearer adaptor", headers.Get("Authorization"))
+	assert.Equal(t, "application/json", headers.Get("Content-Type"))
+	assert.Empty(t, headers.Get("X-Upstream-Key"))
+	assert.Empty(t, headers.Get("X-Trace-Id"))
 }

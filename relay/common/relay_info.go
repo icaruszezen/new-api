@@ -874,7 +874,15 @@ func (info *RelayInfo) ConvOptions() *convmeta.Options {
 			// Gemini API v1 has no parametersJsonSchema; v1beta and Vertex AI
 			// accept it.
 			SupportsJSONSchema: func(modelName string) bool {
-				return channelType == constant.ChannelTypeVertexAi || model_setting.GetGeminiVersionSetting(modelName) != "v1"
+				if channelType == constant.ChannelTypeVertexAi {
+					return true
+				}
+				originModelName := ""
+				if info != nil {
+					originModelName = info.OriginModelName
+				}
+				// The URL drops the thinking suffix before it picks the version.
+				return model_setting.GetGeminiVersionSetting(GeminiUpstreamModelName(originModelName, modelName)) != "v1"
 			},
 		},
 		OpenRouterDialect:      info != nil && info.GetChannelType() == constant.ChannelTypeOpenRouter,

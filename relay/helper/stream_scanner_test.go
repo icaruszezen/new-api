@@ -1056,21 +1056,59 @@ func (r *deadlineRecorder) SetWriteDeadline(deadline time.Time) error {
 }
 
 func TestStreamWriteBudget(t *testing.T) {
+	// Not parallel: modifies global constant.StreamingTimeout
+	oldTimeout := constant.StreamingTimeout
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	const (
+		smallEvent = 8 << 10    // 1s at streamMinClientRate
+		imageEvent = 3600 << 10 // 450s at streamMinClientRate
+	)
 	start := time.Unix(1_800_000_000, 0)
-	var budget streamWriteBudget
-	steps := []struct {
+	type step struct {
 		name  string
 		at    time.Duration
 		bytes int
 		want  time.Duration
-	}{
-		{"small event", 0, 8 << 10, 31 * time.Second},
-		{"image event gets the time a slow client needs", 0, 3600 << 10, 481 * time.Second},
-		{"next write keeps the image budget", 60 * time.Second, 8 << 10, 482 * time.Second},
-		{"budget starts over once it ran out", 600 * time.Second, 8 << 10, 631 * time.Second},
 	}
-	for _, step := range steps {
-		assert.Equal(t, start.Add(step.want), budget.Deadline(start.Add(step.at), step.bytes), step.name)
+	cases := []struct {
+		name             string
+		streamingTimeout int
+		steps            []step
+	}{
+		{"default timeout carries at most 60s", 300, []step{
+			{"small event", 0, smallEvent, 31 * time.Second},
+			{"image event gets the time a slow client needs", 0, imageEvent, 481 * time.Second},
+			{"small write after the image lead carries only 60s", 60 * time.Second, smallEvent, 151 * time.Second},
+			{"large write after a lead still gets its own allowance", 61 * time.Second, imageEvent, 601 * time.Second},
+			{"budget starts over once it ran out", 700 * time.Second, smallEvent, 731 * time.Second},
+		}},
+		{"90s timeout carries at most 30s", 90, []step{
+			{"image event", 0, imageEvent, 480 * time.Second},
+			{"small write after the image lead", 60 * time.Second, smallEvent, 121 * time.Second},
+		}},
+		{"45s timeout carries nothing", 45, []step{
+			{"image event", 0, imageEvent, 480 * time.Second},
+			{"small write after the image lead", 60 * time.Second, smallEvent, 91 * time.Second},
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			constant.StreamingTimeout = tc.streamingTimeout
+			streamingTimeout := time.Duration(tc.streamingTimeout) * time.Second
+			var budget streamWriteBudget
+			for _, s := range tc.steps {
+				now := start.Add(s.at)
+				deadline := budget.Deadline(now, s.bytes)
+				assert.Equal(t, start.Add(s.want), deadline, s.name)
+				if s.bytes == smallEvent {
+					// A client that stops reading must fail this write, which
+					// starts the client-disconnect drain, before the idle
+					// watchdog ends the stream as a timeout.
+					assert.Less(t, deadline.Sub(now), streamingTimeout, s.name)
+				}
+			}
+		})
 	}
 }
 

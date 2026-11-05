@@ -33,6 +33,10 @@ const (
 	// time a client reading at streamMinClientRate needs for the data.
 	streamWriteTimeout  = 30 * time.Second
 	streamMinClientRate = 8 << 10 // bytes per second
+	// streamMaxWriteCarry caps the budget lead that earlier writes carry into
+	// the next one; streamWriteBudget lowers it further for a short
+	// STREAMING_TIMEOUT.
+	streamMaxWriteCarry = 60 * time.Second
 )
 
 func getScannerBufferSize() int {
@@ -68,20 +72,41 @@ func copyCodexSSEHeaders(c *gin.Context, resp *http.Response) {
 
 // streamWriteBudget gives the writes of one stream a deadline of
 // streamWriteTimeout past the time a client reading at streamMinClientRate
-// needs for everything written so far. A fixed deadline per write cut slow
-// clients off in the middle of a multi-megabyte image event, and the timeout
-// looked like a client disconnect. The budget carries over between writes
-// because the kernel can still hold megabytes of earlier writes and wakes a
-// blocked writer only after a large part of them drains. A client that stops
-// reading is still cut off once the budget runs out. Callers serialize writes.
+// needs for the data. A fixed deadline per write cut slow clients off in the
+// middle of a multi-megabyte image event, and the timeout looked like a client
+// disconnect. Every write gets n/streamMinClientRate for its own n bytes, so a
+// single large write keeps its size-proportional allowance. Part of the lead
+// left by earlier writes carries over, because the kernel can still hold
+// megabytes of them and wakes a blocked writer only after a large part of them
+// drains.
+//
+// The carried lead is capped at
+// min(streamMaxWriteCarry, max(0, STREAMING_TIMEOUT - 2*streamWriteTimeout)).
+// A client that stops reading with its connection still open must fail its
+// write before the STREAMING_TIMEOUT idle watchdog of the stream handlers
+// (StreamScannerHandler and the AWS Bedrock event stream, both writing through
+// this budget) ends the stream as a timeout: the failed write is what makes
+// net/http cancel the request context, which starts the client-disconnect
+// drain that reads the upstream to its final usage. Without the cap the lead
+// of a fast stream grew without bound, the watchdog fired first, and billing
+// fell back to an estimate. With it a blocked small write fails at most
+// carry + streamWriteTimeout after it started: a full streamWriteTimeout
+// before the watchdog once STREAMING_TIMEOUT reaches 2*streamWriteTimeout,
+// and below that nothing carries over, which leaves small writes the fixed
+// streamWriteTimeout they had before the budget. Callers serialize writes.
 type streamWriteBudget struct {
 	drainBy time.Time
 }
 
 // Deadline returns the write deadline for n more bytes written at now.
 func (b *streamWriteBudget) Deadline(now time.Time, n int) time.Time {
+	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
+	maxCarry := max(0, min(streamMaxWriteCarry, streamingTimeout-2*streamWriteTimeout))
 	if b.drainBy.Before(now) {
 		b.drainBy = now
+	}
+	if limit := now.Add(maxCarry); b.drainBy.After(limit) {
+		b.drainBy = limit
 	}
 	b.drainBy = b.drainBy.Add(time.Duration(n) * time.Second / streamMinClientRate)
 	return b.drainBy.Add(streamWriteTimeout)

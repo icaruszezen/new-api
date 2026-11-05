@@ -225,6 +225,12 @@ func FunctionDeclaration(name, description string, rawParameters json.RawMessage
 	if len(misfits) > 0 {
 		kitutil.LogInfo(fmt.Sprintf("gemini function %q parameters cannot carry %s; dropped them", name, strings.Join(misfits, ", ")))
 	}
+	if field == "parametersJsonSchema" {
+		// The schema goes unchanged: send the client's bytes, which keep its
+		// property order (decoding into a map would sort the keys).
+		declaration[field] = rawParameters
+		return declaration, nil
+	}
 	if value != nil {
 		declaration[field] = value
 	}

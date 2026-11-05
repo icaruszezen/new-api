@@ -16,7 +16,7 @@ import (
 // parametersJsonSchema and responseJsonSchema when the upstream model accepts
 // them, and keep the typed fields otherwise.
 func TestOpenAIToGeminiSendsUnfitSchemasAsJSONSchema(t *testing.T) {
-	const toolParameters = `{"type":"object","properties":{"mode":{"type":"string","const":"fast"}},"required":["mode"]}`
+	const toolParameters = `{"type":"object","properties":{"reasoning":{"type":"string"},"mode":{"type":"string","const":"fast"}},"required":["mode"]}`
 	const outputSchema = `{"type":"object","properties":{"value":{"type":["string","null"]}},"required":["value"]}`
 
 	converters := []struct {
@@ -79,6 +79,8 @@ func TestOpenAIToGeminiSendsUnfitSchemasAsJSONSchema(t *testing.T) {
 				declaration := gjson.GetBytes(body, "tools.0.functionDeclarations.0")
 				assert.Equal(t, "pick", declaration.Get("name").String())
 				assert.Equal(t, "fast", declaration.Get("parametersJsonSchema.properties.mode.const").String())
+				// The schema goes unchanged, in the client's member order.
+				assert.Equal(t, toolParameters, declaration.Get("parametersJsonSchema").Raw)
 				assert.False(t, declaration.Get("parameters").Exists())
 
 				config := gjson.GetBytes(body, "generationConfig")

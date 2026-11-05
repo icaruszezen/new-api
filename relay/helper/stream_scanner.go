@@ -111,7 +111,8 @@ func (w *streamResponseWriter) Unwrap() http.ResponseWriter {
 }
 
 // StreamScannerHandler reads an SSE upstream and hands every `data:` payload
-// to dataHandler; `data: [DONE]` ends the stream. When the client disconnects
+// to dataHandler; a `data: [DONE]` or bare `[DONE]` line ends the stream (only
+// an exact marker after trimming whitespace). When the client disconnects
 // it closes the upstream at once, unless info.DrainUpstreamOnClientDisconnect
 // is set: then it keeps reading until the upstream ends on its own, so the
 // handler still sees the final usage event, bounded by the STREAMING_TIMEOUT
@@ -322,13 +323,13 @@ func scanUpstreamStream(c *gin.Context, resp *http.Response, info *relaycommon.R
 				}
 			case strings.HasPrefix(line, "data:"):
 				data = strings.TrimSpace(line[len("data:"):])
-			case strings.HasPrefix(line, "[DONE]"):
+			case strings.TrimSpace(line) == "[DONE]":
 				data = "[DONE]"
 			}
 			if data == "" {
 				continue
 			}
-			if !rawLines && strings.HasPrefix(data, "[DONE]") {
+			if !rawLines && data == "[DONE]" {
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 				logger.LogDebug(c, "received [DONE], stopping scanner")
 				return

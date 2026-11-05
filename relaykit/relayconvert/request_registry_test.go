@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestClaudeMessagesToOpenAIChatPreservesAssistantTextWithToolCalls(t *testing.T) {
@@ -739,6 +740,40 @@ func TestConvertRequestByIDExecutesMultiHopConverter(t *testing.T) {
 		},
 	}, result.Steps)
 	assert.Equal(t, []types.RelayFormat{types.RelayFormatClaude, types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses}, info.ConversionChain)
+}
+
+// Claude images carry no detail, so the Claude -> Chat -> Responses steps send
+// the Responses default for user images and for tool_result images, which the
+// Chat step hoists into a user message after the tool output.
+func TestConvertRequestClaudeToResponsesDefaultsImageDetail(t *testing.T) {
+	const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+Xoy8AAAAASUVORK5CYII="
+	req := &dto.ClaudeRequest{
+		Model: "gpt-test",
+		Messages: []dto.ClaudeMessage{
+			{Role: "user", Content: []dto.ClaudeMediaMessage{{
+				Type:   "image",
+				Source: &dto.ClaudeMessageSource{Type: "base64", MediaType: "image/png", Data: imageData},
+			}}},
+			{Role: "assistant", Content: []dto.ClaudeMediaMessage{{
+				Type: "tool_use", Id: "call_1", Name: "screenshot", Input: map[string]any{},
+			}}},
+			{Role: "user", Content: []dto.ClaudeMediaMessage{{
+				Type: "tool_result", ToolUseId: "call_1",
+				Content: []dto.ClaudeMediaMessage{{
+					Type:   "image",
+					Source: &dto.ClaudeMessageSource{Type: "base64", MediaType: "image/png", Data: imageData},
+				}},
+			}}},
+		},
+	}
+
+	result, err := ConvertRequestByID(nil, &convmeta.Values{}, requestConverterClaudeToResponses, req)
+	require.NoError(t, err)
+	responsesReq, ok := result.Value.(*dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	userMessages := gjson.GetBytes(responsesReq.Input, `#(role=="user")#`)
+	assert.Equal(t, `["input_image","input_image"]`, userMessages.Get("#.content.0.type").Raw)
+	assert.Equal(t, `["auto","auto"]`, userMessages.Get("#.content.0.detail").Raw)
 }
 
 func TestConvertRequestRejectsUnsupportedConverterAndNilRequest(t *testing.T) {

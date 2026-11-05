@@ -7,9 +7,45 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	relaymedia "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/media"
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/samber/lo"
 )
+
+// clientImageDetails returns, in order, the detail of each image_url part of
+// a Chat message content as the client wrote it, empty where it wrote none.
+// Message.ParseContent fills a missing detail with "high", which must not
+// reach a Responses upstream as if the client had asked for it. The order
+// matches the image_url parts ParseContent returns for the same content: it
+// keeps every image_url map and every image_url MediaContent, in order.
+func clientImageDetails(content any) []string {
+	items, ok := content.([]any)
+	if !ok {
+		return nil
+	}
+	var details []string
+	for _, item := range items {
+		switch typed := item.(type) {
+		case dto.MediaContent:
+			if typed.Type != dto.ContentTypeImageURL {
+				continue
+			}
+			detail := ""
+			if image := typed.GetImageMedia(); image != nil {
+				detail = image.Detail
+			}
+			details = append(details, detail)
+		case map[string]any:
+			if partType, _ := typed["type"].(string); partType != dto.ContentTypeImageURL {
+				continue
+			}
+			imageURL, _ := typed["image_url"].(map[string]any)
+			detail, _ := imageURL["detail"].(string)
+			details = append(details, detail)
+		}
+	}
+	return details
+}
 
 func normalizeChatImageURLToString(v any) any {
 	switch vv := v.(type) {
@@ -211,6 +247,8 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 		}
 
 		parts := msg.ParseContent()
+		imageDetails := clientImageDetails(msg.Content)
+		imageIndex := 0
 		contentParts := make([]map[string]any, 0, len(parts))
 		for _, part := range parts {
 			switch part.Type {
@@ -224,9 +262,19 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 					"text": part.Text,
 				})
 			case dto.ContentTypeImageURL:
+				// Content set by an earlier conversion is []MediaContent, which
+				// holds no ParseContent default, so its own detail is used.
+				var detail string
+				if imageIndex < len(imageDetails) {
+					detail = imageDetails[imageIndex]
+				} else if image := part.GetImageMedia(); image != nil {
+					detail = image.Detail
+				}
+				imageIndex++
 				contentParts = append(contentParts, map[string]any{
 					"type":      "input_image",
 					"image_url": normalizeChatImageURLToString(part.ImageUrl),
+					"detail":    relaymedia.ResponsesImageDetail(detail),
 				})
 			case dto.ContentTypeInputAudio:
 				contentParts = append(contentParts, map[string]any{

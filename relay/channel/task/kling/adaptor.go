@@ -312,17 +312,22 @@ func (a *TaskAdaptor) createJWTToken() (string, error) {
 }
 
 func (a *TaskAdaptor) createJWTTokenWithKey(apiKey string) (string, error) {
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey == "" {
+		return "", errors.New("api_key is empty")
+	}
 	if isNewAPIRelay(apiKey) {
 		return apiKey, nil // new api relay
 	}
 	keyParts := strings.Split(apiKey, "|")
+	// A single API key is sent as the bearer token as is.
+	if len(keyParts) == 1 {
+		return apiKey, nil
+	}
 	if len(keyParts) != 2 {
 		return "", errors.New("invalid api_key, required format is accessKey|secretKey")
 	}
 	accessKey := strings.TrimSpace(keyParts[0])
-	if len(keyParts) == 1 {
-		return accessKey, nil
-	}
 	secretKey := strings.TrimSpace(keyParts[1])
 	now := time.Now().Unix()
 	claims := jwt.MapClaims{

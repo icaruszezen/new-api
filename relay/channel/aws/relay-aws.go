@@ -278,6 +278,9 @@ func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (
 	}
 	stream := awsResp.GetStream()
 	defer stream.Close()
+	// Installs the stream writer whose write budget bounds every write to a
+	// client that stopped reading.
+	helper.SetEventStreamHeaders(c)
 
 	claudeInfo := &claude.ClaudeResponseInfo{
 		ResponseId:   helper.GetResponseID(c),
@@ -339,7 +342,6 @@ streamLoop:
 			case *bedrockruntimeTypes.ResponseStreamMemberChunk:
 				info.SetFirstResponseTime()
 				info.ReceivedResponseCount++
-				helper.ExtendWriteDeadline(c)
 				handlerErr = claude.HandleStreamResponseData(c, info, claudeInfo, string(v.Value.Bytes))
 			case *bedrockruntimeTypes.UnknownUnionMember:
 				fmt.Println("unknown tag:", v.Tag)

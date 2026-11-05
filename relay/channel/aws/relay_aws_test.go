@@ -788,6 +788,43 @@ func TestAwsStreamHandlerRecordsUpstreamEnd(t *testing.T) {
 	}
 }
 
+type awsDeadlineRecorder struct {
+	*httptest.ResponseRecorder
+	deadlines []time.Time
+}
+
+func (r *awsDeadlineRecorder) SetWriteDeadline(deadline time.Time) error {
+	r.deadlines = append(r.deadlines, deadline)
+	return nil
+}
+
+// Bedrock streams do not go through doRequest, so the handler itself must
+// install the stream writer whose budget bounds every client write; a client
+// that stops reading would otherwise block the relay forever.
+func TestAwsStreamHandlerBoundsClientWrites(t *testing.T) {
+	useAwsStreamLimits(t, 30, 1800)
+	client := newAwsTestClient(awsHTTPClientFunc(func(request *http.Request) (*http.Response, error) {
+		var body bytes.Buffer
+		for _, event := range append(append([]string{}, awsClaudeStreamStart...), awsClaudeStreamFinish...) {
+			if err := writeAwsStreamEvent(&body, event); err != nil {
+				return nil, err
+			}
+		}
+		return newAwsStreamResponse(request, io.NopCloser(&body)), nil
+	}))
+	adaptor := &Adaptor{AwsClient: client, AwsReq: newAwsStreamInput()}
+	recorder := &awsDeadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+	before := time.Now()
+
+	handlerErr, usage := awsStreamHandler(newAwsTestContext(recorder, context.Background()), newAwsTestRelayInfo(), adaptor)
+
+	require.Nil(t, handlerErr)
+	require.NotNil(t, usage)
+	require.NotEmpty(t, recorder.deadlines)
+	assert.False(t, recorder.deadlines[0].Before(before.Add(30*time.Second)), "a write may take at least the 30s write timeout")
+	assert.Contains(t, recorder.Body.String(), "partial")
+}
+
 func TestAwsStreamHandlerClosesUpstreamWhenClientLeavesWithoutDrain(t *testing.T) {
 	useAwsStreamLimits(t, 30, 1800)
 	run := startAwsStreamRun(t, false)

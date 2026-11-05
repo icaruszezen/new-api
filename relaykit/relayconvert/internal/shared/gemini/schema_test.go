@@ -1,8 +1,10 @@
 package gemini
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -148,4 +150,184 @@ func TestCleanFunctionParametersShallowDropsBooleanEnum(t *testing.T) {
 		"type": "STRING",
 		"enum": []interface{}{"a", "b"},
 	}, cleaned)
+}
+
+func TestFunctionParametersRoutesSchemaByTypedSchemaFit(t *testing.T) {
+	refSchema := func() map[string]any {
+		return map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"item": map[string]any{"$ref": "#/$defs/item"},
+			},
+			"$defs": map[string]any{
+				"item": map[string]any{"type": "string"},
+			},
+		}
+	}
+	booleanEnumSchema := func() map[string]any {
+		return map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"flag": map[string]any{"type": "boolean", "enum": []any{true}},
+			},
+		}
+	}
+
+	tests := []struct {
+		name        string
+		schema      any
+		jsonSchema  bool
+		wantField   string
+		wantValue   any
+		wantMisfits []string
+	}{
+		{
+			name: "string enum stays in typed parameters",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"color": map[string]any{"type": "string", "enum": []any{"red", "green"}},
+				},
+				"required": []any{"color"},
+			},
+			jsonSchema: true,
+			wantField:  "parameters",
+			wantValue: map[string]any{
+				"type": "OBJECT",
+				"properties": map[string]any{
+					"color": map[string]any{"type": "STRING", "enum": []any{"red", "green"}},
+				},
+				"required": []any{"color"},
+			},
+		},
+		{
+			name:       "boolean enum goes unchanged to parametersJsonSchema",
+			schema:     booleanEnumSchema(),
+			jsonSchema: true,
+			wantField:  "parametersJsonSchema",
+			wantValue:  booleanEnumSchema(),
+		},
+		{
+			name:       "boolean enum is cleaned when JSON Schema is not accepted",
+			schema:     booleanEnumSchema(),
+			jsonSchema: false,
+			wantField:  "parameters",
+			wantValue: map[string]any{
+				"type": "OBJECT",
+				"properties": map[string]any{
+					"flag": map[string]any{"type": "BOOLEAN"},
+				},
+			},
+			wantMisfits: []string{"non-string enum values"},
+		},
+		{
+			name: "additionalProperties and $schema alone keep typed parameters",
+			schema: map[string]any{
+				"$schema":              "http://json-schema.org/draft-07/schema#",
+				"type":                 "object",
+				"properties":           map[string]any{"q": map[string]any{"type": "string"}},
+				"additionalProperties": false,
+			},
+			jsonSchema: true,
+			wantField:  "parameters",
+			wantValue: map[string]any{
+				"type":       "OBJECT",
+				"properties": map[string]any{"q": map[string]any{"type": "STRING"}},
+			},
+		},
+		{
+			name:       "empty properties leave the parameters out",
+			schema:     map[string]any{"type": "object", "properties": map[string]any{}},
+			jsonSchema: true,
+			wantField:  "parameters",
+			wantValue:  nil,
+		},
+		{
+			name:       "$ref and $defs go unchanged to parametersJsonSchema",
+			schema:     refSchema(),
+			jsonSchema: true,
+			wantField:  "parametersJsonSchema",
+			wantValue:  refSchema(),
+		},
+		{
+			name:       "$ref and $defs are dropped when JSON Schema is not accepted",
+			schema:     refSchema(),
+			jsonSchema: false,
+			wantField:  "parameters",
+			wantValue: map[string]any{
+				"type":       "OBJECT",
+				"properties": map[string]any{"item": map[string]any{}},
+			},
+			wantMisfits: []string{"$defs", "$ref"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			field, value, misfits := FunctionParameters(tt.schema, tt.jsonSchema)
+
+			assert.Equal(t, tt.wantField, field)
+			assert.Equal(t, tt.wantValue, value)
+			if len(tt.wantMisfits) == 0 {
+				assert.Empty(t, misfits)
+			} else {
+				assert.Equal(t, tt.wantMisfits, misfits)
+			}
+		})
+	}
+}
+
+func TestApplyResponseSchemaRoutesSchemaByTypedSchemaFit(t *testing.T) {
+	// The key order is not alphabetical, so a re-marshal would show.
+	nullableSchema := `{"type":"object","properties":{"zeta":{"type":["string","null"]},"alpha":{"type":"string"}},"required":["zeta","alpha"]}`
+	nullableFormat := json.RawMessage(`{"name":"answer","schema":` + nullableSchema + `}`)
+	strictFormat := json.RawMessage(`{"name":"answer","strict":true,"schema":{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}}`)
+
+	tests := []struct {
+		name               string
+		format             json.RawMessage
+		jsonSchema         bool
+		wantResponseSchema any
+		wantJSONSchema     string
+	}{
+		{
+			name:           "type array goes to responseJsonSchema as the client wrote it",
+			format:         nullableFormat,
+			jsonSchema:     true,
+			wantJSONSchema: nullableSchema,
+		},
+		{
+			name:       "type array stays in responseSchema when JSON Schema is not accepted",
+			format:     nullableFormat,
+			jsonSchema: false,
+			wantResponseSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"zeta":  map[string]any{"type": []any{"string", "null"}},
+					"alpha": map[string]any{"type": "string"},
+				},
+				"required": []any{"zeta", "alpha"},
+			},
+		},
+		{
+			name:       "strict schema keeps the responseSchema cleanup",
+			format:     strictFormat,
+			jsonSchema: true,
+			wantResponseSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"value": map[string]any{"type": "string"}},
+				"required":   []any{"value"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config dto.GeminiChatGenerationConfig
+			ApplyResponseSchema(&config, tt.format, "response_format.json_schema.schema", tt.jsonSchema)
+
+			assert.Equal(t, tt.wantResponseSchema, config.ResponseSchema)
+			assert.Equal(t, tt.wantJSONSchema, string(config.ResponseJsonSchema))
+		})
+	}
 }

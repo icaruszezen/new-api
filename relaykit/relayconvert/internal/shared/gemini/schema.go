@@ -1,9 +1,13 @@
 package gemini
 
 import (
+	"encoding/json"
+	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 )
 
 var geminiOpenAPISchemaAllowedFields = map[string]struct{}{
@@ -197,6 +201,163 @@ func normalizeGeminiSchemaTypeAndNullable(schema map[string]interface{}) {
 			schema["type"] = chosen
 		} else {
 			delete(schema, "type")
+		}
+	}
+}
+
+// FunctionDeclaration builds a Gemini function declaration for an OpenAI
+// function tool. The schema goes to the field FunctionParameters picks; an
+// empty description or a schema left out is omitted, and OpenAI-only fields
+// such as strict are never sent. When the typed Schema has to drop part of
+// the schema, a log line names what was lost.
+func FunctionDeclaration(name, description string, parameters any, jsonSchema bool) map[string]any {
+	declaration := map[string]any{"name": name}
+	if description != "" {
+		declaration["description"] = description
+	}
+	field, value, misfits := FunctionParameters(parameters, jsonSchema)
+	if len(misfits) > 0 {
+		kitutil.LogInfo(fmt.Sprintf("gemini function %q parameters cannot carry %s; dropped them", name, strings.Join(misfits, ", ")))
+	}
+	if value != nil {
+		declaration[field] = value
+	}
+	return declaration
+}
+
+// FunctionParameters returns the Gemini function declaration field that
+// carries schema, and its value. A schema that fits Gemini's typed Schema is
+// cleaned as before, and still left out when its properties are empty. Any
+// other schema goes unchanged to parametersJsonSchema when jsonSchema is
+// true; otherwise it is cleaned anyway and misfits names what the typed
+// Schema cannot carry.
+func FunctionParameters(schema any, jsonSchema bool) (field string, value any, misfits []string) {
+	misfits = schemaMisfits(schema)
+	object, _ := schema.(map[string]any)
+	properties, hasProperties := object["properties"].(map[string]any)
+	emptyObject := hasProperties && len(properties) == 0
+	if emptyObject {
+		for key, item := range object {
+			switch key {
+			case "type", "properties":
+				continue
+			case "required":
+				if required, _ := item.([]any); len(required) == 0 {
+					continue
+				}
+			}
+			if _, allowed := geminiOpenAPISchemaAllowedFields[key]; allowed {
+				misfits = append(misfits, "constraints on an empty object")
+				break
+			}
+		}
+	}
+	if len(misfits) > 0 && jsonSchema {
+		return "parametersJsonSchema", schema, nil
+	}
+	if emptyObject {
+		return "parameters", nil, misfits
+	}
+	return "parameters", CleanFunctionParameters(schema), misfits
+}
+
+// ApplyResponseSchema sets the structured output schema from the json_schema
+// object of an OpenAI response format. A schema that fits Gemini's typed
+// Schema keeps the responseSchema cleanup. Any other schema is sent unchanged
+// as responseJsonSchema when jsonSchema is true; otherwise it is cleaned
+// anyway and a log line names, with path, what responseSchema cannot carry.
+func ApplyResponseSchema(config *dto.GeminiChatGenerationConfig, rawFormat json.RawMessage, path string, jsonSchema bool) {
+	var format dto.FormatJsonSchema
+	if err := kitutil.Unmarshal(rawFormat, &format); err != nil {
+		return
+	}
+	misfits := schemaMisfits(format.Schema)
+	if len(misfits) > 0 && jsonSchema {
+		// The raw member keeps the client's key order.
+		var raw struct {
+			Schema json.RawMessage `json:"schema"`
+		}
+		if err := kitutil.Unmarshal(rawFormat, &raw); err == nil {
+			config.ResponseJsonSchema = raw.Schema
+			return
+		}
+	}
+	config.ResponseSchema = RemoveAdditionalProperties(format.Schema, 0)
+	if len(misfits) > 0 {
+		kitutil.LogInfo(fmt.Sprintf("gemini response schema %s cannot carry %s; dropped them", path, strings.Join(misfits, ", ")))
+	}
+}
+
+// schemaMisfits lists what Gemini's typed Schema cannot hold of a JSON Schema
+// as written: keywords outside its fields, type arrays, non-string enum
+// values, tuple items, boolean schemas, and nesting deeper than
+// CleanFunctionParameters keeps. additionalProperties and $schema are not
+// misfits: agent tools and OpenAI strict schemas carry them on nearly every
+// object, and dropping them as before keeps those requests unchanged for
+// upstreams that do not pass the JSON Schema fields through.
+func schemaMisfits(schema any) []string {
+	found := make(map[string]struct{})
+	collectSchemaMisfits(schema, 0, found)
+	misfits := make([]string, 0, len(found))
+	for misfit := range found {
+		misfits = append(misfits, misfit)
+	}
+	slices.Sort(misfits)
+	return misfits
+}
+
+func collectSchemaMisfits(schema any, depth int, found map[string]struct{}) {
+	if depth > geminiFunctionSchemaMaxDepth {
+		found[fmt.Sprintf("nesting deeper than %d levels", geminiFunctionSchemaMaxDepth)] = struct{}{}
+		return
+	}
+	value, ok := schema.(map[string]any)
+	if !ok {
+		if _, isBool := schema.(bool); isBool {
+			found["boolean schemas"] = struct{}{}
+		}
+		return
+	}
+	for key, item := range value {
+		if _, allowed := geminiOpenAPISchemaAllowedFields[key]; !allowed {
+			if key != "additionalProperties" && key != "$schema" {
+				found[key] = struct{}{}
+			}
+			continue
+		}
+		switch key {
+		case "type":
+			if _, isArray := item.([]any); isArray {
+				found["type arrays"] = struct{}{}
+			}
+		case "enum":
+			values, _ := item.([]any)
+			if slices.ContainsFunc(values, func(value any) bool {
+				_, isString := value.(string)
+				return !isString
+			}) {
+				found["non-string enum values"] = struct{}{}
+			}
+		case "properties":
+			properties, _ := item.(map[string]any)
+			for _, property := range properties {
+				collectSchemaMisfits(property, depth+1, found)
+			}
+		case "items":
+			entries, isTuple := item.([]any)
+			if !isTuple {
+				collectSchemaMisfits(item, depth+1, found)
+				continue
+			}
+			found["tuple items"] = struct{}{}
+			for _, entry := range entries {
+				collectSchemaMisfits(entry, depth+1, found)
+			}
+		case "anyOf":
+			variants, _ := item.([]any)
+			for _, variant := range variants {
+				collectSchemaMisfits(variant, depth+1, found)
+			}
 		}
 	}
 }

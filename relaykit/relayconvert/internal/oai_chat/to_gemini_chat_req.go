@@ -166,8 +166,9 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 		geminiRequest.SafetySettings = safetySettings
 	}
 
+	jsonSchema := opts.Gemini.SupportsJSONSchemaModel(upstreamModelName)
 	if textRequest.Tools != nil {
-		functions := make([]dto.FunctionRequest, 0, len(textRequest.Tools))
+		functions := make([]map[string]any, 0, len(textRequest.Tools))
 		googleSearch := false
 		codeExecution := false
 		urlContext := false
@@ -184,17 +185,9 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 				urlContext = true
 				continue
 			}
-			if tool.Function.Parameters != nil {
-				if params, ok := tool.Function.Parameters.(map[string]interface{}); ok {
-					if props, hasProps := params["properties"].(map[string]interface{}); hasProps && len(props) == 0 {
-						tool.Function.Parameters = nil
-					}
-				}
-			}
-			tool.Function.Parameters = sharedgemini.CleanFunctionParameters(tool.Function.Parameters)
-			// Gemini function declarations have no strict field and reject unknown fields.
-			tool.Function.Strict = nil
-			functions = append(functions, tool.Function)
+			// The declaration carries only Gemini fields: strict has no Gemini
+			// counterpart and the API rejects unknown fields.
+			functions = append(functions, sharedgemini.FunctionDeclaration(tool.Function.Name, tool.Function.Description, tool.Function.Parameters, jsonSchema))
 		}
 		geminiTools := geminiRequest.GetTools()
 		if codeExecution {
@@ -228,11 +221,8 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 		geminiRequest.GenerationConfig.ResponseMimeType = "application/json"
 
 		if len(textRequest.ResponseFormat.JsonSchema) > 0 {
-			var jsonSchema dto.FormatJsonSchema
-			if err := kitutil.Unmarshal(textRequest.ResponseFormat.JsonSchema, &jsonSchema); err == nil {
-				cleanedSchema := sharedgemini.RemoveAdditionalProperties(jsonSchema.Schema, 0)
-				geminiRequest.GenerationConfig.ResponseSchema = cleanedSchema
-			}
+			sharedgemini.ApplyResponseSchema(&geminiRequest.GenerationConfig, textRequest.ResponseFormat.JsonSchema,
+				"response_format.json_schema.schema", jsonSchema)
 		}
 	}
 

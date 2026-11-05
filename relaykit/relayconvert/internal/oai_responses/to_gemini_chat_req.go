@@ -57,7 +57,8 @@ func OpenAIResponsesRequestToGeminiChat(c context.Context, req *dto.OpenAIRespon
 	if opts.Gemini.SupportsImagineModel(upstreamModelName) {
 		geminiRequest.GenerationConfig.ResponseModalities = []string{"TEXT", "IMAGE"}
 	}
-	if err := applyResponsesTextToGemini(req.Text, geminiRequest); err != nil {
+	jsonSchema := opts.Gemini.SupportsJSONSchemaModel(upstreamModelName)
+	if err := applyResponsesTextToGemini(req.Text, geminiRequest, jsonSchema); err != nil {
 		return nil, err
 	}
 	sharedgemini.ApplyThinkingConfig(geminiRequest, info, dto.GeneralOpenAIRequest{
@@ -85,18 +86,13 @@ func OpenAIResponsesRequestToGeminiChat(c context.Context, req *dto.OpenAIRespon
 	if err != nil {
 		return nil, err
 	}
-	for i := range functions {
-		if params, ok := functions[i].Parameters.(map[string]interface{}); ok {
-			if props, hasProps := params["properties"].(map[string]interface{}); hasProps && len(props) == 0 {
-				functions[i].Parameters = nil
-				continue
-			}
-		}
-		functions[i].Parameters = sharedgemini.CleanFunctionParameters(functions[i].Parameters)
-	}
 	if len(functions) > 0 {
+		declarations := make([]map[string]any, 0, len(functions))
+		for _, function := range functions {
+			declarations = append(declarations, sharedgemini.FunctionDeclaration(function.Name, function.Description, function.Parameters, jsonSchema))
+		}
 		geminiRequest.SetTools([]dto.GeminiChatTool{
-			{FunctionDeclarations: functions},
+			{FunctionDeclarations: declarations},
 		})
 	}
 
@@ -187,7 +183,7 @@ func OpenAIResponsesRequestToGeminiChat(c context.Context, req *dto.OpenAIRespon
 	return geminiRequest, nil
 }
 
-func applyResponsesTextToGemini(raw []byte, geminiRequest *dto.GeminiChatRequest) error {
+func applyResponsesTextToGemini(raw []byte, geminiRequest *dto.GeminiChatRequest, jsonSchema bool) error {
 	responseFormat, err := RequestTextToChatResponseFormat(raw)
 	if err != nil {
 		return err
@@ -201,11 +197,7 @@ func applyResponsesTextToGemini(raw []byte, geminiRequest *dto.GeminiChatRequest
 		return nil
 	}
 
-	var jsonSchema dto.FormatJsonSchema
-	if err := kitutil.Unmarshal(responseFormat.JsonSchema, &jsonSchema); err != nil {
-		return nil
-	}
-	geminiRequest.GenerationConfig.ResponseSchema = sharedgemini.RemoveAdditionalProperties(jsonSchema.Schema, 0)
+	sharedgemini.ApplyResponseSchema(&geminiRequest.GenerationConfig, responseFormat.JsonSchema, "text.format.schema", jsonSchema)
 	return nil
 }
 

@@ -1867,22 +1867,19 @@ func pruneObjects(data []byte, path, contextJSON string, value interface{}) ([]b
 		return data, nil
 	}
 
-	var pruned []prunedObject
-	if _, err := collectPrunedObjects(target, path, options, contextJSON, true, &pruned); err != nil {
+	// 目标子树只重建一次、写回一次：逐个删除匹配对象时每次都要复制整个
+	// 请求体，而匹配数由客户端决定，耗时会随请求体大小平方增长
+	pruned, changed, _, err := prunedJSON(target, options, contextJSON, true)
+	if err != nil {
 		return nil, err
 	}
-	// 从后往前删，前面数组元素的下标不受影响
-	for i := len(pruned) - 1; i >= 0; i-- {
-		if pruned[i].member {
-			data, err = DeleteJSONMember(data, pruned[i].path)
-		} else {
-			data, err = sjson.DeleteBytes(data, pruned[i].path)
-		}
-		if err != nil {
-			return nil, err
-		}
+	if !changed {
+		return data, nil
 	}
-	return data, nil
+	if path == "" {
+		return []byte(pruned), nil
+	}
+	return sjson.SetRawBytes(data, path, []byte(pruned))
 }
 
 func parsePruneObjectsOptions(value interface{}) (pruneObjectsOptions, error) {
@@ -2010,60 +2007,90 @@ func parseConditionOperations(raw interface{}) ([]ConditionOperation, error) {
 	}
 }
 
-// prunedObject 是 prune_objects 要删除的对象：对象成员按键删除所有副本，
-// 数组元素按下标删除。
-type prunedObject struct {
-	path   string
-	member bool
-}
-
-// collectPrunedObjects 遍历 node：数组逐个检查元素，对象满足条件时（根节点除外）
-// 整个删除，recursive 时继续检查对象的成员。要删除的路径按文档顺序追加到
-// pruned，返回值表示 node 本身是否要删除。
-func collectPrunedObjects(node gjson.Result, path string, options pruneObjectsOptions, contextJSON string, isRoot bool, pruned *[]prunedObject) (bool, error) {
-	prefix := ""
-	if path != "" {
-		prefix = path + "."
-	}
+// prunedJSON 返回删去 prune_objects 匹配对象后的 node：数组去掉匹配的元素，
+// 对象中值匹配的成员按键删除所有副本（与 DeleteJSONMember 一致），
+// recursive 时继续检查对象的成员。保留的值沿用原始字节，只有内容有删改的
+// 容器按保留部分重新拼接。changed 表示 raw 与 node.Raw 不同，drop 表示
+// node 本身满足条件（根节点除外）要整个删除。
+func prunedJSON(node gjson.Result, options pruneObjectsOptions, contextJSON string, isRoot bool) (raw string, changed, drop bool, err error) {
 	switch {
 	case node.IsArray():
-		for i, item := range node.Array() {
-			itemPath := prefix + strconv.Itoa(i)
-			drop, err := collectPrunedObjects(item, itemPath, options, contextJSON, false, pruned)
-			if err != nil {
-				return false, err
+		var items []string
+		node.ForEach(func(_, item gjson.Result) bool {
+			itemRaw, itemChanged, itemDrop, itemErr := prunedJSON(item, options, contextJSON, false)
+			if itemErr != nil {
+				err = itemErr
+				return false
 			}
-			if drop {
-				*pruned = append(*pruned, prunedObject{path: itemPath})
+			if itemDrop {
+				changed = true
+				return true
 			}
+			changed = changed || itemChanged
+			items = append(items, itemRaw)
+			return true
+		})
+		if err != nil {
+			return "", false, false, err
 		}
-		return false, nil
+		if !changed {
+			return node.Raw, false, false, nil
+		}
+		return "[" + strings.Join(items, ",") + "]", true, false, nil
 	case node.IsObject():
 		shouldDrop, err := checkConditions([]byte(node.Raw), contextJSON, options.conditions, options.logic)
 		if err != nil {
-			return false, err
+			return "", false, false, err
 		}
 		if shouldDrop && !isRoot {
-			return true, nil
+			return "", true, true, nil
 		}
 		if !options.recursive {
-			return false, nil
+			return node.Raw, false, false, nil
 		}
+		type keptMember struct {
+			name, key, raw string
+		}
+		var members []keptMember
+		dropped := map[string]bool{}
 		node.ForEach(func(key, child gjson.Result) bool {
-			childPath := prefix + jsonPathKey(key.Str)
-			var drop bool
-			drop, err = collectPrunedObjects(child, childPath, options, contextJSON, false, pruned)
-			if err != nil {
+			childRaw, childChanged, childDrop, childErr := prunedJSON(child, options, contextJSON, false)
+			if childErr != nil {
+				err = childErr
 				return false
 			}
-			if drop {
-				*pruned = append(*pruned, prunedObject{path: childPath, member: true})
+			if childDrop {
+				dropped[key.Str] = true
+				return true
 			}
+			changed = changed || childChanged
+			members = append(members, keptMember{name: key.Str, key: key.Raw, raw: childRaw})
 			return true
 		})
-		return false, err
+		if err != nil {
+			return "", false, false, err
+		}
+		if !changed && len(dropped) == 0 {
+			return node.Raw, false, false, nil
+		}
+		var b strings.Builder
+		b.Grow(len(node.Raw))
+		b.WriteByte('{')
+		for _, member := range members {
+			if dropped[member.name] {
+				continue
+			}
+			if b.Len() > 1 {
+				b.WriteByte(',')
+			}
+			b.WriteString(member.key)
+			b.WriteByte(':')
+			b.WriteString(member.raw)
+		}
+		b.WriteByte('}')
+		return b.String(), true, false, nil
 	default:
-		return false, nil
+		return node.Raw, false, false, nil
 	}
 }
 

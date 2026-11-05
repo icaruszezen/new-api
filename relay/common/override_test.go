@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 
 	common2 "github.com/QuantumNous/new-api/common"
@@ -204,6 +206,52 @@ func TestApplyParamOverrideMergeAndPruneKeepMemberOrder(t *testing.T) {
 			assert.Equal(t, tt.want, string(out))
 		})
 	}
+}
+
+// A client controls how many objects prune_objects drops, so the edit must
+// stay linear in the body size: deleting each match from the whole body costs
+// one body copy per match. The bound on allocated bytes fails such a
+// quadratic edit without timing it.
+func TestApplyParamOverridePruneManyObjectsIsLinear(t *testing.T) {
+	const parts = 10000
+	var input, want strings.Builder
+	input.WriteString(`{"model":"m","messages":[{"role":"user","content":[`)
+	want.WriteString(`{"model":"m","messages":[{"role":"user","content":[`)
+	for i := 0; i < parts; i++ {
+		if i > 0 {
+			input.WriteByte(',')
+			want.WriteByte(',')
+		}
+		input.WriteString(`{"type":"thinking","thinking":"a"},{"type":"text","n":1.50}`)
+		want.WriteString(`{"type":"text","n":1.50}`)
+	}
+	input.WriteString(`]}],"max_tokens":1e3}`)
+	want.WriteString(`]}],"max_tokens":1e3}`)
+	body := []byte(input.String())
+	override := map[string]any{"operations": []any{
+		map[string]any{"path": "messages", "mode": "prune_objects", "value": "thinking"},
+	}}
+
+	var out []byte
+	var err error
+	allocated := allocatedBytes(func() {
+		out, err = ApplyParamOverride(body, override, nil)
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, want.String(), string(out))
+	assert.Less(t, allocated, uint64(64*len(body)))
+}
+
+// allocatedBytes reports the heap bytes f allocates. JSON edits on a client
+// body must stay linear in its size; a bound on these bytes catches an edit
+// that copies the whole body once per match.
+func allocatedBytes(f func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
 }
 
 func TestApplyParamOverrideTrimRequiresValue(t *testing.T) {

@@ -109,6 +109,26 @@ func TestBuildClaudeUsageFromOpenAICacheWriteUsage(t *testing.T) {
 	assert.Equal(t, 3616, usage.BillingUsage.OpenAIUsage.PromptTokensDetails.CacheWriteTokens)
 }
 
+func TestBuildClaudeUsageFromOpenAICacheCreationInputTokens(t *testing.T) {
+	usage := buildClaudeUsageFromOpenAIUsage(&dto.Usage{
+		PromptTokens:     1510,
+		CompletionTokens: 20,
+		TotalTokens:      1530,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedTokens:             1200,
+			CacheCreationInputTokens: 300,
+		},
+	})
+
+	require.NotNil(t, usage)
+	// cache_creation_input_tokens is part of prompt_tokens, so Claude
+	// input_tokens excludes it along with the cache read.
+	assert.Equal(t, 10, usage.InputTokens)
+	assert.Equal(t, 1200, usage.CacheReadInputTokens)
+	assert.Equal(t, 300, usage.CacheCreationInputTokens)
+	assert.Equal(t, 20, usage.OutputTokens)
+}
+
 func TestStreamResponseOpenAI2ClaudeClosesTextThinkingAndToolBlocks(t *testing.T) {
 	info := &convmeta.Values{
 		ClaudeConvertInfo: &convmeta.ClaudeConvertInfo{

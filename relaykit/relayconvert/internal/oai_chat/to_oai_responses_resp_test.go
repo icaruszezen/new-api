@@ -4,9 +4,11 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestChatCompletionsResponseToResponsesPreservesTextToolCallsAndUsage(t *testing.T) {
@@ -170,6 +172,18 @@ func TestChatCompletionsStreamToResponsesEmitsReasoningSummaryPartLifecycle(t *t
 		responsesEventCompleted,
 	}, types)
 
+	// The Responses schema requires summary on every reasoning item, including
+	// the one announced before any summary text exists.
+	itemAdded, err := kitutil.Marshal(events[1].Payload)
+	require.NoError(t, err)
+	assert.Contains(t, string(itemAdded), `"summary":[]`)
+
+	// The finished reasoning item carries its text in summary, not content.
+	itemDone, err := kitutil.Marshal(events[10].Payload)
+	require.NoError(t, err)
+	assert.Equal(t, `[{"type":"summary_text","text":"think"}]`, gjson.GetBytes(itemDone, "item.summary").Raw)
+	assert.Equal(t, "null", gjson.GetBytes(itemDone, "item.content").Raw)
+
 	partAdded := events[2].Payload
 	assert.Equal(t, "resp_1_reasoning_0", partAdded.ItemID)
 	assert.Equal(t, 0, lo.FromPtr(partAdded.OutputIndex))
@@ -257,12 +271,12 @@ func TestChatCompletionsStreamToResponsesReopensItemsAfterMidStreamFinishReason(
 				responsesOutputTypeReasoning, responsesOutputTypeMessage,
 			}, []string{output[0].Type, output[1].Type, output[2].Type, output[3].Type, output[4].Type})
 			assert.Equal(t, "resp_1_reasoning_0", output[0].ID)
-			assert.Equal(t, "round 1", output[0].Content[0].Text)
+			assert.Equal(t, "round 1", output[0].Summary[0].Text)
 			assert.Equal(t, "resp_1_msg_0", output[1].ID)
 			assert.Equal(t, "calling", output[1].Content[0].Text)
 			assert.Equal(t, "call_1", output[2].CallId)
 			assert.Equal(t, "resp_1_reasoning_1", output[3].ID)
-			assert.Equal(t, "round 2", output[3].Content[0].Text)
+			assert.Equal(t, "round 2", output[3].Summary[0].Text)
 			assert.Equal(t, "resp_1_msg_1", output[4].ID)
 			assert.Equal(t, "final", output[4].Content[0].Text)
 			for _, item := range output {

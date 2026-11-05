@@ -326,17 +326,33 @@ type IncompleteDetails struct {
 }
 
 type ResponsesOutput struct {
-	Type      string                   `json:"type"`
-	ID        string                   `json:"id"`
-	Status    string                   `json:"status"`
-	Role      string                   `json:"role"`
-	Content   []ResponsesOutputContent `json:"content"`
-	Quality   string                   `json:"quality"`
-	Size      string                   `json:"size"`
-	Result    string                   `json:"result,omitempty"`
-	CallId    string                   `json:"call_id,omitempty"`
-	Name      string                   `json:"name,omitempty"`
-	Arguments json.RawMessage          `json:"arguments,omitempty"`
+	Type      string                          `json:"type"`
+	ID        string                          `json:"id"`
+	Status    string                          `json:"status"`
+	Role      string                          `json:"role"`
+	Content   []ResponsesOutputContent        `json:"content"`
+	Summary   []ResponsesReasoningSummaryPart `json:"summary,omitempty"`
+	Quality   string                          `json:"quality"`
+	Size      string                          `json:"size"`
+	Result    string                          `json:"result,omitempty"`
+	CallId    string                          `json:"call_id,omitempty"`
+	Name      string                          `json:"name,omitempty"`
+	Arguments json.RawMessage                 `json:"arguments,omitempty"`
+}
+
+// MarshalJSON always writes summary on a reasoning item: the Responses
+// schema requires it, even before any summary text exists, and strict
+// clients reject a reasoning item without it. Other items keep omitting an
+// empty summary.
+func (r ResponsesOutput) MarshalJSON() ([]byte, error) {
+	type responsesOutputAlias ResponsesOutput
+	if r.Type != "reasoning" || len(r.Summary) > 0 {
+		return kitutil.Marshal(responsesOutputAlias(r))
+	}
+	return kitutil.Marshal(struct {
+		responsesOutputAlias
+		Summary []ResponsesReasoningSummaryPart `json:"summary"`
+	}{responsesOutputAlias(r), []ResponsesReasoningSummaryPart{}})
 }
 
 // ArgumentsString returns function call arguments in the string form expected by Chat Completions.

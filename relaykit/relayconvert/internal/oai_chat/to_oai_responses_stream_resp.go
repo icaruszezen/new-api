@@ -199,7 +199,7 @@ func (s *ChatToResponsesStreamState) appendReasoningDelta(delta string) []ChatTo
 				Type:    responsesOutputTypeReasoning,
 				ID:      s.reasoningID(),
 				Status:  "in_progress",
-				Content: []dto.ResponsesOutputContent{},
+				Summary: []dto.ResponsesReasoningSummaryPart{},
 			},
 		}))
 		events = append(events, responsesStreamEvent(responsesEventReasoningSummaryPartAdded, dto.ResponsesStreamResponse{
@@ -452,7 +452,7 @@ func (s *ChatToResponsesStreamState) reasoningOutput(status string) *dto.Respons
 		Type:   responsesOutputTypeReasoning,
 		ID:     s.reasoningID(),
 		Status: status,
-		Content: []dto.ResponsesOutputContent{
+		Summary: []dto.ResponsesReasoningSummaryPart{
 			{
 				Type: "summary_text",
 				Text: s.reasoning.String(),

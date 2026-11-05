@@ -219,13 +219,39 @@ func ExtractReasoningTextFromResponses(resp *dto.OpenAIResponsesResponse) string
 		if out.Type != responsesOutputTypeReasoning {
 			continue
 		}
-		for _, c := range out.Content {
-			if c.Text != "" {
-				sb.WriteString(c.Text)
-			}
-		}
+		sb.WriteString(reasoningOutputText(&out))
 	}
 	return sb.String()
+}
+
+// reasoningOutputText returns the text of a Responses reasoning item: its
+// content text when there is any, otherwise its summary parts. OpenAI puts
+// the reasoning summary in summary; some compatible upstreams put the text in
+// content. Summary parts are separated by a blank line, as the stream
+// converter separates summary parts.
+func reasoningOutputText(out *dto.ResponsesOutput) string {
+	var content strings.Builder
+	for _, c := range out.Content {
+		content.WriteString(c.Text)
+	}
+	if content.Len() > 0 {
+		return content.String()
+	}
+	var summary strings.Builder
+	for _, part := range out.Summary {
+		if part.Text == "" {
+			continue
+		}
+		if summary.Len() > 0 && !strings.HasPrefix(part.Text, "\n\n") {
+			if strings.HasPrefix(part.Text, "\n") {
+				summary.WriteString("\n")
+			} else {
+				summary.WriteString("\n\n")
+			}
+		}
+		summary.WriteString(part.Text)
+	}
+	return summary.String()
 }
 
 func responseStatusString(resp *dto.OpenAIResponsesResponse) string {

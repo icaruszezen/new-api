@@ -3,6 +3,7 @@ package common
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -246,4 +247,89 @@ func TestGenRelayInfoJoinsRepeatedRequestHeaderLines(t *testing.T) {
 	// line the Claude adaptor forwards upstream, not only the first one.
 	assert.Equal(t, "thinking-binding-controls-2026-08-01,fast-mode-2026-02-01", info.RequestHeaders["Anthropic-Beta"])
 	assert.Equal(t, "2023-06-01", info.RequestHeaders["Anthropic-Version"])
+}
+
+// A client may repeat a key the gateway removes or replaces (the AWS
+// pass-through drops "stream", alpha search rewrites "model"). Every copy
+// goes in one pass over the parent object: removing one copy at a time copies
+// the whole body per copy. The bound on allocated bytes fails such a
+// quadratic edit without timing it.
+func TestJSONMemberEditsRemoveManyRepeatedKeysLinearly(t *testing.T) {
+	const copies = 20000
+	body := []byte(`{"model":"m","stream":false,"messages":[{"role":"user","content":"hi"}]` +
+		strings.Repeat(`,"stream":false`, copies) + `,"max_tokens":1e3}`)
+
+	var deleted, set []byte
+	var deleteErr, setErr error
+	deleteAllocated := allocatedBytes(func() {
+		deleted, deleteErr = DeleteJSONMember(body, "", "stream")
+	})
+	setAllocated := allocatedBytes(func() {
+		set, setErr = SetJSONMember(body, "", "stream", true)
+	})
+
+	require.NoError(t, deleteErr)
+	require.NoError(t, setErr)
+	assert.Equal(t, `{"model":"m","messages":[{"role":"user","content":"hi"}],"max_tokens":1e3}`, string(deleted))
+	assert.Equal(t, `{"model":"m","messages":[{"role":"user","content":"hi"}],"max_tokens":1e3,"stream":true}`, string(set))
+	assert.Less(t, deleteAllocated, uint64(16*len(body)))
+	assert.Less(t, setAllocated, uint64(16*len(body)))
+}
+
+// Removing repeated copies leaves the other members as the client wrote them,
+// including the separators between them.
+func TestDeleteJSONMemberRemovesEveryCopy(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		parent string
+		key    string
+		want   string
+	}{
+		{
+			name:  "single copy",
+			input: `{"a": 1, "x": 2, "b": 3}`,
+			key:   "x",
+			want:  `{"a": 1, "b": 3}`,
+		},
+		{
+			name:  "first, middle and last copies",
+			input: "{\"x\":0, \"a\": 1.0,\n \"x\": 2,\n \"b\": \"<b>&\", \"x\":4}",
+			key:   "x",
+			want:  "{\"a\": 1.0,\n \"b\": \"<b>&\"}",
+		},
+		{
+			name:   "nested parent",
+			input:  `{"stream_options":{"include_obfuscation":false,"include_usage":true,"include_obfuscation":true},"n":1e2}`,
+			parent: "stream_options",
+			key:    "include_obfuscation",
+			want:   `{"stream_options":{"include_usage":true},"n":1e2}`,
+		},
+		{
+			name:  "key that is path syntax",
+			input: `{"a.b":1,"c":2,"a.b":3}`,
+			key:   "a.b",
+			want:  `{"c":2}`,
+		},
+		{
+			name:  "every member",
+			input: `{"x":1,"x":2}`,
+			key:   "x",
+			want:  `{}`,
+		},
+		{
+			name:   "parent is not an object",
+			input:  `{"a":[1],"x":1}`,
+			parent: "a",
+			key:    "x",
+			want:   `{"a":[1],"x":1}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := DeleteJSONMember([]byte(tt.input), tt.parent, tt.key)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(out))
+		})
+	}
 }

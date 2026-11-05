@@ -204,7 +204,7 @@ func buildAwsRequestBody(c *gin.Context, info *relaycommon.RelayInfo, awsClaudeR
 			return nil, errors.New("pass-through unmarshal request body fail: request body must be a JSON object")
 		}
 		for _, key := range []string{"model", "stream"} {
-			if body, err = relaycommon.DeleteJSONMember(body, key); err != nil {
+			if body, err = relaycommon.DeleteJSONMember(body, "", key); err != nil {
 				return nil, errors.Wrap(err, "pass-through unmarshal request body fail")
 			}
 		}

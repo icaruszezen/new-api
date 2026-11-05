@@ -614,7 +614,7 @@ func redactVideoResponseBody(body []byte) []byte {
 		return body
 	}
 	out := body
-	if next, err := relaycommon.DeleteJSONMember(out, "response.bytesBase64Encoded"); err == nil {
+	if next, err := relaycommon.DeleteJSONMember(out, "response", "bytesBase64Encoded"); err == nil {
 		out = next
 	}
 	if video := resp.Get("video"); video.Type == gjson.String {
@@ -627,7 +627,7 @@ func redactVideoResponseBody(body []byte) []byte {
 			if !video.IsObject() {
 				continue
 			}
-			if next, err := relaycommon.DeleteJSONMember(out, fmt.Sprintf("response.videos.%d.bytesBase64Encoded", i)); err == nil {
+			if next, err := relaycommon.DeleteJSONMember(out, fmt.Sprintf("response.videos.%d", i), "bytesBase64Encoded"); err == nil {
 				out = next
 			}
 		}

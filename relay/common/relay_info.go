@@ -1114,13 +1114,38 @@ func FailTaskInfo(reason string) *TaskInfo {
 	}
 }
 
-// DeleteJSONMember removes every copy of the member at path. A client body
-// may repeat a key, and most upstream parsers read the last copy, so a
-// surviving copy could reach the upstream after the gateway removed or
-// replaced the first one. data must be valid JSON: sjson does not report an
-// error on invalid input. data itself is never changed.
-func DeleteJSONMember(data []byte, path string) ([]byte, error) {
-	for gjson.GetBytes(data, path).Exists() {
+// DeleteJSONMember removes every copy of member key from the object at parent
+// ("" for the root). A client body may repeat a key, and most upstream parsers
+// read the last copy, so a surviving copy could reach the upstream after the
+// gateway removed or replaced the first one. A single copy is cut out with
+// sjson; repeated copies are all cut out in one pass over the parent object,
+// since removing them one at a time copies the whole body per copy and a
+// client decides how many there are. Other members keep their bytes, order
+// and separators. data must be valid JSON: sjson does not report an error on
+// invalid input. data itself is never changed.
+func DeleteJSONMember(data []byte, parent, key string) ([]byte, error) {
+	path := jsonPathKey(key)
+	var object gjson.Result
+	if parent == "" {
+		object = gjson.ParseBytes(data)
+	} else {
+		path = parent + "." + path
+		object = gjson.GetBytes(data, parent)
+	}
+	if !object.IsObject() {
+		return data, nil
+	}
+	copies := 0
+	object.ForEach(func(member, _ gjson.Result) bool {
+		if member.Str == key {
+			copies++
+		}
+		return true
+	})
+	switch copies {
+	case 0:
+		return data, nil
+	case 1:
 		next, err := sjson.DeleteBytes(data, path)
 		if err != nil {
 			return nil, err
@@ -1128,9 +1153,36 @@ func DeleteJSONMember(data []byte, path string) ([]byte, error) {
 		if len(next) >= len(data) {
 			return nil, fmt.Errorf("delete %s: member was not removed", path)
 		}
-		data = next
+		return next, nil
 	}
-	return data, nil
+
+	// Member offsets are offsets into data only when the object is a plain
+	// slice of it, which a path with modifiers or queries does not give.
+	start := object.Index
+	if start < 0 || start+len(object.Raw) > len(data) || string(data[start:start+len(object.Raw)]) != object.Raw {
+		return nil, fmt.Errorf("delete %s: object is not part of the body", path)
+	}
+	// A kept member is written with the separator that came before it, unless
+	// it is the first one kept, so no comma is left dangling.
+	out := make([]byte, 0, len(data))
+	prevEnd := -1
+	kept := false
+	object.ForEach(func(member, value gjson.Result) bool {
+		if prevEnd < 0 {
+			out = append(out, data[:member.Index]...)
+		}
+		end := value.Index + len(value.Raw)
+		if member.Str != key {
+			if kept {
+				out = append(out, data[prevEnd:member.Index]...)
+			}
+			out = append(out, data[member.Index:end]...)
+			kept = true
+		}
+		prevEnd = end
+		return true
+	})
+	return append(out, data[prevEnd:]...), nil
 }
 
 // SetJSONMember sets member key of the object at parent ("" for the root) to
@@ -1156,7 +1208,7 @@ func SetJSONMember(data []byte, parent, key string, value any) ([]byte, error) {
 	})
 	if copies > 1 {
 		var err error
-		if data, err = DeleteJSONMember(data, path); err != nil {
+		if data, err = DeleteJSONMember(data, parent, key); err != nil {
 			return nil, err
 		}
 	}
@@ -1221,24 +1273,25 @@ func RemoveDisabledFields(jsonData []byte, channelOtherSettings dto.ChannelOther
 		disabled = append(disabled, "safety_identifier")
 	}
 
-	// 默认移除 stream_options.include_obfuscation，除非明确允许（避免关闭响应流混淆保护）
-	removeObfuscation := !channelOtherSettings.AllowIncludeObfuscation && gjson.GetBytes(jsonData, "stream_options").IsObject()
-	if removeObfuscation {
-		disabled = append(disabled, "stream_options.include_obfuscation")
-	}
-
 	// A failed removal fails the request: a disabled field must never reach
 	// the upstream.
 	out := jsonData
 	var err error
-	for _, path := range disabled {
-		if out, err = DeleteJSONMember(out, path); err != nil {
+	for _, key := range disabled {
+		if out, err = DeleteJSONMember(out, "", key); err != nil {
 			return nil, err
 		}
 	}
-	if removeObfuscation && len(gjson.GetBytes(out, "stream_options").Map()) == 0 {
-		if out, err = DeleteJSONMember(out, "stream_options"); err != nil {
+
+	// 默认移除 stream_options.include_obfuscation，除非明确允许（避免关闭响应流混淆保护）
+	if !channelOtherSettings.AllowIncludeObfuscation && gjson.GetBytes(out, "stream_options").IsObject() {
+		if out, err = DeleteJSONMember(out, "stream_options", "include_obfuscation"); err != nil {
 			return nil, err
+		}
+		if len(gjson.GetBytes(out, "stream_options").Map()) == 0 {
+			if out, err = DeleteJSONMember(out, "", "stream_options"); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return out, nil

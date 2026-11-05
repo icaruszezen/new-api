@@ -600,8 +600,11 @@ func cloneRequestHeaders(c *gin.Context) map[string]string {
 		return nil
 	}
 	headers := make(map[string]string, len(c.Request.Header))
-	for key := range c.Request.Header {
-		value := strings.TrimSpace(c.Request.Header.Get(key))
+	for key, values := range c.Request.Header {
+		// Join repeated header lines the way they are forwarded upstream (for
+		// example every anthropic-beta line), so header() in billing
+		// expressions sees the same value the provider receives.
+		value := strings.TrimSpace(strings.Join(values, ","))
 		if value == "" {
 			continue
 		}

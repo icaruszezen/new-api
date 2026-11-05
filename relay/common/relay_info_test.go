@@ -231,3 +231,19 @@ func TestInitChannelMetaClearsDrainUpstreamOnClientDisconnect(t *testing.T) {
 
 	assert.False(t, info.DrainUpstreamOnClientDisconnect)
 }
+
+func TestGenRelayInfoJoinsRepeatedRequestHeaderLines(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/messages", nil)
+	c.Request.Header.Add("anthropic-beta", "thinking-binding-controls-2026-08-01")
+	c.Request.Header.Add("anthropic-beta", "fast-mode-2026-02-01")
+	c.Request.Header.Set("anthropic-version", "2023-06-01")
+
+	info := GenRelayInfoClaude(c, &dto.ClaudeRequest{Model: "claude-opus-5-5"})
+
+	// Billing expressions read header("anthropic-beta"); it must see every
+	// line the Claude adaptor forwards upstream, not only the first one.
+	assert.Equal(t, "thinking-binding-controls-2026-08-01,fast-mode-2026-02-01", info.RequestHeaders["Anthropic-Beta"])
+	assert.Equal(t, "2023-06-01", info.RequestHeaders["Anthropic-Version"])
+}

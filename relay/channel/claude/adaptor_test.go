@@ -1,11 +1,14 @@
 package claude
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,4 +40,20 @@ func TestConvertClaudeRequestPreservesMessageOutputConfig(t *testing.T) {
 	assert.Equal(t, map[string]any{"effort": "high"}, upstream.Messages[1]["output_config"])
 	assert.NotContains(t, upstream.Messages[0], "output_config")
 	assert.NotContains(t, upstream.Messages[2], "output_config")
+}
+
+func TestSetupRequestHeaderForwardsEveryAnthropicBetaValue(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	c.Request.Header.Add("anthropic-beta", "fast-mode-2026-02-01")
+	c.Request.Header.Add("anthropic-beta", "thinking-binding-controls-2026-08-01")
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "claude-opus-5-5",
+		ChannelMeta:     &relaycommon.ChannelMeta{ApiKey: "sk-test"},
+	}
+
+	header := http.Header{}
+	require.NoError(t, (&Adaptor{}).SetupRequestHeader(c, &header, info))
+	assert.Equal(t, []string{"fast-mode-2026-02-01,thinking-binding-controls-2026-08-01"}, header.Values("anthropic-beta"))
 }

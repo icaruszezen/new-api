@@ -1593,12 +1593,14 @@ func syncRuntimeHeaderOverrideFromContext(info *RelayInfo, context map[string]in
 	info.UseRuntimeHeadersOverride = true
 }
 
+// moveValue and copyValue write the source's raw bytes: a decoded value
+// would be re-encoded with sorted object keys.
 func moveValue(data []byte, fromPath, toPath string) ([]byte, error) {
 	sourceValue := gjson.GetBytes(data, fromPath)
 	if !sourceValue.Exists() {
 		return data, fmt.Errorf("source path does not exist: %s", fromPath)
 	}
-	result, err := sjson.SetBytes(data, toPath, sourceValue.Value())
+	result, err := sjson.SetRawBytes(data, toPath, []byte(sourceValue.Raw))
 	if err != nil {
 		return nil, err
 	}
@@ -1610,7 +1612,7 @@ func copyValue(data []byte, fromPath, toPath string) ([]byte, error) {
 	if !sourceValue.Exists() {
 		return data, fmt.Errorf("source path does not exist: %s", fromPath)
 	}
-	return sjson.SetBytes(data, toPath, sourceValue.Value())
+	return sjson.SetRawBytes(data, toPath, []byte(sourceValue.Raw))
 }
 
 func isPathBasedOperation(mode string) bool {
@@ -1712,32 +1714,33 @@ func modifyValue(data []byte, path string, value interface{}, keepOrigin, isPrep
 	return data, fmt.Errorf("operation not supported for type: %v", current.Type)
 }
 
+// modifyArray 把 value 追加（或前置）到 path 处的数组。原有元素保留原始字节，
+// 对象键顺序、数字写法和字符都不变；只有新值经过编码。
 func modifyArray(data []byte, path string, value interface{}, isPrepend bool) ([]byte, error) {
-	current := gjson.GetBytes(data, path)
-	var newArray []interface{}
-	// 添加新值
-	addValue := func() {
-		if arr, ok := value.([]interface{}); ok {
-			newArray = append(newArray, arr...)
-		} else {
-			newArray = append(newArray, value)
+	newValues, ok := value.([]interface{})
+	if !ok {
+		newValues = []interface{}{value}
+	}
+	added := make([]string, 0, len(newValues))
+	for _, newValue := range newValues {
+		encoded, err := common.Marshal(newValue)
+		if err != nil {
+			return nil, err
 		}
+		added = append(added, string(encoded))
 	}
-	// 添加原值
-	addOriginal := func() {
-		current.ForEach(func(_, val gjson.Result) bool {
-			newArray = append(newArray, val.Value())
-			return true
-		})
-	}
+	var items []string
 	if isPrepend {
-		addValue()
-		addOriginal()
-	} else {
-		addOriginal()
-		addValue()
+		items = append(items, added...)
 	}
-	return sjson.SetBytes(data, path, newArray)
+	gjson.GetBytes(data, path).ForEach(func(_, val gjson.Result) bool {
+		items = append(items, val.Raw)
+		return true
+	})
+	if !isPrepend {
+		items = append(items, added...)
+	}
+	return sjson.SetRawBytes(data, path, []byte("["+strings.Join(items, ",")+"]"))
 }
 
 func modifyString(data []byte, path string, value interface{}, isPrepend bool) ([]byte, error) {

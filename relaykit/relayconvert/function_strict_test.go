@@ -2,6 +2,7 @@ package relayconvert
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -20,7 +21,7 @@ func strictChatRequest() *dto.GeneralOpenAIRequest {
 			Type: "function",
 			Function: dto.FunctionRequest{
 				Name:       "lookup",
-				Parameters: map[string]any{"type": "object", "properties": map[string]any{"q": map[string]any{"type": "string"}}},
+				Parameters: json.RawMessage(`{"type":"object","properties":{"q":{"type":"string"}}}`),
 				Strict:     &strict,
 			},
 		}},

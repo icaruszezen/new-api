@@ -625,6 +625,50 @@ func TestApplyParamOverridePrependAppendArray(t *testing.T) {
 	assertJSONEqual(t, `{"arr":[0,1,2,3,4]}`, string(out))
 }
 
+// move, copy and array append/prepend write the existing values as the client
+// sent them: a schema keeps its property order, and numbers and characters
+// keep their spelling.
+func TestApplyParamOverrideMoveCopyAndArrayKeepRawBytes(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		op    map[string]interface{}
+		want  string
+	}{
+		{
+			name:  "move",
+			input: `{"src":{"properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}},"type":"object","n":1.0},"model":"m"}`,
+			op:    map[string]interface{}{"mode": "move", "from": "src", "to": "dst"},
+			want:  `{"model":"m","dst":{"properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}},"type":"object","n":1.0}}`,
+		},
+		{
+			name:  "copy",
+			input: `{"schema":{"z":1e2,"a":"<b>&"}}`,
+			op:    map[string]interface{}{"mode": "copy", "from": "schema", "to": "format.schema"},
+			want:  `{"schema":{"z":1e2,"a":"<b>&"},"format":{"schema":{"z":1e2,"a":"<b>&"}}}`,
+		},
+		{
+			name:  "append",
+			input: `{"tools":[{"name":"b","parameters":{"z":1.0,"a":"<b>&"}}]}`,
+			op:    map[string]interface{}{"path": "tools", "mode": "append", "value": map[string]interface{}{"name": "a"}},
+			want:  `{"tools":[{"name":"b","parameters":{"z":1.0,"a":"<b>&"}},{"name":"a"}]}`,
+		},
+		{
+			name:  "prepend",
+			input: `{"tools":[{"name":"b","parameters":{"z":1.0,"a":"<b>&"}}]}`,
+			op:    map[string]interface{}{"path": "tools", "mode": "prepend", "value": []interface{}{"x", 2}},
+			want:  `{"tools":["x",2,{"name":"b","parameters":{"z":1.0,"a":"<b>&"}}]}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := ApplyParamOverride([]byte(tt.input), map[string]interface{}{"operations": []interface{}{tt.op}}, nil)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(out))
+		})
+	}
+}
+
 func TestApplyParamOverrideAppendObjectMergeKeepOrigin(t *testing.T) {
 	input := []byte(`{"obj":{"a":1}}`)
 	override := map[string]interface{}{

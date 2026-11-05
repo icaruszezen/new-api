@@ -210,10 +210,16 @@ func normalizeGeminiSchemaTypeAndNullable(schema map[string]interface{}) {
 // empty description or a schema left out is omitted, and OpenAI-only fields
 // such as strict are never sent. When the typed Schema has to drop part of
 // the schema, a log line names what was lost.
-func FunctionDeclaration(name, description string, parameters any, jsonSchema bool) map[string]any {
+func FunctionDeclaration(name, description string, rawParameters json.RawMessage, jsonSchema bool) (map[string]any, error) {
 	declaration := map[string]any{"name": name}
 	if description != "" {
 		declaration["description"] = description
+	}
+	var parameters any
+	if len(rawParameters) > 0 {
+		if err := kitutil.Unmarshal(rawParameters, &parameters); err != nil {
+			return nil, fmt.Errorf("invalid tool parameters: %w", err)
+		}
 	}
 	field, value, misfits := FunctionParameters(parameters, jsonSchema)
 	if len(misfits) > 0 {
@@ -222,7 +228,7 @@ func FunctionDeclaration(name, description string, parameters any, jsonSchema bo
 	if value != nil {
 		declaration[field] = value
 	}
-	return declaration
+	return declaration, nil
 }
 
 // FunctionParameters returns the Gemini function declaration field that

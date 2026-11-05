@@ -187,7 +187,11 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 			}
 			// The declaration carries only Gemini fields: strict has no Gemini
 			// counterpart and the API rejects unknown fields.
-			functions = append(functions, sharedgemini.FunctionDeclaration(tool.Function.Name, tool.Function.Description, tool.Function.Parameters, jsonSchema))
+			declaration, err := sharedgemini.FunctionDeclaration(tool.Function.Name, tool.Function.Description, tool.Function.Parameters, jsonSchema)
+			if err != nil {
+				return nil, err
+			}
+			functions = append(functions, declaration)
 		}
 		geminiTools := geminiRequest.GetTools()
 		if codeExecution {

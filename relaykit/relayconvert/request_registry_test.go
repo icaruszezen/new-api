@@ -2,6 +2,7 @@ package relayconvert
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -425,8 +426,8 @@ func TestConvertRequestResponsesToGeminiUsesDirectConverter(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, functions, 1)
 	assert.Equal(t, "lookup", functions[0].Name)
-	params, ok := functions[0].Parameters.(map[string]any)
-	require.True(t, ok)
+	var params map[string]any
+	require.NoError(t, kitutil.Unmarshal(functions[0].Parameters, &params))
 	assert.Equal(t, "OBJECT", params["type"])
 	assert.NotContains(t, params, "additionalProperties")
 	assert.NotContains(t, params, "propertyNames")
@@ -527,7 +528,7 @@ func TestConvertRequestOpenAIChatToGeminiAddsThoughtSignatureForAdvancedCustom(t
 				Type: "function",
 				Function: dto.FunctionRequest{
 					Name:       "lookup",
-					Parameters: map[string]any{"type": "object"},
+					Parameters: json.RawMessage(`{"type":"object"}`),
 				},
 			},
 		},

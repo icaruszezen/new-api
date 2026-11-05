@@ -27,14 +27,12 @@ func TestOpenAIToGeminiSendsUnfitSchemasAsJSONSchema(t *testing.T) {
 			name: "chat completions",
 			convert: func(t *testing.T, meta convmeta.Meta) []byte {
 				t.Helper()
-				var parameters any
-				require.NoError(t, kitutil.Unmarshal([]byte(toolParameters), &parameters))
 				got, err := OpenAIChatRequestToGeminiGenerateContent(context.Background(), dto.GeneralOpenAIRequest{
 					Model:    "gemini-alias",
 					Messages: []dto.Message{{Role: "user", Content: "hello"}},
 					Tools: []dto.ToolCallRequest{{
 						Type:     "function",
-						Function: dto.FunctionRequest{Name: "pick", Parameters: parameters},
+						Function: dto.FunctionRequest{Name: "pick", Parameters: []byte(toolParameters)},
 					}},
 					ResponseFormat: &dto.ResponseFormat{
 						Type:       "json_schema",

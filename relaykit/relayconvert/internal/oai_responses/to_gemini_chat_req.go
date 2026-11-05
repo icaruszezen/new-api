@@ -89,7 +89,11 @@ func OpenAIResponsesRequestToGeminiChat(c context.Context, req *dto.OpenAIRespon
 	if len(functions) > 0 {
 		declarations := make([]map[string]any, 0, len(functions))
 		for _, function := range functions {
-			declarations = append(declarations, sharedgemini.FunctionDeclaration(function.Name, function.Description, function.Parameters, jsonSchema))
+			declaration, err := sharedgemini.FunctionDeclaration(function.Name, function.Description, function.Parameters, jsonSchema)
+			if err != nil {
+				return nil, err
+			}
+			declarations = append(declarations, declaration)
 		}
 		geminiRequest.SetTools([]dto.GeminiChatTool{
 			{FunctionDeclarations: declarations},

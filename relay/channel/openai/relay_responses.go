@@ -43,6 +43,8 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		if responsesResponse.Usage.InputTokensDetails != nil {
 			usage.PromptTokensDetails.CachedTokens = responsesResponse.Usage.InputTokensDetails.CachedTokens
 			usage.PromptTokensDetails.CacheWriteTokens = responsesResponse.Usage.InputTokensDetails.CacheWriteTokens
+			usage.PromptTokensDetails.CachedCreationTokens = responsesResponse.Usage.InputTokensDetails.CachedCreationTokens
+			usage.PromptTokensDetails.CacheCreationInputTokens = responsesResponse.Usage.InputTokensDetails.CacheCreationInputTokens
 			usage.InputTokensDetails = responsesResponse.Usage.InputTokensDetails
 		}
 	}

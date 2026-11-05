@@ -160,6 +160,8 @@ func applyResponsesStreamUsage(dst *dto.Usage, src *dto.Usage) {
 	if src.InputTokensDetails != nil {
 		dst.PromptTokensDetails.CachedTokens = src.InputTokensDetails.CachedTokens
 		dst.PromptTokensDetails.CacheWriteTokens = src.InputTokensDetails.CacheWriteTokens
+		dst.PromptTokensDetails.CachedCreationTokens = src.InputTokensDetails.CachedCreationTokens
+		dst.PromptTokensDetails.CacheCreationInputTokens = src.InputTokensDetails.CacheCreationInputTokens
 		dst.InputTokensDetails = src.InputTokensDetails
 	}
 }

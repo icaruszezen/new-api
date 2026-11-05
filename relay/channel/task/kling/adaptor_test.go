@@ -1,11 +1,13 @@
 package kling
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -57,6 +59,47 @@ func TestBuildRequestHeaderAuthorization(t *testing.T) {
 			issuer, err := parsed.Claims.GetIssuer()
 			require.NoError(t, err)
 			assert.Equal(t, "ak", issuer)
+		})
+	}
+}
+
+// OpenAI-style video requests carry a WIDTHxHEIGHT size; Kling gets the nearest
+// aspect ratio it supports, and a metadata aspect_ratio still overrides it.
+func TestBuildRequestBodyMapsSizeToNearestAspectRatio(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		size     string
+		metadata map[string]any
+		want     string
+	}{
+		{size: "1280x720", want: "16:9"},
+		{size: "1920x1080", want: "16:9"},
+		{size: "1792x1024", want: "16:9"},
+		{size: "1280X720", want: "16:9"},
+		{size: "720x1280", want: "9:16"},
+		{size: "1080x1920", want: "9:16"},
+		{size: "1024x1792", want: "9:16"},
+		{size: "1024x1024", want: "1:1"},
+		{size: "512x512", want: "1:1"},
+		{size: "720x720", want: "1:1"},
+		{size: "", want: "1:1"},
+		{size: "abc", want: "1:1"},
+		{size: "1280x720x2", want: "1:1"},
+		{size: "0x720", want: "1:1"},
+		{size: "1024x1792", metadata: map[string]any{"aspect_ratio": "16:9"}, want: "16:9"},
+	} {
+		t.Run(tc.size, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Set("task_request", relaycommon.TaskSubmitReq{Prompt: "a cat", Size: tc.size, Metadata: tc.metadata})
+			adaptor := &TaskAdaptor{}
+
+			body, err := adaptor.BuildRequestBody(ctx, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "kling-v1"}})
+			require.NoError(t, err)
+			data, err := io.ReadAll(body)
+			require.NoError(t, err)
+			var payload map[string]any
+			require.NoError(t, common.Unmarshal(data, &payload))
+			assert.Equal(t, tc.want, payload["aspect_ratio"])
 		})
 	}
 }

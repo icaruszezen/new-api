@@ -3,8 +3,10 @@ package common
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1843,47 +1845,44 @@ type pruneObjectsOptions struct {
 	recursive  bool
 }
 
+// pruneObjects 删除 path（为空时为整个请求体）下满足条件的对象，其余内容保持
+// 原样：不会把整个请求体或目标子树解码后再重新编码。
 func pruneObjects(data []byte, path, contextJSON string, value interface{}) ([]byte, error) {
 	options, err := parsePruneObjectsOptions(value)
 	if err != nil {
 		return nil, err
 	}
-
-	if path == "" {
-		var root interface{}
-		if err := common.Unmarshal(data, &root); err != nil {
-			return nil, err
-		}
-		cleaned, _, err := pruneObjectsNode(root, options, contextJSON, true)
-		if err != nil {
-			return nil, err
-		}
-		return common.Marshal(cleaned)
+	// sjson 对非法 JSON 不报错，会写出损坏的请求体
+	if !gjson.ValidBytes(data) {
+		return nil, errors.New("prune_objects: request body is not valid JSON")
 	}
 
-	target := gjson.GetBytes(data, path)
+	var target gjson.Result
+	if path == "" {
+		target = gjson.ParseBytes(data)
+	} else {
+		target = gjson.GetBytes(data, path)
+	}
 	if !target.Exists() {
 		return data, nil
 	}
 
-	var targetNode interface{}
-	if target.Type == gjson.JSON {
-		if err := common.UnmarshalJsonStr(target.Raw, &targetNode); err != nil {
+	var pruned []prunedObject
+	if _, err := collectPrunedObjects(target, path, options, contextJSON, true, &pruned); err != nil {
+		return nil, err
+	}
+	// 从后往前删，前面数组元素的下标不受影响
+	for i := len(pruned) - 1; i >= 0; i-- {
+		if pruned[i].member {
+			data, err = DeleteJSONMember(data, pruned[i].path)
+		} else {
+			data, err = sjson.DeleteBytes(data, pruned[i].path)
+		}
+		if err != nil {
 			return nil, err
 		}
-	} else {
-		targetNode = target.Value()
 	}
-
-	cleaned, _, err := pruneObjectsNode(targetNode, options, contextJSON, true)
-	if err != nil {
-		return nil, err
-	}
-	cleanedBytes, err := common.Marshal(cleaned)
-	if err != nil {
-		return nil, err
-	}
-	return sjson.SetRawBytes(data, path, cleanedBytes)
+	return data, nil
 }
 
 func parsePruneObjectsOptions(value interface{}) (pruneObjectsOptions, error) {
@@ -2011,66 +2010,67 @@ func parseConditionOperations(raw interface{}) ([]ConditionOperation, error) {
 	}
 }
 
-func pruneObjectsNode(node interface{}, options pruneObjectsOptions, contextJSON string, isRoot bool) (interface{}, bool, error) {
-	switch value := node.(type) {
-	case []interface{}:
-		result := make([]interface{}, 0, len(value))
-		for _, item := range value {
-			next, drop, err := pruneObjectsNode(item, options, contextJSON, false)
+// prunedObject 是 prune_objects 要删除的对象：对象成员按键删除所有副本，
+// 数组元素按下标删除。
+type prunedObject struct {
+	path   string
+	member bool
+}
+
+// collectPrunedObjects 遍历 node：数组逐个检查元素，对象满足条件时（根节点除外）
+// 整个删除，recursive 时继续检查对象的成员。要删除的路径按文档顺序追加到
+// pruned，返回值表示 node 本身是否要删除。
+func collectPrunedObjects(node gjson.Result, path string, options pruneObjectsOptions, contextJSON string, isRoot bool, pruned *[]prunedObject) (bool, error) {
+	prefix := ""
+	if path != "" {
+		prefix = path + "."
+	}
+	switch {
+	case node.IsArray():
+		for i, item := range node.Array() {
+			itemPath := prefix + strconv.Itoa(i)
+			drop, err := collectPrunedObjects(item, itemPath, options, contextJSON, false, pruned)
 			if err != nil {
-				return nil, false, err
+				return false, err
 			}
 			if drop {
-				continue
+				*pruned = append(*pruned, prunedObject{path: itemPath})
 			}
-			result = append(result, next)
 		}
-		return result, false, nil
-	case map[string]interface{}:
-		shouldDrop, err := shouldPruneObject(value, options, contextJSON)
+		return false, nil
+	case node.IsObject():
+		shouldDrop, err := checkConditions([]byte(node.Raw), contextJSON, options.conditions, options.logic)
 		if err != nil {
-			return nil, false, err
+			return false, err
 		}
 		if shouldDrop && !isRoot {
-			return nil, true, nil
+			return true, nil
 		}
 		if !options.recursive {
-			return value, false, nil
+			return false, nil
 		}
-		for key, child := range value {
-			next, drop, err := pruneObjectsNode(child, options, contextJSON, false)
+		node.ForEach(func(key, child gjson.Result) bool {
+			childPath := prefix + jsonPathKey(key.Str)
+			var drop bool
+			drop, err = collectPrunedObjects(child, childPath, options, contextJSON, false, pruned)
 			if err != nil {
-				return nil, false, err
+				return false
 			}
 			if drop {
-				delete(value, key)
-				continue
+				*pruned = append(*pruned, prunedObject{path: childPath, member: true})
 			}
-			value[key] = next
-		}
-		return value, false, nil
-	default:
-		return node, false, nil
-	}
-}
-
-func shouldPruneObject(node map[string]interface{}, options pruneObjectsOptions, contextJSON string) (bool, error) {
-	nodeBytes, err := common.Marshal(node)
-	if err != nil {
+			return true
+		})
 		return false, err
+	default:
+		return false, nil
 	}
-	return checkConditions(nodeBytes, contextJSON, options.conditions, options.logic)
 }
 
+// mergeObjects 把 value 的成员写入 path 处的对象：已有成员原地替换，新成员按
+// 键名顺序追加到末尾，其余成员保持原样。
 func mergeObjects(data []byte, path string, value interface{}, keepOrigin bool) ([]byte, error) {
-	current := gjson.GetBytes(data, path)
-	var currentMap, newMap map[string]interface{}
-
-	// 解析当前值（current.Raw 是 data 的子串，避免再分配一份）
-	if err := common.UnmarshalJsonStr(current.Raw, &currentMap); err != nil {
-		return nil, err
-	}
-	// 解析新值
+	var newMap map[string]interface{}
 	switch v := value.(type) {
 	case map[string]interface{}:
 		newMap = v
@@ -2080,17 +2080,18 @@ func mergeObjects(data []byte, path string, value interface{}, keepOrigin bool) 
 			return nil, err
 		}
 	}
-	// 合并
-	result := make(map[string]interface{})
-	for k, v := range currentMap {
-		result[k] = v
-	}
-	for k, v := range newMap {
-		if !keepOrigin || result[k] == nil {
-			result[k] = v
+	var err error
+	for _, key := range slices.Sorted(maps.Keys(newMap)) {
+		if keepOrigin {
+			if current := gjson.GetBytes(data, path+"."+jsonPathKey(key)); current.Exists() && current.Type != gjson.Null {
+				continue
+			}
+		}
+		if data, err = SetJSONMember(data, path, key, newMap[key]); err != nil {
+			return nil, err
 		}
 	}
-	return sjson.SetBytes(data, path, result)
+	return data, nil
 }
 
 // BuildParamOverrideContext 提供 ApplyParamOverride 可用的上下文信息。

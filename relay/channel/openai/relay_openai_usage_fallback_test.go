@@ -122,3 +122,56 @@ func TestProcessTokenDataCountsOutputForEachRelayMode(t *testing.T) {
 		})
 	}
 }
+
+// 上游 usage 缺输入 token 时只替换 usage：其余成员保持上游的顺序、数字写法和字符，
+// 重复的 usage 只留下补好的那一份，客户端看到的就是计费用的 usage。
+// want 里的 USAGE 代表补好的 usage。
+func TestOpenaiHandlerUsagePatchKeepsUpstreamBytes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const estimatedPromptTokens = 12
+
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "usage replaced where it stands",
+			body: `{"id":"c1","usage":{"prompt_tokens":0,"completion_tokens":5,"total_tokens":5},"choices":[{"index":0,"message":{"role":"assistant","content":"<b>&"},"logprobs":{"content":[{"token":"a","logprob":-1.50}]},"finish_reason":"stop"}],"z":1e2}`,
+			want: `{"id":"c1","usage":USAGE,"choices":[{"index":0,"message":{"role":"assistant","content":"<b>&"},"logprobs":{"content":[{"token":"a","logprob":-1.50}]},"finish_reason":"stop"}],"z":1e2}`,
+		},
+		{
+			name: "repeated usage collapses",
+			body: `{"id":"c2","usage":{"prompt_tokens":0,"completion_tokens":5,"total_tokens":5},"choices":[{"index":0,"message":{"role":"assistant","content":"<b>&"},"finish_reason":"stop"}],"usage":{"prompt_tokens":0,"completion_tokens":5,"total_tokens":5},"z":1e2}`,
+			want: `{"id":"c2","choices":[{"index":0,"message":{"role":"assistant","content":"<b>&"},"finish_reason":"stop"}],"z":1e2,"usage":USAGE}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			info := &relaycommon.RelayInfo{
+				RelayFormat:     types.RelayFormatOpenAI,
+				RelayMode:       relayconstant.RelayModeChatCompletions,
+				OriginModelName: "gpt-4o",
+				ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "gpt-4o"},
+			}
+			info.SetEstimatePromptTokens(estimatedPromptTokens)
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(tt.body)),
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+			}
+
+			usage, apiErr := OpenaiHandler(c, info, resp)
+
+			require.Nil(t, apiErr)
+			require.NotNil(t, usage)
+			assert.Equal(t, estimatedPromptTokens, usage.PromptTokens)
+			usageJSON, err := common.Marshal(usage)
+			require.NoError(t, err)
+			assert.Equal(t, strings.Replace(tt.want, "USAGE", string(usageJSON), 1), recorder.Body.String())
+		})
+	}
+}

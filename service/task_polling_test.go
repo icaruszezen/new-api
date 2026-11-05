@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -495,4 +496,31 @@ func TestSweepTimedOutTasksHonorsRefundRolloutBoundary(t *testing.T) {
 	assert.Contains(t, reloadedModern.FailReason, "任务超时")
 	assert.Equal(t, initialQuota+modernTaskQuota, getUserQuota(t, userID))
 	assert.Equal(t, int64(1), countLogs(t))
+}
+
+// Redaction removes only the inline video bytes: the stored result keeps the
+// upstream's member order and number spelling.
+func TestRedactVideoResponseBodyKeepsUntouchedBytes(t *testing.T) {
+	longVideo := strings.Repeat("A", 300)
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "videos and top-level bytes",
+			body: `{"name":"op","response":{"videos":[{"uri":"u","bytesBase64Encoded":"x"}],"durationSeconds":8.0,"bytesBase64Encoded":"y"},"done":true}`,
+			want: `{"name":"op","response":{"videos":[{"uri":"u"}],"durationSeconds":8.0},"done":true}`,
+		},
+		{
+			name: "inline video is truncated in place",
+			body: `{"response":{"video":"` + longVideo + `","durationSeconds":8.0},"done":true}`,
+			want: `{"response":{"video":"` + longVideo[:256] + `...","durationSeconds":8.0},"done":true}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, string(redactVideoResponseBody([]byte(tt.body))))
+		})
+	}
 }

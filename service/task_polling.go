@@ -22,6 +22,7 @@ import (
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/samber/lo"
+	"github.com/tidwall/gjson"
 )
 
 // TaskPollingAdaptor 定义轮询所需的最小适配器接口，避免 service -> relay 的循环依赖
@@ -601,30 +602,37 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	return nil
 }
 
+// redactVideoResponseBody drops inline video bytes from a task result before
+// it is stored and shown to clients. Only the redacted members change; the
+// rest keeps the upstream bytes. An edit that fails keeps the last good body.
 func redactVideoResponseBody(body []byte) []byte {
-	var m map[string]any
-	if err := common.Unmarshal(body, &m); err != nil {
+	if !gjson.ValidBytes(body) || common.GetJsonType(body) != "object" {
 		return body
 	}
-	resp, _ := m["response"].(map[string]any)
-	if resp != nil {
-		delete(resp, "bytesBase64Encoded")
-		if v, ok := resp["video"].(string); ok {
-			resp["video"] = truncateBase64(v)
+	resp := gjson.GetBytes(body, "response")
+	if !resp.IsObject() {
+		return body
+	}
+	out := body
+	if next, err := relaycommon.DeleteJSONMember(out, "response.bytesBase64Encoded"); err == nil {
+		out = next
+	}
+	if video := resp.Get("video"); video.Type == gjson.String {
+		if next, err := relaycommon.SetJSONMember(out, "response", "video", truncateBase64(video.Str)); err == nil {
+			out = next
 		}
-		if vs, ok := resp["videos"].([]any); ok {
-			for i := range vs {
-				if vm, ok := vs[i].(map[string]any); ok {
-					delete(vm, "bytesBase64Encoded")
-				}
+	}
+	if videos := resp.Get("videos"); videos.IsArray() {
+		for i, video := range videos.Array() {
+			if !video.IsObject() {
+				continue
+			}
+			if next, err := relaycommon.DeleteJSONMember(out, fmt.Sprintf("response.videos.%d.bytesBase64Encoded", i)); err == nil {
+				out = next
 			}
 		}
 	}
-	b, err := common.Marshal(m)
-	if err != nil {
-		return body
-	}
-	return b
+	return out
 }
 
 func truncateBase64(s string) string {

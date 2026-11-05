@@ -317,13 +317,12 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:
 		if usageModified {
-			var bodyMap map[string]interface{}
-			err = common.Unmarshal(responseBody, &bodyMap)
+			// Only usage changes: the rest of the upstream response keeps its
+			// member order, number spelling and characters.
+			responseBody, err = relaycommon.SetJSONMember(responseBody, "", "usage", simpleResponse.Usage)
 			if err != nil {
 				return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 			}
-			bodyMap["usage"] = simpleResponse.Usage
-			responseBody, _ = common.Marshal(bodyMap)
 		}
 		if forceFormat {
 			responseBody, err = common.Marshal(simpleResponse)

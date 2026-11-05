@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 )
 
 func AlphaSearchHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
@@ -144,10 +145,10 @@ func buildAlphaSearchRequestBody(rawBody []byte, originModel, upstreamModel stri
 	if upstreamModel == "" || upstreamModel == originModel {
 		return rawBody, nil
 	}
-	var body map[string]any
-	if err := common.Unmarshal(rawBody, &body); err != nil {
-		return nil, err
+	if !gjson.ValidBytes(rawBody) || common.GetJsonType(rawBody) != "object" {
+		return nil, errors.New("alpha search request body must be a JSON object")
 	}
-	body["model"] = upstreamModel
-	return common.Marshal(body)
+	// Routing read the first "model" and most upstreams read the last, so a
+	// repeated model must leave a single copy carrying the mapped value.
+	return relaycommon.SetJSONMember(rawBody, "", "model", upstreamModel)
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,6 +124,89 @@ func TestApplyPassThroughReasoningEffortFromModelNoMatch(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, changed)
 	require.Equal(t, body, updated)
+}
+
+// On pass-through channels the auto effort edits only the members it sets:
+// tool and structured-output schemas keep the client's member order, which
+// upstreams follow when they fill properties, and the rest of the body keeps
+// its bytes (number spelling, unescaped characters).
+func TestApplyPassThroughReasoningEffortFromModelKeepsClientBytes(t *testing.T) {
+	tests := []struct {
+		name  string
+		apply func([]byte, bool) ([]byte, bool, error)
+		input string
+		want  string
+	}{
+		{
+			name:  "claude adds thinking and sets output_config effort in place",
+			apply: applyClaudePassThroughReasoningEffortFromModel,
+			input: `{"model":"claude-x-high","output_config":{"format":{"type":"json_schema","schema":{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}}},"tools":[{"name":"a","input_schema":{"type":"object","properties":{"reasoning":{},"answer":{}}}}],"seed":12345678901234567890,"system":"<b>&","temperature":1.0}`,
+			want:  `{"model":"claude-x-high","output_config":{"format":{"type":"json_schema","schema":{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}},"effort":"high"},"tools":[{"name":"a","input_schema":{"type":"object","properties":{"reasoning":{},"answer":{}}}}],"seed":12345678901234567890,"system":"<b>&","temperature":1.0,"thinking":{"type":"adaptive"}}`,
+		},
+		{
+			name:  "claude keeps a thinking type and adds output_config",
+			apply: applyClaudePassThroughReasoningEffortFromModel,
+			input: `{"model":"claude-low","thinking":{"type":"enabled","budget_tokens":1024},"max_tokens":1e3}`,
+			want:  `{"model":"claude-low","thinking":{"type":"enabled","budget_tokens":1024},"max_tokens":1e3,"output_config":{"effort":"low"}}`,
+		},
+		{
+			name:  "claude sets a missing thinking type and replaces a non-object output_config",
+			apply: applyClaudePassThroughReasoningEffortFromModel,
+			input: `{"model":"m-medium","thinking":{"budget_tokens":2048},"output_config":null}`,
+			want:  `{"model":"m-medium","thinking":{"budget_tokens":2048,"type":"adaptive"},"output_config":{"effort":"medium"}}`,
+		},
+		{
+			name:  "openai sets reasoning_effort and reasoning.effort",
+			apply: applyOpenAIPassThroughReasoningEffortFromModel,
+			input: `{"model":"gpt-5-xhigh","reasoning":{"summary":"auto","effort":"low"},"response_format":{"type":"json_schema","json_schema":{"schema":{"properties":{"b":{},"a":{}}}}},"seed":12345678901234567890}`,
+			want:  `{"model":"gpt-5-xhigh","reasoning":{"summary":"auto","effort":"xhigh"},"response_format":{"type":"json_schema","json_schema":{"schema":{"properties":{"b":{},"a":{}}}}},"seed":12345678901234567890,"reasoning_effort":"xhigh"}`,
+		},
+		{
+			name:  "openai leaves a non-object reasoning",
+			apply: applyOpenAIPassThroughReasoningEffortFromModel,
+			input: `{"model":"o3-high","reasoning_effort":"low","reasoning":"x","n":1.0}`,
+			want:  `{"model":"o3-high","reasoning_effort":"high","reasoning":"x","n":1.0}`,
+		},
+		{
+			name:  "responses adds reasoning",
+			apply: applyResponsesPassThroughReasoningEffortFromModel,
+			input: `{"model":"gpt-5-medium","input":"<b>&","text":{"format":{"type":"json_schema","schema":{"properties":{"b":{},"a":{}}}}}}`,
+			want:  `{"model":"gpt-5-medium","input":"<b>&","text":{"format":{"type":"json_schema","schema":{"properties":{"b":{},"a":{}}}}},"reasoning":{"effort":"medium"}}`,
+		},
+		{
+			name:  "responses sets effort in reasoning",
+			apply: applyResponsesPassThroughReasoningEffortFromModel,
+			input: `{"model":"gpt-5-low","reasoning":{"summary":"auto"},"max_output_tokens":1e3}`,
+			want:  `{"model":"gpt-5-low","reasoning":{"summary":"auto","effort":"low"},"max_output_tokens":1e3}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			updated, changed, err := tt.apply([]byte(tt.input), true)
+			require.NoError(t, err)
+			assert.True(t, changed)
+			assert.Equal(t, tt.want, string(updated))
+		})
+	}
+}
+
+// The DTO paths keep the raw reasoning and output_config objects as the
+// client wrote them apart from effort, so a structured-output schema keeps
+// its property order.
+func TestApplyReasoningEffortFromModelKeepsRawObjects(t *testing.T) {
+	claudeRequest := &dto.ClaudeRequest{
+		OutputConfig: []byte(`{"format":{"type":"json_schema","schema":{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}},"effort":"low"}`),
+	}
+	openAIRequest := &dto.GeneralOpenAIRequest{Reasoning: []byte(`{"summary":"auto","effort":"low","max_tokens":1e3}`)}
+	nullOutputConfigRequest := &dto.ClaudeRequest{OutputConfig: []byte(`null`)}
+
+	require.True(t, applyClaudeReasoningEffortFromModel(claudeRequest, "claude-x-high", true))
+	require.True(t, applyOpenAIReasoningEffortFromModel(openAIRequest, "gpt-5-xhigh", true))
+	require.True(t, applyClaudeReasoningEffortFromModel(nullOutputConfigRequest, "claude-x-medium", true))
+
+	assert.Equal(t, `{"format":{"type":"json_schema","schema":{"type":"object","properties":{"reasoning":{"type":"string"},"answer":{"type":"string"}}}},"effort":"high"}`, string(claudeRequest.OutputConfig))
+	assert.Equal(t, `{"summary":"auto","effort":"xhigh","max_tokens":1e3}`, string(openAIRequest.Reasoning))
+	assert.Equal(t, `{"effort":"medium"}`, string(nullOutputConfigRequest.OutputConfig))
 }
 
 func mustMarshalForReasoningEffortTest(t *testing.T, value any) []byte {

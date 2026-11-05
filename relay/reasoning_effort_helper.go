@@ -1,11 +1,15 @@
 package relay
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/tidwall/gjson"
 )
 
 const (
@@ -100,72 +104,79 @@ func applyClaudeReasoningEffort(request *dto.ClaudeRequest, effort string) {
 }
 
 func applyOpenAIPassThroughReasoningEffortFromModel(data []byte, enabled bool) ([]byte, bool, error) {
-	return applyPassThroughReasoningEffortFromModel(data, enabled, func(body map[string]any, effort string) {
-		body["reasoning_effort"] = effort
-		if reasoningObj, ok := body["reasoning"].(map[string]any); ok {
-			reasoningObj["effort"] = effort
+	return applyPassThroughReasoningEffortFromModel(data, enabled, func(body []byte, effort string) ([]byte, error) {
+		body, err := relaycommon.SetJSONMember(body, "", "reasoning_effort", effort)
+		if err != nil || !gjson.GetBytes(body, "reasoning").IsObject() {
+			return body, err
 		}
+		return relaycommon.SetJSONMember(body, "reasoning", "effort", effort)
 	})
 }
 
 func applyResponsesPassThroughReasoningEffortFromModel(data []byte, enabled bool) ([]byte, bool, error) {
-	return applyPassThroughReasoningEffortFromModel(data, enabled, func(body map[string]any, effort string) {
-		reasoningObj, ok := body["reasoning"].(map[string]any)
-		if !ok {
-			reasoningObj = map[string]any{}
-			body["reasoning"] = reasoningObj
+	return applyPassThroughReasoningEffortFromModel(data, enabled, func(body []byte, effort string) ([]byte, error) {
+		if !gjson.GetBytes(body, "reasoning").IsObject() {
+			return relaycommon.SetJSONMember(body, "", "reasoning", map[string]string{"effort": effort})
 		}
-		reasoningObj["effort"] = effort
+		return relaycommon.SetJSONMember(body, "reasoning", "effort", effort)
 	})
 }
 
 func applyClaudePassThroughReasoningEffortFromModel(data []byte, enabled bool) ([]byte, bool, error) {
-	return applyPassThroughReasoningEffortFromModel(data, enabled, func(body map[string]any, effort string) {
-		thinkingObj, ok := body["thinking"].(map[string]any)
-		if !ok {
-			thinkingObj = map[string]any{}
-			body["thinking"] = thinkingObj
+	return applyPassThroughReasoningEffortFromModel(data, enabled, func(body []byte, effort string) ([]byte, error) {
+		var err error
+		thinking := gjson.GetBytes(body, "thinking")
+		if !thinking.IsObject() {
+			body, err = relaycommon.SetJSONMember(body, "", "thinking", map[string]string{"type": "adaptive"})
+		} else if thinking.Get("type").Type != gjson.String {
+			body, err = relaycommon.SetJSONMember(body, "thinking", "type", "adaptive")
 		}
-		if _, ok := thinkingObj["type"].(string); !ok {
-			thinkingObj["type"] = "adaptive"
+		if err != nil {
+			return nil, err
 		}
-		outputConfigObj, ok := body["output_config"].(map[string]any)
-		if !ok {
-			outputConfigObj = map[string]any{}
-			body["output_config"] = outputConfigObj
+		if !gjson.GetBytes(body, "output_config").IsObject() {
+			return relaycommon.SetJSONMember(body, "", "output_config", map[string]string{"effort": effort})
 		}
-		outputConfigObj["effort"] = effort
+		return relaycommon.SetJSONMember(body, "output_config", "effort", effort)
 	})
 }
 
-func applyPassThroughReasoningEffortFromModel(data []byte, enabled bool, apply func(map[string]any, string)) ([]byte, bool, error) {
+// applyPassThroughReasoningEffortFromModel edits only the members apply sets,
+// so the rest of a pass-through body (tool and output schemas, numbers,
+// characters) reaches the upstream as the client sent it. data is the shared
+// request body and is never changed.
+func applyPassThroughReasoningEffortFromModel(data []byte, enabled bool, apply func([]byte, string) ([]byte, error)) ([]byte, bool, error) {
 	if !enabled {
 		return data, false, nil
 	}
-	var body map[string]any
-	if err := common.Unmarshal(data, &body); err != nil {
-		return nil, false, fmt.Errorf("failed to parse pass-through request body for reasoning effort: %w", err)
+	// sjson does not report an error on invalid JSON.
+	if !gjson.ValidBytes(data) || common.GetJsonType(data) != "object" {
+		return nil, false, errors.New("failed to parse pass-through request body for reasoning effort: request body must be a JSON object")
 	}
-	model, _ := body["model"].(string)
-	effort, ok := detectModelReasoningEffort(model)
+	model := gjson.GetBytes(data, "model")
+	if model.Type != gjson.String {
+		return data, false, nil
+	}
+	effort, ok := detectModelReasoningEffort(model.Str)
 	if !ok {
 		return data, false, nil
 	}
-	apply(body, effort)
-	updated, err := common.Marshal(body)
+	updated, err := apply(data, effort)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to marshal pass-through request body for reasoning effort: %w", err)
+		return nil, false, fmt.Errorf("failed to set reasoning effort in pass-through request body: %w", err)
 	}
 	return updated, true, nil
 }
 
+// setJSONRawObjectString sets key in the raw JSON object and keeps the other
+// members as they are, so a structured-output schema keeps its property
+// order. Empty or null raw starts a new object.
 func setJSONRawObjectString(raw []byte, key string, value string) ([]byte, error) {
-	obj := map[string]any{}
-	if len(raw) > 0 {
-		if err := common.Unmarshal(raw, &obj); err != nil {
-			return nil, err
-		}
+	if trimmed := bytes.TrimSpace(raw); len(trimmed) == 0 || string(trimmed) == "null" {
+		raw = []byte("{}")
 	}
-	obj[key] = value
-	return common.Marshal(obj)
+	if !gjson.ValidBytes(raw) || common.GetJsonType(raw) != "object" {
+		return nil, errors.New("not a JSON object")
+	}
+	return relaycommon.SetJSONMember(raw, "", key, value)
 }

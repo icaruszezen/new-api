@@ -240,7 +240,13 @@ func (r *GeneralOpenAIRequest) GetTokenCountMeta() *types.TokenCountMeta {
 			texts = append(texts, tool.Function.Description)
 		}
 		if tool.Function.Parameters != nil {
-			texts = append(texts, string(tool.Function.Parameters))
+			// Marshal compacts the raw schema so the client's formatting
+			// whitespace does not inflate the estimate.
+			parameters, err := kitutil.Marshal(tool.Function.Parameters)
+			if err != nil {
+				parameters = tool.Function.Parameters
+			}
+			texts = append(texts, string(parameters))
 		}
 	}
 	//toolTokens := CountTokenInput(countStr, request.Model)

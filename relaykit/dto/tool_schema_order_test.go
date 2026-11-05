@@ -60,12 +60,33 @@ func TestRequestNullToolSchemaStaysAbsent(t *testing.T) {
 }
 
 // The tool token estimate, and with it the pre-consumed quota, reads the
-// schema text, not the byte values of the raw message.
+// compact schema text: not the byte values of the raw message, and not the
+// client's formatting whitespace either.
 func TestGeneralOpenAIRequestTokenCountUsesSchemaText(t *testing.T) {
-	var req GeneralOpenAIRequest
-	require.NoError(t, kitutil.Unmarshal([]byte(`{"model":"m","tools":[{"type":"function","function":{"name":"f","parameters":{"type":"object"}}}]}`), &req))
+	tests := []struct {
+		name       string
+		parameters string
+		wantSchema string
+	}{
+		{
+			name:       "compact schema",
+			parameters: `{"type":"object"}`,
+			wantSchema: `{"type":"object"}`,
+		},
+		{
+			name:       "indented schema",
+			parameters: "{\n    \"type\": \"object\",\n    \"required\": [\n        \"a\"\n    ]\n}",
+			wantSchema: `{"type":"object","required":["a"]}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var req GeneralOpenAIRequest
+			require.NoError(t, kitutil.Unmarshal([]byte(`{"model":"m","tools":[{"type":"function","function":{"name":"f","parameters":`+tt.parameters+`}}]}`), &req))
 
-	meta := req.GetTokenCountMeta()
+			meta := req.GetTokenCountMeta()
 
-	assert.Equal(t, "f\n"+`{"type":"object"}`, meta.CombineText)
+			assert.Equal(t, "f\n"+tt.wantSchema, meta.CombineText)
+		})
+	}
 }

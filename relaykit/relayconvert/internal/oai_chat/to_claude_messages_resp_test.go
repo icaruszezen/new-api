@@ -204,6 +204,103 @@ func TestStreamResponseOpenAI2ClaudeClosesTextThinkingAndToolBlocks(t *testing.T
 	assert.Equal(t, "message_stop", finishResponses[2].Type)
 }
 
+func TestStreamResponseOpenAI2ClaudeKeepsTextSharingChunkWithReasoning(t *testing.T) {
+	type claudeStreamEvent struct {
+		Type  string
+		Block string
+		Index int
+		Text  string
+	}
+
+	tests := []struct {
+		name   string
+		chunks []dto.ChatCompletionsStreamResponseChoiceDelta
+		want   []claudeStreamEvent
+	}{
+		{
+			name: "first chunk carries reasoning and text",
+			chunks: []dto.ChatCompletionsStreamResponseChoiceDelta{
+				{ReasoningContent: ptr("think"), Content: ptr("Hello")},
+			},
+			want: []claudeStreamEvent{
+				{Type: "message_start"},
+				{Type: "content_block_start", Block: "thinking", Index: 0},
+				{Type: "content_block_delta", Block: "thinking_delta", Index: 0, Text: "think"},
+				{Type: "content_block_stop", Index: 0},
+				{Type: "content_block_start", Block: "text", Index: 1},
+				{Type: "content_block_delta", Block: "text_delta", Index: 1, Text: "Hello"},
+			},
+		},
+		{
+			name: "later chunk carries reasoning and text after a reasoning chunk",
+			chunks: []dto.ChatCompletionsStreamResponseChoiceDelta{
+				{ReasoningContent: ptr("think")},
+				{ReasoningContent: ptr(" more"), Content: ptr("Hello")},
+			},
+			want: []claudeStreamEvent{
+				{Type: "message_start"},
+				{Type: "content_block_start", Block: "thinking", Index: 0},
+				{Type: "content_block_delta", Block: "thinking_delta", Index: 0, Text: "think"},
+				{Type: "content_block_delta", Block: "thinking_delta", Index: 0, Text: " more"},
+				{Type: "content_block_stop", Index: 0},
+				{Type: "content_block_start", Block: "text", Index: 1},
+				{Type: "content_block_delta", Block: "text_delta", Index: 1, Text: "Hello"},
+			},
+		},
+		{
+			name: "later chunk carries reasoning and text after a role-only chunk",
+			chunks: []dto.ChatCompletionsStreamResponseChoiceDelta{
+				{Role: "assistant"},
+				{ReasoningContent: ptr("think"), Content: ptr("Hello")},
+			},
+			want: []claudeStreamEvent{
+				{Type: "message_start"},
+				{Type: "content_block_start", Block: "thinking", Index: 0},
+				{Type: "content_block_delta", Block: "thinking_delta", Index: 0, Text: "think"},
+				{Type: "content_block_stop", Index: 0},
+				{Type: "content_block_start", Block: "text", Index: 1},
+				{Type: "content_block_delta", Block: "text_delta", Index: 1, Text: "Hello"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &convmeta.Values{
+				ClaudeConvertInfo: &convmeta.ClaudeConvertInfo{
+					LastMessagesType: convmeta.LastMessageTypeNone,
+				},
+			}
+			var got []claudeStreamEvent
+			for i, delta := range tt.chunks {
+				info.SendResponseCount = i + 1
+				responses := StreamResponseOpenAI2Claude(&dto.ChatCompletionsStreamResponse{
+					Id:      "chatcmpl_1",
+					Model:   "gpt-test",
+					Choices: []dto.ChatCompletionsStreamResponseChoice{{Delta: delta}},
+				}, info)
+				for _, response := range responses {
+					event := claudeStreamEvent{Type: response.Type, Index: response.GetIndex()}
+					if response.ContentBlock != nil {
+						event.Block = response.ContentBlock.Type
+					}
+					if response.Delta != nil {
+						event.Block = response.Delta.Type
+						if response.Delta.Thinking != nil {
+							event.Text = *response.Delta.Thinking
+						}
+						if response.Delta.Text != nil {
+							event.Text = *response.Delta.Text
+						}
+					}
+					got = append(got, event)
+				}
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestNormalizeCacheCreationSplit(t *testing.T) {
 	cache5m, cache1h := NormalizeCacheCreationSplit(10, 3, 2)
 	assert.Equal(t, 8, cache5m)
